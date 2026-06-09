@@ -1,0 +1,28 @@
+# Python environments and caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local battle and benchmark artifacts
+logs/
+*.log
+
+# Local scratch/output data
+scratch/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Local secrets
+.env
+.env.*
+!.env.example
+

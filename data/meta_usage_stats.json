@@ -1,0 +1,156 @@
+{
+  "format": "gen9randomdoublesbattle",
+  "source": "local_snapshot",
+  "pokemon": {
+    "incineroar": {
+      "moves": {
+        "fakeout": 0.91,
+        "partingshot": 0.84,
+        "flareblitz": 0.77,
+        "knockoff": 0.61
+      },
+      "abilities": {
+        "intimidate": 0.99
+      },
+      "items": {
+        "sitrusberry": 0.32
+      },
+      "teammates": {}
+    },
+    "amoonguss": {
+      "moves": {
+        "ragepowder": 0.95,
+        "spore": 0.90,
+        "pollenpuff": 0.85,
+        "protect": 0.80
+      },
+      "abilities": {
+        "regenerator": 0.99
+      },
+      "items": {
+        "rockyhelmet": 0.50
+      },
+      "teammates": {}
+    },
+    "fluttermane": {
+      "moves": {
+        "shadowball": 0.95,
+        "moonblast": 0.95,
+        "protect": 0.85,
+        "substitute": 0.30
+      },
+      "abilities": {
+        "protosynthesis": 1.00
+      },
+      "items": {
+        "boosterenergy": 0.60
+      },
+      "teammates": {}
+    },
+    "landorustherian": {
+      "moves": {
+        "earthquake": 0.80,
+        "rockslide": 0.85,
+        "stompingtantrum": 0.50,
+        "uturn": 0.70
+      },
+      "abilities": {
+        "intimidate": 1.00
+      },
+      "items": {
+        "choiceband": 0.30
+      },
+      "teammates": {}
+    },
+    "gholdengo": {
+      "moves": {
+        "makeitrain": 0.95,
+        "shadowball": 0.90,
+        "nastyplot": 0.80,
+        "protect": 0.85
+      },
+      "abilities": {
+        "goodasgold": 1.00
+      },
+      "items": {
+        "leftovers": 0.40
+      },
+      "teammates": {}
+    },
+    "regieleki": {
+      "moves": {
+        "thunderbolt": 0.90,
+        "electroweb": 0.80,
+        "voltswitch": 0.75,
+        "protect": 0.70
+      },
+      "abilities": {
+        "transistor": 1.00
+      },
+      "items": {
+        "choicespecs": 0.35
+      },
+      "teammates": {}
+    },
+    "tornadus": {
+      "moves": {
+        "tailwind": 0.95,
+        "bleakwindstorm": 0.90,
+        "taunt": 0.70,
+        "raindance": 0.50
+      },
+      "abilities": {
+        "prankster": 0.99
+      },
+      "items": {
+        "focussash": 0.45
+      },
+      "teammates": {}
+    },
+    "ogerponwellspring": {
+      "moves": {
+        "ivycudgel": 0.95,
+        "hornleech": 0.85,
+        "spikyshield": 0.80,
+        "swordsdance": 0.50
+      },
+      "abilities": {
+        "waterabsorb": 1.00
+      },
+      "items": {
+        "wellspringmask": 1.00
+      },
+      "teammates": {}
+    },
+    "urshifurapidstrike": {
+      "moves": {
+        "surgingstrikes": 0.95,
+        "closecombat": 0.90,
+        "aquajet": 0.80,
+        "protect": 0.75
+      },
+      "abilities": {
+        "unseenfist": 1.00
+      },
+      "items": {
+        "mysticwater": 0.35
+      },
+      "teammates": {}
+    },
+    "rillaboom": {
+      "moves": {
+        "grassyglide": 0.95,
+        "fakeout": 0.90,
+        "woodhammer": 0.80,
+        "uturn": 0.70
+      },
+      "abilities": {
+        "grassysurge": 1.00
+      },
+      "items": {
+        "assaultvest": 0.40
+      },
+      "teammates": {}
+    }
+  }
+}
