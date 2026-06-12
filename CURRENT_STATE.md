@@ -1105,3 +1105,103 @@ Artifacts:
 - `logs/vgc2026_phaseV2e1_failures.json`
 - `logs/vgc2026_phaseV2e1_policy_comparison.json`
 - `logs/vgc2026_phaseV2e1_policy_comparison.md`
+
+## Phase V2h — Pair-Level Feature Stability Diagnosis (2026-06-12)
+
+**Status:** Complete. Decision **B — continue offline evaluator work**.
+No V4 policy was implemented and Phase V3 remains **BLOCKED**.
+
+### Files
+
+- Added `analyze_vgc2026_phaseV2h_feature_stability.py`
+- Added `inspect_vgc2026_phaseV2h_feature.py`
+- Added `test_vgc2026_phaseV2h.py`
+- Updated `vgc2026_plan_features.py`
+- Updated `analyze_vgc2026_phaseV2g_failures.py` to preserve feature audit data
+- Updated `test_vgc2026_phaseV2g.py`
+
+### Codex Review Corrections
+
+The initial V2h implementation required three correctness fixes:
+
+1. The bootstrap-CI exclusion test was inverted. A CI excludes zero
+   when its lower bound is positive **or** its upper bound is negative.
+2. V3-both versus Random-both LOO and 5-fold stability used synthetic
+   signed values. This was replaced by a true unpaired comparison of
+   the 30 V3-both plans against the 25 Random-both plans, with
+   stratified deterministic folds.
+3. `extract_plan_bundle()` dropped the feature audit block. Audit data
+   is now retained, allowing real V3 and Random unknown-move counts.
+
+Regression tests cover positive, negative, and zero-crossing CIs,
+unpaired bootstrap means, translation-invariant LOO, and stratified
+fold direction.
+
+### Statistical Unit
+
+- One deterministic V3 plan per `pair_id`
+- V3-both: 30 pairs
+- Random-both: 25 pairs
+- Split: 45 pairs, descriptive only
+- Decisive n: 55
+- Exact two-sided p: `0.5900533317766357`
+- Exact one-sided p: `0.29502666588831783`
+
+D1 and D2 are repeated battle observations of the same plan and are
+not treated as independent preview-plan samples.
+
+### Corrected Results
+
+- Numeric features analyzed: 31
+- Candidate-actionable features: 0
+- Contradictory features: 18
+- Insufficient-data features: 0
+- Unknown moves: V3 plans 0, Random plans 0
+
+Selected examples:
+
+| Feature | Between-group d | Between mean-diff CI | Failure-pair diff | Failure-pair CI |
+|---|---:|---:|---:|---:|
+| offensive_type_coverage | -0.739 | [-0.163, -0.033] | +0.050 | [+0.006, +0.095] |
+| restorative_moves | -0.548 | [-0.407, -0.013] | +0.120 | [0.000, +0.240] |
+| common_total | +0.033 | [-0.469, +0.598] | +0.859 | [+0.536, +1.174] |
+| setup_moves | -0.059 | [-0.253, +0.200] | -0.160 | [-0.320, -0.040] |
+| type_count_unique | -0.141 | [-1.227, +0.587] | +0.720 | [+0.200, +1.280] |
+
+No feature passes all gates: stable direction in at least 4/5 folds,
+LOO stability at least 90%, sufficient support, same direction in the
+between-group and within-failure comparisons, and a paired bootstrap
+CI excluding zero.
+
+### Verification
+
+V2h-only:
+
+```text
+Ran 48 tests in 17.280s
+OK
+EXIT=0 ELAPSED=17.49s
+```
+
+Cross-phase focused suite:
+
+```text
+Ran 342 tests in 24.984s
+OK
+EXIT=0 ELAPSED=26.25s
+```
+
+The cross-phase command included controlled preview, diagnostics,
+V2e, V2f, V2g, and V2h test modules under a foreground timeout and
+`-W error::ResourceWarning`.
+
+### Artifacts
+
+- `logs/vgc2026_phaseV2h_feature_stability.json`
+- `logs/vgc2026_phaseV2h_feature_stability.md`
+
+Prior V2f and V2g battle artifacts were not overwritten. No battles
+were run. Outcomes are used only as offline diagnostic labels and do
+not enter feature extraction or policy selection. No official server,
+online API, hidden item, hidden move, or probabilistic ability input
+was used.

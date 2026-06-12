@@ -7,11 +7,33 @@ Policy-independent feature extractors for 4-from-6 preview plans.
 A feature here is computed from a Pokémon list (the plan) and a visible
 opponent team. The extractors never call V2, V3 or any other
 policy's internal scoring function. They are used for diagnostic
-analysis (V2g) and may be re-used by future policies, but they
-themselves do not select a plan.
+analysis (V2g, V2h) and may be re-used by future policies, but
+they themselves do not select a plan.
 
 All features read only open team-sheet information: species, ability,
 moves, and types from the local dex.
+
+Dex metadata source
+------------------
+Move metadata is loaded from the installed ``poke-env`` static Gen 9
+dex. The dex exposes ``category`` (Physical / Special / Status),
+``priority`` (signed integer), ``target`` (targeting string),
+``stallingMove`` (true for Protect / Detect / etc.) and ``flags``.
+
+Move classifications
+-------------------
+- "Damaging" : category in {Physical, Special} AND basePower > 0.
+- "Priority"  : priority > 0 AND NOT stallingMove.
+- "Spread"    : target in {allAdjacent, allAdjacentFoes, all} AND
+                Damaging.
+- "Stall"     : stallingMove is true.
+- "Setup"     : a small dictionary-driven list (swords dance, nasty
+                plot, ...). Used only as a rough categorisation; the
+                list is documented at the top of the module.
+- "Restorative": recover / roost / slackoff / ...
+- "Pivot"     : u-turn / volt switch / teleport / ...
+Unknown moves are reported explicitly as "unknown" and never
+silently mapped to a known status category.
 """
 
 from __future__ import annotations
@@ -26,35 +48,23 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 from team_preview_policy import (
     TYPE_CHART,
     get_ability_category,
-    get_move_category,
     get_species_types,
 )
 
 
 # ---------------------------------------------------------------------------
-# Move / ability / role taxonomy
+# Hand-written role taxonomy (small, documented, not the dex's full surface)
 # ---------------------------------------------------------------------------
 
-
-WEATHER_SETTERS = {
-    "drizzle": "rain",
-    "drought": "sun",
-    "snow warning": "snow",
-    "sand stream": "sand",
-}
-TERRAIN_SETTERS = {
-    "electric surge": "electric",
-    "grassy surge": "grassy",
-    "misty surge": "misty",
-    "psychic surge": "psychic",
-}
-WEATHER_ABOLISHERS = {
-    "cloud nine", "air lock",
-}
+# These are stable preview-visible role tags, not the full Gen 9 move
+# surface. They cover the common setups and pivots. Any move outside
+# this set is reported as "unknown" in the audit, never silently
+# rewritten as a known role.
 SETUP_MOVES = frozenset({
     "swords dance", "nasty plot", "calm mind", "bulk up",
     "dragon dance", "agility", "rock polish", "shell smash",
     "quiver dance", "coil", "curse", "work up", "coaching",
+    "calm mind", "growth", "meditate", "hone claws",
 })
 PIVOT_MOVES = frozenset({
     "u-turn", "uturn", "volt switch", "voltswitch", "parting shot",
@@ -65,6 +75,7 @@ RESTORATIVE_MOVES = frozenset({
     "recover", "roost", "soft-boiled", "soft boiled", "moonlight",
     "morning sun", "synthesis", "slackoff", "rest", "wish",
     "heal pulse", "life dew", "jungle healing", "milk drink",
+    "heal order",
 })
 
 
@@ -84,6 +95,7 @@ class PlanFeatures:
     opponent_team_size: int
     features: Dict[str, float] = field(default_factory=dict)
     categorical: Dict[str, Any] = field(default_factory=dict)
+    audit: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -94,11 +106,132 @@ class PlanFeatures:
             "opponent_team_size": self.opponent_team_size,
             "features": dict(self.features),
             "categorical": dict(self.categorical),
+            "audit": dict(self.audit),
         }
 
 
 # ---------------------------------------------------------------------------
-# Plan resolution helpers
+# Move / ability helpers
+# ---------------------------------------------------------------------------
+
+
+def _move_id(move_name: str) -> str:
+    return "".join(ch for ch in str(move_name).lower() if ch.isalnum())
+
+
+@lru_cache(maxsize=1)
+def _gen9_moves() -> Dict[str, Dict[str, Any]]:
+    """Load the installed poke-env Gen 9 move data without importing
+    poke-env. The package's static JSON file is the same data the
+    installed server uses."""
+    path = distribution("poke-env").locate_file(
+        "poke_env/data/static/moves/gen9moves.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _move_data(move_name: str) -> Mapping[str, Any]:
+    return _gen9_moves().get(_move_id(move_name), {})
+
+
+def _move_category(move_name: str) -> str:
+    return str(_move_data(move_name).get("category", "")).strip().lower()
+
+
+def _move_priority(move_name: str) -> float:
+    raw = _move_data(move_name).get("priority", 0)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _move_is_stalling(move_name: str) -> bool:
+    return bool(_move_data(move_name).get("stallingMove", False))
+
+
+def _move_target(move_name: str) -> str:
+    return str(_move_data(move_name).get("target", "")).strip()
+
+
+def _move_base_power(move_name: str) -> float:
+    raw = _move_data(move_name).get("basePower", 0)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _move_is_damaging(move_name: str) -> bool:
+    return (
+        _move_category(move_name) in {"physical", "special"}
+        and _move_base_power(move_name) > 0
+    )
+
+
+def _is_priority_move(move_name: str) -> bool:
+    """Priority that is not stalling.
+
+    A Protect at +4 is NOT an offensive priority tool. The dex's
+    `stallingMove` flag distinguishes the two.
+    """
+    return _move_priority(move_name) > 0 and not _move_is_stalling(move_name)
+
+
+def _is_stall_move(move_name: str) -> bool:
+    return _move_is_stalling(move_name)
+
+
+def _is_spread_move(move_name: str) -> bool:
+    return _move_target(move_name) in {
+        "allAdjacent", "allAdjacentFoes", "all"
+    } and _move_is_damaging(move_name)
+
+
+def _is_pivot_move(move_name: str) -> bool:
+    return move_name.lower() in PIVOT_MOVES
+
+
+def _is_setup_move(move_name: str) -> bool:
+    return move_name.lower() in SETUP_MOVES
+
+
+def _is_restorative_move(move_name: str) -> bool:
+    return move_name.lower() in RESTORATIVE_MOVES
+
+
+def classify_move(move_name: str) -> str:
+    """Return one of: physical, special, stall, priority, spread,
+    setup, restorative, pivot, unknown.
+
+    A single move gets exactly one label, in priority order. Unknown
+    moves never get remapped to a known status.
+    """
+    if _move_id(move_name) not in _gen9_moves():
+        return "unknown"
+    if _is_stall_move(move_name):
+        return "stall"
+    if _is_priority_move(move_name):
+        return "priority"
+    if _is_spread_move(move_name):
+        return "spread"
+    if _move_category(move_name) == "physical":
+        return "physical"
+    if _move_category(move_name) == "special":
+        return "special"
+    if _is_setup_move(move_name):
+        return "setup"
+    if _is_restorative_move(move_name):
+        return "restorative"
+    if _is_pivot_move(move_name):
+        return "pivot"
+    if _move_category(move_name) == "status":
+        return "status"
+    return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Plan resolution
 # ---------------------------------------------------------------------------
 
 
@@ -112,10 +245,6 @@ def _resolve_plan(
     lead_2: Sequence[str],
     back_2: Sequence[str],
 ) -> List[Dict[str, Any]]:
-    """Resolve species names to team dicts. Order follows lead_2 + back_2.
-
-    Raises KeyError on missing species.
-    """
     by_species: Dict[str, Dict[str, Any]] = {}
     for entry in team:
         key = _normalise_species(entry.get("species", ""))
@@ -128,9 +257,7 @@ def _resolve_plan(
             raise KeyError(f"Species {species!r} not in team")
         plan.append(by_species[key])
     if len(plan) != 4:
-        raise ValueError(
-            f"Plan must contain 4 pokemon, got {len(plan)}"
-        )
+        raise ValueError(f"Plan must contain 4 pokemon, got {len(plan)}")
     seen = {p["species"].strip().lower() for p in plan}
     if len(seen) != 4:
         raise ValueError("Plan contains duplicate species")
@@ -149,89 +276,6 @@ def _resolve_plan(
 
 
 # ---------------------------------------------------------------------------
-# Atomic classifiers (single Pokémon)
-# ---------------------------------------------------------------------------
-
-
-def _move_id(move_name: str) -> str:
-    return "".join(ch for ch in str(move_name).lower() if ch.isalnum())
-
-
-@lru_cache(maxsize=1)
-def _gen9_moves() -> Dict[str, Dict[str, Any]]:
-    """Load the installed poke-env Gen 9 move data without importing poke-env.
-
-    Importing the package starts its background event loop. Reading the
-    installed static JSON through package metadata keeps this offline
-    diagnostic process free of that lifecycle side effect.
-    """
-    path = distribution("poke-env").locate_file(
-        "poke_env/data/static/moves/gen9moves.json"
-    )
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _move_data(move_name: str) -> Mapping[str, Any]:
-    return _gen9_moves().get(_move_id(move_name), {})
-
-
-def _move_kind(move_name: str) -> str:
-    """Return 'physical', 'special' or 'other'."""
-    category = str(_move_data(move_name).get("category", "")).lower()
-    if category == "physical":
-        return "physical"
-    if category == "special":
-        return "special"
-    return "other"
-
-
-def _is_priority_move(move_name: str) -> bool:
-    data = _move_data(move_name)
-    priority = data.get("priority", 0)
-    return (
-        isinstance(priority, (int, float))
-        and priority > 0
-        and not bool(data.get("stallingMove"))
-    )
-
-
-def _is_pivot_move(move_name: str) -> bool:
-    return move_name.lower() in PIVOT_MOVES
-
-
-def _is_setup_move(move_name: str) -> bool:
-    return move_name.lower() in SETUP_MOVES
-
-
-def _is_damaging_move(move_name: str) -> bool:
-    data = _move_data(move_name)
-    base_power = data.get("basePower", 0)
-    return (
-        _move_kind(move_name) in {"physical", "special"}
-        and isinstance(base_power, (int, float))
-        and base_power > 0
-    )
-
-
-def _is_restorative(move_name: str) -> bool:
-    return move_name.lower() in RESTORATIVE_MOVES
-
-
-def _has_weather_setter(pokemon: Mapping[str, Any]) -> Optional[str]:
-    ability = pokemon.get("ability", "")
-    return WEATHER_SETTERS.get(ability.lower())
-
-
-def _has_terrain_setter(pokemon: Mapping[str, Any]) -> Optional[str]:
-    ability = pokemon.get("ability", "")
-    return TERRAIN_SETTERS.get(ability.lower())
-
-
-def _has_weather_abolisher(pokemon: Mapping[str, Any]) -> bool:
-    return pokemon.get("ability", "").lower() in WEATHER_ABOLISHERS
-
-
-# ---------------------------------------------------------------------------
 # Plan-level feature calculations
 # ---------------------------------------------------------------------------
 
@@ -246,11 +290,12 @@ def _all_attacker_multiplier(
     return combined
 
 
-def _lead_shared_weakness_count(leads: Sequence[Mapping[str, Any]]) -> Tuple[int, int, float]:
-    """Return (shared_2x_count, shared_4x_count, attack_type_breakdown_dict)."""
+def _lead_shared_weakness_count(
+    leads: Sequence[Mapping[str, Any]]
+) -> Tuple[int, int]:
     lead_types = [get_species_types(p.get("species", "")) for p in leads]
     if any(not t for t in lead_types):
-        return 0, 0, 0.0
+        return 0, 0
     shared_2x = 0
     shared_4x = 0
     for attack_type in TYPE_CHART:
@@ -266,65 +311,68 @@ def _lead_shared_weakness_count(leads: Sequence[Mapping[str, Any]]) -> Tuple[int
                 shared_4x += 1
             else:
                 shared_2x += 1
-    return shared_2x, shared_4x, 0.0  # last is reserved for future
-
-
-def _back_pressure(backs: Sequence[Mapping[str, Any]]) -> float:
-    """Immediate-pressure score for the back: priority + spread + setup."""
-    score = 0.0
-    for pokemon in backs:
-        moves = pokemon.get("moves", []) or []
-        for move in moves:
-            if _is_priority_move(move):
-                score += 1.0
-            data = _move_data(move)
-            if _is_damaging_move(move) and data.get("target") in {
-                "allAdjacent", "allAdjacentFoes", "all",
-            }:
-                score += 0.5
-            if _is_setup_move(move):
-                score += 0.5
-    return score
+    return shared_2x, shared_4x
 
 
 def _physical_special_balance(
-    plan: Sequence[Mapping[str, Any]],
-) -> Dict[str, int]:
-    physical = 0
-    special = 0
+    plan: Sequence[Mapping[str, Any]]
+) -> Tuple[int, int, int, int]:
+    """Return (physical_damaging, special_damaging, physical_total,
+    special_total). Total counts include damaging moves plus the
+    physical/special status moves so the per-move audit is
+    transparent."""
+    physical_damaging = 0
+    special_damaging = 0
+    physical_total = 0
+    special_total = 0
     for pokemon in plan:
         for move in pokemon.get("moves", []) or []:
-            kind = _move_kind(move)
-            if kind == "physical":
-                physical += 1
-            elif kind == "special":
-                special += 1
-    return {"physical_moves": physical, "special_moves": special}
+            cat = _move_category(move)
+            if cat == "physical":
+                physical_total += 1
+                if _move_is_damaging(move):
+                    physical_damaging += 1
+            elif cat == "special":
+                special_total += 1
+                if _move_is_damaging(move):
+                    special_damaging += 1
+    return physical_damaging, special_damaging, physical_total, special_total
 
 
 def _weather_terrain_conflict(
-    plan: Sequence[Mapping[str, Any]],
+    plan: Sequence[Mapping[str, Any]]
 ) -> Dict[str, List[str]]:
     weather_setters: List[str] = []
     terrain_setters: List[str] = []
     for pokemon in plan:
-        weather = _has_weather_setter(pokemon)
-        if weather:
-            weather_setters.append(weather)
-        terrain = _has_terrain_setter(pokemon)
-        if terrain:
-            terrain_setters.append(terrain)
-    has_weather = bool(weather_setters)
-    has_terrain = bool(terrain_setters)
-    has_multiple_weather = len(set(weather_setters)) > 1
-    has_multiple_terrain = len(set(terrain_setters)) > 1
+        ability = pokemon.get("ability", "").lower()
+        if ability == "drizzle":
+            weather_setters.append("rain")
+        elif ability == "drought":
+            weather_setters.append("sun")
+        elif ability == "snow warning":
+            weather_setters.append("snow")
+        elif ability == "sand stream":
+            weather_setters.append("sand")
+        if ability == "electric surge":
+            terrain_setters.append("electric")
+        elif ability == "grassy surge":
+            terrain_setters.append("grassy")
+        elif ability == "misty surge":
+            terrain_setters.append("misty")
+        elif ability == "psychic surge":
+            terrain_setters.append("psychic")
     return {
         "weather_setters": weather_setters,
         "terrain_setters": terrain_setters,
-        "has_weather_setter": ["yes" if has_weather else "no"],
-        "has_terrain_setter": ["yes" if has_terrain else "no"],
-        "has_conflicting_weather": ["yes" if has_multiple_weather else "no"],
-        "has_conflicting_terrain": ["yes" if has_multiple_terrain else "no"],
+        "has_weather_setter": ["yes" if weather_setters else "no"],
+        "has_terrain_setter": ["yes" if terrain_setters else "no"],
+        "has_conflicting_weather": [
+            "yes" if len(set(weather_setters)) > 1 else "no"
+        ],
+        "has_conflicting_terrain": [
+            "yes" if len(set(terrain_setters)) > 1 else "no"
+        ],
     }
 
 
@@ -340,12 +388,10 @@ def extract_plan_features(
     lead_2: Sequence[str],
     back_2: Sequence[str],
 ) -> PlanFeatures:
-    """Compute the full policy-independent feature bundle for a 4/2/2 plan.
-
-    Parameters mirror those of `evaluate_plan_on_common_scale`. The
-    function refuses to invent data; if the plan is malformed it
-    raises `KeyError` or `ValueError` rather than returning a guess.
-    """
+    """Compute the full policy-independent feature bundle for a 4/2/2
+    plan. Plan membership is validated strictly. Moves not present
+    in the Gen 9 dex are reported in the audit, not silently
+    rewritten."""
     if team is None or len(team) != 6:
         raise ValueError(
             f"Team must have exactly 6 Pokémon, got {len(team) if team else 0}."
@@ -355,9 +401,10 @@ def extract_plan_features(
     plan = _resolve_plan(team, chosen_4, lead_2, back_2)
     leads = plan[:2]
     backs = plan[2:]
-    all_types: List[List[str]] = [get_species_types(p["species"]) for p in plan]
+    all_types: List[List[str]] = [
+        get_species_types(p["species"]) for p in plan
+    ]
 
-    # Common-evaluator components are also useful as features.
     from vgc2026_common_plan_evaluator import (
         COMPONENT_WEIGHTS,
         _offensive_type_coverage,
@@ -373,6 +420,7 @@ def extract_plan_features(
         _back_pivot_or_switch,
         _duplicate_role_penalty,
     )
+
     features: Dict[str, float] = {}
     features["offensive_type_coverage"] = (
         _offensive_type_coverage(plan, opponent_team)
@@ -380,9 +428,7 @@ def extract_plan_features(
     features["defensive_weakness_exposure"] = (
         _defensive_weakness_exposure(plan, opponent_team)
     )
-    features["lead_shared_weakness"] = (
-        _lead_shared_weakness(leads)
-    )
+    features["lead_shared_weakness"] = _lead_shared_weakness(leads)
     features["lead_speed_control_pressure"] = (
         _lead_speed_control_pressure(leads)
     )
@@ -397,60 +443,119 @@ def extract_plan_features(
     features["back_pivot_or_switch"] = _back_pivot_or_switch(backs)
     features["duplicate_role_penalty"] = _duplicate_role_penalty(plan)
 
-    # Weights are kept identical to the common evaluator so that the
-    # common total and the feature sum are mutually consistent.
     common_total = sum(
         features[name] * COMPONENT_WEIGHTS[name]
         for name in COMPONENT_WEIGHTS
     )
     features["common_total"] = common_total
 
-    # Newly exposed features.
-    shared_2x, shared_4x, _ = _lead_shared_weakness_count(leads)
+    shared_2x, shared_4x = _lead_shared_weakness_count(leads)
     features["lead_shared_2x_weakness_count"] = float(shared_2x)
     features["lead_shared_4x_weakness_count"] = float(shared_4x)
-    features["back_immediate_pressure"] = _back_pressure(backs)
-    balance = _physical_special_balance(plan)
-    features["physical_damaging_moves"] = float(balance["physical_moves"])
-    features["special_damaging_moves"] = float(balance["special_moves"])
-    features["physical_special_balance_diff"] = float(
-        balance["physical_moves"] - balance["special_moves"]
+
+    # Back-pressure from the dex: priority + spread + setup. Never
+    # counts stalling moves (Protect is a defensive tool, not
+    # offensive pressure).
+    back_priority = 0
+    back_spread = 0
+    back_setup = 0
+    for pokemon in backs:
+        for move in pokemon.get("moves", []) or []:
+            if _is_priority_move(move):
+                back_priority += 1
+            if _is_spread_move(move):
+                back_spread += 1
+            if _is_setup_move(move):
+                back_setup += 1
+    features["back_priority_moves"] = float(back_priority)
+    features["back_spread_moves"] = float(back_spread)
+    features["back_setup_moves"] = float(back_setup)
+    features["back_immediate_pressure"] = float(
+        back_priority + 0.5 * back_spread + 0.5 * back_setup
     )
-    features["lead_immediate_damage"] = float(
-        sum(
-            1
-            for pokemon in leads
-            for move in pokemon.get("moves", []) or []
-            if _is_damaging_move(move) or _is_priority_move(move)
-        )
+
+    # Lead immediate damage: damaging + priority. Stalls excluded.
+    lead_damage_count = 0
+    for pokemon in leads:
+        for move in pokemon.get("moves", []) or []:
+            if _move_is_damaging(move) or _is_priority_move(move):
+                lead_damage_count += 1
+    features["lead_immediate_damage"] = float(lead_damage_count)
+
+    back_damage_count = 0
+    for pokemon in backs:
+        for move in pokemon.get("moves", []) or []:
+            if _move_is_damaging(move) or _is_priority_move(move):
+                back_damage_count += 1
+    features["back_immediate_damage"] = float(back_damage_count)
+
+    phys_dmg, spec_dmg, phys_total, spec_total = _physical_special_balance(
+        plan
     )
-    features["back_immediate_damage"] = float(
-        sum(
-            1
-            for pokemon in backs
-            for move in pokemon.get("moves", []) or []
-            if _is_damaging_move(move) or _is_priority_move(move)
-        )
+    features["physical_damaging_moves"] = float(phys_dmg)
+    features["special_damaging_moves"] = float(spec_dmg)
+    features["physical_total_moves"] = float(phys_total)
+    features["special_total_moves"] = float(spec_total)
+    features["physical_special_balance_diff"] = float(phys_dmg - spec_dmg)
+
+    setup_count = sum(
+        1
+        for pokemon in plan
+        for move in pokemon.get("moves", []) or []
+        if _is_setup_move(move)
     )
-    features["setup_moves"] = float(
-        sum(
-            1
-            for pokemon in plan
-            for move in pokemon.get("moves", []) or []
-            if _is_setup_move(move)
-        )
+    features["setup_moves"] = float(setup_count)
+
+    restorative_count = sum(
+        1
+        for pokemon in plan
+        for move in pokemon.get("moves", []) or []
+        if _is_restorative_move(move)
     )
-    features["restorative_moves"] = float(
-        sum(
-            1
-            for pokemon in plan
-            for move in pokemon.get("moves", []) or []
-            if _is_restorative(move)
-        )
+    features["restorative_moves"] = float(restorative_count)
+
+    stall_count = sum(
+        1
+        for pokemon in plan
+        for move in pokemon.get("moves", []) or []
+        if _is_stall_move(move)
     )
+    features["stall_moves"] = float(stall_count)
+
+    pivot_count = sum(
+        1
+        for pokemon in plan
+        for move in pokemon.get("moves", []) or []
+        if _is_pivot_move(move)
+    )
+    features["pivot_moves"] = float(pivot_count)
+
     features["type_count_unique"] = float(
         len({t for types in all_types for t in types})
     )
+
+    # Audit / unknown-move reporting
+    audit: Dict[str, Any] = {}
+    move_classes: Counter = Counter()
+    unknown_moves: List[str] = []
+    for pokemon in plan:
+        for move in pokemon.get("moves", []) or []:
+            cls = classify_move(move)
+            move_classes[cls] += 1
+            if cls == "unknown":
+                unknown_moves.append(move)
+    audit["move_classes"] = dict(move_classes)
+    audit["unknown_moves"] = sorted(set(unknown_moves))
+    audit["unknown_count"] = len(unknown_moves)
+    audit["opponent_unknown_moves"] = []
+    for pokemon in opponent_team:
+        for move in pokemon.get("moves", []) or []:
+            if classify_move(move) == "unknown":
+                audit["opponent_unknown_moves"].append(move)
+    audit["opponent_unknown_moves"] = sorted(
+        set(audit["opponent_unknown_moves"])
+    )
+
     categorical: Dict[str, Any] = {}
     categorical.update(_weather_terrain_conflict(plan))
     categorical["lead_pair"] = "|".join(
@@ -462,7 +567,9 @@ def extract_plan_features(
     categorical["chosen_4"] = sorted(p["species"] for p in plan)
     categorical["has_fake_out_in_leads"] = any(
         any(
-            get_move_category(move) == "fake_out"
+            get_move_category(move, _gen9_moves())
+            if False
+            else _move_id(move) == "fakeout"
             for move in p.get("moves", [])
         )
         for p in leads
@@ -473,21 +580,19 @@ def extract_plan_features(
     )
     categorical["has_redirection_in_plan"] = any(
         any(
-            get_move_category(move) == "redirection"
+            _move_id(move) in {"followme", "ragepowder"}
             for move in p.get("moves", [])
         )
         for p in plan
     )
     categorical["has_tailwind_or_trick_room"] = any(
         any(
-            get_move_category(move) in {"tailwind", "trick_room"}
+            _move_id(move) in {"tailwind", "trickroom"}
             for move in p.get("moves", [])
         )
         for p in plan
     )
-    categorical["has_weather_abolisher_in_plan"] = any(
-        _has_weather_abolisher(p) for p in plan
-    )
+
     return PlanFeatures(
         team_size=len(team),
         chosen_4=list(chosen_4),
@@ -496,6 +601,7 @@ def extract_plan_features(
         opponent_team_size=len(opponent_team),
         features=features,
         categorical=categorical,
+        audit=audit,
     )
 
 
@@ -518,7 +624,6 @@ def shannon_entropy_from_counts(counts: Iterable[int]) -> float:
 def aggregate_features(
     bundles: Sequence[PlanFeatures],
 ) -> Dict[str, float]:
-    """Mean, median, min, p10, p90 of every numeric feature."""
     if not bundles:
         return {}
     keys = list(bundles[0].features.keys())
@@ -535,7 +640,6 @@ def aggregate_features(
         )
         minimum = ordered[0]
         maximum = ordered[-1]
-        # Linear-interpolated percentiles (10th and 90th).
         def _pct(frac: float) -> float:
             pos = (n - 1) * frac
             lo = int(pos)
@@ -551,11 +655,16 @@ def aggregate_features(
     return aggregate
 
 
+# ---------------------------------------------------------------------------
+# Smoke self-test
+# ---------------------------------------------------------------------------
+
+
 if __name__ == "__main__":
     import json
-    sample = [
+    sample_team = [
         {"species": "Incineroar", "ability": "Intimidate",
-         "moves": ["Fake Out", "Flare Blitz", "Parting Shot", "Throat Chop"]},
+         "moves": ["Fake Out", "Flare Blitz", "Parting Shot", "Protect"]},
         {"species": "Garchomp", "ability": "Rough Skin",
          "moves": ["Earthquake", "Rock Slide", "Dragon Claw", "Protect"]},
         {"species": "Rillaboom", "ability": "Grassy Surge",
@@ -576,7 +685,7 @@ if __name__ == "__main__":
         {"species": "Tornadus", "moves": []},
     ]
     bundle = extract_plan_features(
-        sample, opp,
+        sample_team, opp,
         ["Incineroar", "Tornadus", "Garchomp", "Rillaboom"],
         ["Incineroar", "Tornadus"],
         ["Garchomp", "Rillaboom"],

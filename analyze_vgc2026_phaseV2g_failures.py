@@ -327,6 +327,7 @@ def extract_plan_bundle(
         "components": dict(common.components),
         "features": dict(features.features),
         "categorical": dict(features.categorical),
+        "audit": dict(features.audit),
         "chosen_4": list(common.chosen_4),
         "lead_2": list(common.lead_2),
         "back_2": list(common.back_2),

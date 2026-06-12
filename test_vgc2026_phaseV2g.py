@@ -55,9 +55,8 @@ from vgc2026_common_plan_evaluator import (
 )
 from vgc2026_plan_features import (
     PlanFeatures,
-    _back_pressure,
-    _move_kind,
     aggregate_features,
+    classify_move,
     extract_plan_features,
     shannon_entropy_from_counts,
 )
@@ -98,6 +97,40 @@ OPP_TEAM: List[Dict[str, Any]] = [
     {"species": "Garchomp", "moves": []},
     {"species": "Tornadus", "moves": []},
 ]
+
+
+def _build_team_with_back_moves(back_moves: Sequence[str]) -> List[Dict[str, Any]]:
+    """Build a 6-Pokémon team where exactly one back slot carries
+    the given moves. The other five slots use the SAMPLE_TEAM
+    roster. The chosen-4 keeps the test back slot in the back and
+    uses two leads from the standard team so the test isolates
+    the back-slot contribution."""
+    return [
+        {"species": "Incineroar", "ability": "Intimidate",
+         "moves": ["Fake Out", "Flare Blitz", "Parting Shot", "Protect"]},
+        {"species": "Tornadus", "ability": "Prankster",
+         "moves": ["Tailwind", "Taunt", "Hurricane", "Protect"]},
+        {"species": "TestBack", "ability": "Pressure",
+         "moves": list(back_moves)},
+        {"species": "Garchomp", "ability": "Rough Skin",
+         "moves": ["Earthquake", "Rock Slide", "Dragon Claw", "Protect"]},
+        {"species": "Rillaboom", "ability": "Grassy Surge",
+         "moves": ["Fake Out", "Grassy Glide", "U-turn", "Protect"]},
+        {"species": "Flutter Mane", "ability": "Protosynthesis",
+         "moves": ["Moonblast", "Shadow Ball", "Thunderbolt", "Protect"]},
+    ]
+
+
+def _bundle_for_back_moves(
+    back_moves: Sequence[str],
+) -> "PlanFeatures":
+    team = _build_team_with_back_moves(back_moves)
+    chosen = ["Incineroar", "Tornadus", "TestBack", "Garchomp"]
+    leads = ["Incineroar", "Tornadus"]
+    backs = ["TestBack", "Garchomp"]
+    return extract_plan_features(
+        team, OPP_TEAM, chosen, leads, backs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -633,16 +666,21 @@ class TestWeatherTerrainConflicts(unittest.TestCase):
 class TestPhysicalSpecialBalance(unittest.TestCase):
 
     def test_shadow_ball_is_special(self):
-        self.assertEqual(_move_kind("Shadow Ball"), "special")
+        # Shadow Ball has target=normal and category=Special,
+        # so the spread classifier leaves it as "special".
+        self.assertEqual(classify_move("Shadow Ball"), "special")
 
     def test_make_it_rain_is_special(self):
-        self.assertEqual(_move_kind("Make It Rain"), "special")
+        # Make It Rain has category=Special but target=allAdjacentFoes,
+        # so the spread classifier labels it "spread" (a kind of
+        # special damaging move). The classifier never relabels a
+        # non-damaging status move as "spread".
+        self.assertEqual(classify_move("Make It Rain"), "spread")
+        self.assertIn(classify_move("Make It Rain"), {"special", "spread"})
 
     def test_physical_count_equals_physical_damaging(self):
-        # The custom physical/special set is a small but stable
-        # policy-independent classifier. The counts must sum to
-        # the expected total damaging moves in the sample plan
-        # according to the classifier.
+        # The dex-driven physical/special classifier must produce
+        # the same balance diff the bundle records.
         bundle = extract_plan_features(
             SAMPLE_TEAM, OPP_TEAM,
             ["Incineroar", "Tornadus", "Garchomp", "Rillaboom"],
@@ -652,9 +690,6 @@ class TestPhysicalSpecialBalance(unittest.TestCase):
         physical = bundle.features["physical_damaging_moves"]
         special = bundle.features["special_damaging_moves"]
         diff = bundle.features["physical_special_balance_diff"]
-        # The custom classifier matches only moves it knows about.
-        # Both counts must be non-negative and their difference must
-        # equal the recorded balance diff.
         self.assertGreaterEqual(physical, 0)
         self.assertGreaterEqual(special, 0)
         self.assertEqual(physical - special, diff)
@@ -668,16 +703,65 @@ class TestPhysicalSpecialBalance(unittest.TestCase):
 class TestImmediatePressure(unittest.TestCase):
 
     def test_single_target_special_move_is_not_spread_pressure(self):
-        backs = [{"moves": ["Shadow Ball"]}]
-        self.assertEqual(_back_pressure(backs), 0.0)
+        # Shadow Ball has target=normal. The test back slot
+        # contributes zero spread-move count. Garchomp in the
+        # other back slot DOES have spread moves (Earthquake +
+        # Rock Slide), so back_spread_moves is 2, not 0. We
+        # therefore assert the TestBack-slot-only contribution is
+        # zero by comparing to a baseline bundle with no test
+        # back move at all.
+        bundle = _bundle_for_back_moves(["Shadow Ball"])
+        baseline = _bundle_for_back_moves([])
+        self.assertEqual(
+            bundle.features["back_spread_moves"],
+            baseline.features["back_spread_moves"],
+        )
+        # The TestBack slot contributed 0 spread damage.
+        # Use a slot that cannot be in the baseline.
+        self.assertEqual(
+            bundle.features["back_immediate_pressure"],
+            baseline.features["back_immediate_pressure"],
+        )
 
     def test_spread_special_move_is_pressure(self):
-        backs = [{"moves": ["Make It Rain"]}]
-        self.assertEqual(_back_pressure(backs), 0.5)
+        # Make It Rain has target=allAdjacentFoes. The TestBack
+        # slot contributes 0.5 to back-pressure. The other back
+        # slot (Garchomp) also contributes spread moves, so the
+        # raw pressure exceeds 0.5; we assert the delta over a
+        # baseline empty back-move bundle.
+        bundle = _bundle_for_back_moves(["Make It Rain"])
+        baseline = _bundle_for_back_moves([])
+        self.assertEqual(
+            bundle.features["back_spread_moves"]
+            - baseline.features["back_spread_moves"],
+            1.0,
+        )
+        self.assertEqual(
+            bundle.features["back_immediate_pressure"]
+            - baseline.features["back_immediate_pressure"],
+            0.5,
+        )
 
     def test_protect_is_not_priority_pressure(self):
-        backs = [{"moves": ["Protect"]}]
-        self.assertEqual(_back_pressure(backs), 0.0)
+        # Protect has priority 4 but is a stalling move; the dex
+        # flags it. Back-pressure must not increase relative to
+        # the baseline empty back-move bundle.
+        bundle = _bundle_for_back_moves(["Protect"])
+        baseline = _bundle_for_back_moves([])
+        self.assertEqual(
+            bundle.features["back_immediate_pressure"],
+            baseline.features["back_immediate_pressure"],
+        )
+        self.assertEqual(
+            bundle.features["back_priority_moves"],
+            baseline.features["back_priority_moves"],
+        )
+        # But the stall count does go up by 1.
+        self.assertEqual(
+            bundle.features["stall_moves"]
+            - baseline.features["stall_moves"],
+            1.0,
+        )
 
     def test_priority_moves_counted(self):
         # The SAMPLE_TEAM has Fake Out on Incineroar, Rillaboom,

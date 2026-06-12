@@ -946,3 +946,92 @@ EXIT=0 ELAPSED=9.93s
   a spread move.
 - V2g artifacts were regenerated offline after this correction.
 - No battle was rerun and no policy behavior changed.
+
+## Phase V2h — Pair-Level Feature Stability Diagnosis
+
+Phase V2h evaluates whether any preview-visible feature is stable
+enough to justify a future `matchup_top4_v4`. It does not implement
+or enable V4.
+
+### Statistical Design
+
+- Statistical unit: one V3 preview plan per `pair_id`
+- V3-both: 30 pairs
+- Random-both: 25 pairs
+- Split: 45 pairs, descriptive only
+- Decisive sign-test n: 55
+- Two-sided p: `0.5900533317766357`
+- One-sided p: `0.29502666588831783`
+
+D1 and D2 reuse the same deterministic V3 plan. They are not counted
+as independent preview-plan samples.
+
+For each numeric feature, the analyzer reports group summaries,
+unpaired mean difference with deterministic bootstrap CI, pooled
+Cohen's d with bootstrap CI, paired V3-minus-Random difference inside
+the 25 Random-both failure pairs, deterministic LOO direction
+stability, and stratified deterministic 5-fold stability.
+
+### Review Defects Fixed
+
+1. The original CI-excludes-zero expression was logically inverted.
+2. The original between-group LOO/fold calculation used synthetic
+   signed values rather than comparing the 30 and 25 group means.
+3. V2g bundle construction omitted `PlanFeatures.audit`, causing
+   unknown-move counts to be lost.
+
+All three defects have direct regression coverage.
+
+### Results
+
+| Metric | Result |
+|---|---:|
+| Numeric features | 31 |
+| Candidate-actionable | 0 |
+| Contradictory | 18 |
+| Insufficient support | 0 |
+| Unknown V3 moves | 0 |
+| Unknown Random moves | 0 |
+
+Examples:
+
+| Feature | Between-group d | Between mean-diff CI | Failure-pair diff | Failure-pair CI |
+|---|---:|---:|---:|---:|
+| offensive_type_coverage | -0.739 | [-0.163, -0.033] | +0.050 | [+0.006, +0.095] |
+| restorative_moves | -0.548 | [-0.407, -0.013] | +0.120 | [0.000, +0.240] |
+| common_total | +0.033 | [-0.469, +0.598] | +0.859 | [+0.536, +1.174] |
+| setup_moves | -0.059 | [-0.253, +0.200] | -0.160 | [-0.320, -0.040] |
+| type_count_unique | -0.141 | [-1.227, +0.587] | +0.720 | [+0.200, +1.280] |
+
+`common_total` strongly favors the losing V3 plan inside Random-both
+pairs, while it has almost no between-group separation. Eighteen
+features reverse direction between the two comparisons. No feature
+passes the complete stability and consistency gate.
+
+### Verification
+
+```text
+V2h-only:
+Ran 48 tests in 17.280s
+OK
+EXIT=0 ELAPSED=17.49s
+
+Cross-phase:
+Ran 342 tests in 24.984s
+OK
+EXIT=0 ELAPSED=26.25s
+```
+
+### Decision
+
+**B — continue offline evaluator work.**
+
+`matchup_top4_v4` is not implemented. Phase V3 remains **BLOCKED**.
+No battle was run. Outcomes were used only as offline labels. Feature
+extraction and policy selection remain limited to preview-visible
+local data.
+
+Artifacts:
+
+- `logs/vgc2026_phaseV2h_feature_stability.json`
+- `logs/vgc2026_phaseV2h_feature_stability.md`
