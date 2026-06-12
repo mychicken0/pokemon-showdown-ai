@@ -53,6 +53,62 @@ class DoublesDecisionAuditLogger:
             except Exception:
                 self._live_stream_failed = True
 
+    def _is_all_target_immune_damaging_spread(self, order, slot_idx, battle, config) -> bool:
+        """Check if an order is a damaging spread move with all opponent targets immune."""
+        if not order or not hasattr(order, "order"):
+            return False
+        # Check if it's a Move
+        try:
+            from poke_env.battle.move import Move
+            if not isinstance(order.order, Move):
+                return False
+        except Exception:
+            if not hasattr(order.order, "base_power"):
+                return False
+
+        move = order.order
+        if getattr(move, "base_power", 0) <= 0:
+            return False  # not a damaging move
+
+        # Check if spread move targeting opponents
+        target_pos = getattr(order, "move_target", None)
+        if target_pos not in (0, 1, 2):
+            return False
+
+        is_spread = False
+        target_type = getattr(move, "deduced_target", None)
+        try:
+            from poke_env.battle.move import Target
+            if target_type in (Target.ALL, Target.ALL_ADJACENT, Target.ALL_ADJACENT_FOES):
+                is_spread = True
+        except Exception:
+            pass
+        target_str = getattr(move, "target", "")
+        if target_str in ("allAdjacent", "allAdjacentFoes", "all"):
+            is_spread = True
+
+        if not is_spread:
+            return False
+
+        attacker = battle.active_pokemon[slot_idx] if slot_idx < len(battle.active_pokemon) else None
+        if not attacker:
+            return False
+
+        opponent_actives = [opp for opp in battle.opponent_active_pokemon if opp and not getattr(opp, "fainted", False)]
+        if not opponent_actives:
+            return False
+
+        from bot_doubles_damage_aware import is_type_immune
+        for opp in opponent_actives:
+            try:
+                immune, _ = is_type_immune(move, attacker, opp, battle)
+                if not immune:
+                    return False
+            except Exception:
+                return False
+
+        return True
+
     _LIVE_SLOT_KEYS = (
         "action", "move_type", "action_types", "selected_score",
         "expected_damage", "expected_ko", "target_species", "target_hp_before",
@@ -158,18 +214,18 @@ class DoublesDecisionAuditLogger:
         for index, msg in enumerate(turn_events):
             if len(msg) < 3 or msg[0] != "move" or not msg[1].startswith(opp_role):
                 continue
-            
+
             # Gather all events for this move
             move_subevents = []
             for follow in turn_events[index + 1:]:
                 if follow and follow[0] == "move":
                     break
                 move_subevents.append(follow)
-            
+
             # Find which player slots (e.g., p1a, p1b) were targeted or affected
             affected_slots = set()
             immune_slots = {}  # slot -> ability_name
-            
+
             for sub_msg in move_subevents:
                 if len(sub_msg) < 2:
                     continue
@@ -177,7 +233,7 @@ class DoublesDecisionAuditLogger:
                 if subject.startswith(player_role):
                     slot = subject.split(":", 1)[0]
                     affected_slots.add(slot)
-                    
+
                     # Check if ability activated
                     revealed = ""
                     if sub_msg[0] == "-ability" and len(sub_msg) >= 3:
@@ -192,9 +248,9 @@ class DoublesDecisionAuditLogger:
 
             if not affected_slots:
                 continue
-                
+
             saw_resolvable_move = True
-            
+
             # Specifically support spread moves: only count a spread move as an opponent ability error
             # if *all* of our active targets in the turn log are immune/blocked by that ability.
             if len(immune_slots) == len(affected_slots) and len(affected_slots) > 0:
@@ -500,6 +556,7 @@ class DoublesDecisionAuditLogger:
         known_ally_redirection_blocked_candidate_score=None,
         known_ally_redirection_best_safe_alternative=None,
         known_ally_redirection_best_safe_alternative_score=None,
+        **kwargs,
     ):
 
         """
@@ -565,7 +622,7 @@ class DoublesDecisionAuditLogger:
                     if hasattr(move_obj, "base_power") and move_obj.base_power > 0:
                         attacker_mon = battle.active_pokemon[slot_idx] if len(battle.active_pokemon) > slot_idx else None
                         target_pos = getattr(order, "move_target", None)
-                        
+
                         # 1. zero_effectiveness_move_selected
                         if target_pos in (1, 2):
                             target_mon = battle.opponent_active_pokemon[target_pos - 1] if len(battle.opponent_active_pokemon) > (target_pos - 1) else None
@@ -605,6 +662,25 @@ class DoublesDecisionAuditLogger:
         except Exception:
             pass
 
+        # Phase 6.4.10b: All-target immune spread flags
+        all_target_immune_avoided = [False, False]
+        all_target_immune_only_legal = [False, False]
+        all_target_immune_penalized = [False, False]
+        for slot_idx, order in enumerate([first_order, second_order]):
+            if order and self._is_all_target_immune_damaging_spread(order, slot_idx, battle, config):
+                # Check if there's a better joint order without this all-immune spread
+                has_better_alternative = False
+                for other_joint_order, other_score, other_s0, other_s1 in scored_joint_orders[1:]:
+                    other_order = other_joint_order.first_order if slot_idx == 0 else other_joint_order.second_order
+                    if not self._is_all_target_immune_damaging_spread(other_order, slot_idx, battle, config):
+                        has_better_alternative = True
+                        break
+                if has_better_alternative:
+                    all_target_immune_avoided[slot_idx] = True
+                    all_target_immune_penalized[slot_idx] = True
+                else:
+                    all_target_immune_only_legal[slot_idx] = True
+
         # Build actives info
         active_1 = battle.active_pokemon[0] if len(battle.active_pokemon) > 0 else None
         active_2 = battle.active_pokemon[1] if len(battle.active_pokemon) > 1 else None
@@ -616,9 +692,9 @@ class DoublesDecisionAuditLogger:
             if not opp:
                 opponents_info.append(None)
                 continue
-            
+
             from bot_doubles_damage_aware import resolve_known_ability, normalize_possible_abilities
-            
+
             res = resolve_known_ability(opp, battle, config)
             ground_blocked = False
             if res["ability"] == "levitate" and not res["is_currently_suppressed"]:
@@ -630,11 +706,11 @@ class DoublesDecisionAuditLogger:
                         pass
                 if not is_g:
                     ground_blocked = True
-            
+
             singleton_flag = False
             if config:
                 singleton_flag = getattr(config, "ability_hard_safety_allow_singleton_deduction", False)
-            
+
             raw_poss = getattr(opp, "possible_abilities", [])
             opponents_info.append({
                 "species": str(getattr(opp, "species", "")),
@@ -711,6 +787,9 @@ class DoublesDecisionAuditLogger:
                 "best_ko_score": float(best_ko_score[0]) if best_ko_score[0] is not None else None,
                 "zero_effectiveness_move_selected": bool(zero_effectiveness_0),
                 "all_targets_immune_spread_selected": bool(all_targets_immune_0),
+                "all_target_immune_spread_avoided": bool(all_target_immune_avoided[0]) if all_target_immune_avoided else False,
+                "all_target_immune_spread_only_legal": bool(all_target_immune_only_legal[0]) if all_target_immune_only_legal else False,
+                "all_target_immune_spread_joint_penalized": bool(all_target_immune_penalized[0]) if all_target_immune_penalized else False,
                 "self_drop_spam_candidate": bool(self_drop_candidate_0),
                 "self_drop_move_spam": False,
                 "outcome_known": False,
@@ -976,6 +1055,9 @@ class DoublesDecisionAuditLogger:
                 "best_ko_score": float(best_ko_score[1]) if best_ko_score[1] is not None else None,
                 "zero_effectiveness_move_selected": bool(zero_effectiveness_1),
                 "all_targets_immune_spread_selected": bool(all_targets_immune_1),
+                "all_target_immune_spread_avoided": bool(all_target_immune_avoided[1]) if all_target_immune_avoided else False,
+                "all_target_immune_spread_only_legal": bool(all_target_immune_only_legal[1]) if all_target_immune_only_legal else False,
+                "all_target_immune_spread_joint_penalized": bool(all_target_immune_penalized[1]) if all_target_immune_penalized else False,
                 "self_drop_spam_candidate": bool(self_drop_candidate_1),
                 "self_drop_move_spam": False,
                 "outcome_known": False,
@@ -1332,7 +1414,7 @@ class DoublesDecisionAuditLogger:
                     if len(msg) >= 3 and msg[0] == "move" and msg[1].startswith(our_prefix):
                         our_move_idx = idx
                         break
-                
+
                 if our_move_idx is not None:
                     threat_opps = slot_data.get("faster_opponents", []) + slot_data.get("priority_opponents", [])
                     if threat_opps:
@@ -1402,7 +1484,7 @@ class DoublesDecisionAuditLogger:
                                         break
                             if target_mon:
                                 hp_after = float(target_mon.current_hp_fraction) if target_mon.current_hp_fraction is not None else 0.0
-                        
+
                         slot_data["actual_damage"] = max(0.0, hp_before - hp_after)
                         if slot_data["actual_damage"] > 0.0 and hp_after < 0.20 and hp_after > 0.0:
                             slot_data["opponent_survived_below_20"] = True

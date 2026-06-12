@@ -1,29 +1,32 @@
-"""Test-only helper: unregister the poke_env atexit callback that deadlocks.
-
-poke_env.concurrency starts a daemon thread (Thread-1 __run_loop) running
-POKE_LOOP.run_forever() at import time.  It also registers an atexit callback
-(__clear_loop) that attempts to stop the loop and join the thread during
-interpreter shutdown.  In some environments this join deadlocks — the loop
-never processes the stop signal, so the process hangs until an external
-timeout kills it (exit code 124).
-
-This module unregisters that broken atexit callback.  The daemon thread is
-marked daemon=True, so the interpreter will discard it on shutdown without
-attempting a join.  No new cleanup callback is registered.
-
-Production battle code never imports this module.  It is imported only by
-test suites so they terminate naturally.
-
-The operation is idempotent: importing this module multiple times or from
-multiple test files is harmless.
 """
+poke-env test cleanup helper.
+
+This module unregisters the broken poke-env atexit callback that hangs
+when stopping the global event loop (POKE_LOOP). It must be imported
+BEFORE any poke-env production module that triggers POKE_LOOP creation.
+
+Usage:
+    import poke_env_test_cleanup  # must be first import
+    # now safe to import poke_env, bot_vgc2026_phaseV2c, etc.
+"""
+
 import atexit
+import sys
 
-import poke_env.concurrency  # noqa: F401 — triggers POKE_LOOP creation
 
-_clear_loop = getattr(poke_env.concurrency, "__clear_loop", None)
-if _clear_loop is not None:
+def _unregister_poke_env_atexit():
+    """Remove poke-env's __clear_loop from atexit registry."""
     try:
-        atexit.unregister(_clear_loop)
-    except Exception:
-        pass  # already unregistered or not registered
+        from poke_env import concurrency
+        # poke-env registers concurrency.__clear_loop via atexit
+        atexit.unregister(concurrency.__clear_loop)
+    except (ImportError, AttributeError, ValueError):
+        # Already unregistered, not registered, or poke-env not available
+        pass
+
+
+# Execute immediately on import
+_unregister_poke_env_atexit()
+
+# Also provide a function for explicit calls
+unregister_poke_env_atexit = _unregister_poke_env_atexit

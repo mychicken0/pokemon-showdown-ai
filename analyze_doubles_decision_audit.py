@@ -125,7 +125,7 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
     # maps pattern_name -> count_in_losses, count_in_wins
     pattern_losses = {i: 0 for i in range(1, 32)}
     pattern_wins = {i: 0 for i in range(1, 32)}
-    
+
     # Sample battle tags for each pattern
     pattern_loss_samples = {i: [] for i in range(1, 32)}
     pattern_win_samples = {i: [] for i in range(1, 32)}
@@ -664,11 +664,11 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                 for idx, (slot, other) in enumerate([(slot_0, slot_1), (slot_1, slot_0)]):
                     if not slot.get("outcome_known"):
                         continue
-                    
+
                     # 21. detected_speed_priority_threat
                     if slot.get("speed_priority_threatened"):
                         triggered_in_battle.add(21)
-                        
+
                         # 22. true_unanswered_speed_priority_threat
                         is_protect = slot.get("action_types", {}).get("protect")
                         is_switch = slot.get("action_types", {}).get("switch")
@@ -686,7 +686,7 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                             )
                             if not not_unanswered:
                                 triggered_in_battle.add(22)
-                                
+
                             # 23. productive_attack_under_threat
                             is_attack = not is_protect and not is_switch and slot.get("action") and "pass" not in slot.get("action", "")
                             if is_attack:
@@ -697,7 +697,7 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                                 )
                                 if is_productive:
                                     triggered_in_battle.add(23)
-                                    
+
                         # 24. false_positive_speed_priority_threat
                         if slot.get("was_targeted") == False or slot.get("our_mon_fainted") == False:
                             triggered_in_battle.add(24)
@@ -780,7 +780,7 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
         w_cnt = pattern_wins[p_id]
         w_pct = (w_cnt / wins * 100) if wins > 0 else 0
         ratio = f"{l_cnt / max(1, w_cnt):.2f}"
-        
+
         print(f"  {rank:<4} {name:<28} {l_cnt:<10} {l_pct:>6.1f}% {w_cnt:<9} {w_pct:>5.1f}% {ratio:>9}")
 
     print()
@@ -796,13 +796,13 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
     # Recommended Next Tuning Target Heuristics
     print("  Analysis & Recommendation:")
     print("  " + "-" * 40)
-    
+
     top_pattern_id = sorted_patterns[0]
     top_pattern_name = pattern_names[top_pattern_id]
     top_pattern_pct = (pattern_losses[top_pattern_id] / losses * 100) if losses > 0 else 0
 
     print(f"  * The most frequent issue in losses is: {top_pattern_name} ({top_pattern_pct:.1f}% of lost battles).")
-    
+
     if top_pattern_name == "missed_ko":
         print("    Recommendation: Refine damage/KO threshold checks or account for opponent healing/defensive abilities.")
     elif top_pattern_name == "failed_to_target_low_hp":
@@ -933,15 +933,15 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                     for slot_idx, slot_key in enumerate(("slot_0", "slot_1")):
                         slot = turn_data.get(slot_key, {})
                         other = turn_data.get("slot_1" if slot_key == "slot_0" else "slot_0", {})
-                        
+
                         if slot.get("protected_due_to_speed_priority") and slot.get("action_types", {}).get("protect"):
                             our_species = "Unknown"
                             our_actives = turn_data.get("our_active", [])
                             if len(our_actives) > slot_idx and our_actives[slot_idx]:
                                 our_species = our_actives[slot_idx].get("species", "Unknown")
-                                
+
                             opps = [opp.get("species", "Unknown") for opp in turn_data.get("opp_active", []) if opp]
-                            
+
                             classification = "bad"
                             if slot.get("was_targeted") == True:
                                 classification = "good"
@@ -951,7 +951,7 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                                     classification = "good"
                                 elif slot.get("stalling_field_condition", False):
                                     classification = "neutral"
-                                    
+
                             bad_protect_refined_cases.append({
                                 "battle_tag": battle_tag,
                                 "turn": turn_data.get("turn", 0),
@@ -1039,11 +1039,11 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
     print(f"    productive_partial_spread_action_count       : {productive_partial_spread_action_count}  ({productive_partial_spread_action_count * per100:.2f} per 100 battles)")
     print(f"    other_useful_scored_alt_action_count         : {other_useful_scored_alt_action_count}  ({other_useful_scored_alt_action_count * per100:.2f} per 100 battles)")
     print(f"    unclassified_action_count                    : {unclassified_action_count}  ({unclassified_action_count * per100:.2f} per 100 battles)")
-    
-    classified_total = (forced_no_useful_scored_alt_action_count + 
-                        avoidable_safe_damage_alt_action_count + 
-                        productive_partial_spread_action_count + 
-                        other_useful_scored_alt_action_count + 
+
+    classified_total = (forced_no_useful_scored_alt_action_count +
+                        avoidable_safe_damage_alt_action_count +
+                        productive_partial_spread_action_count +
+                        other_useful_scored_alt_action_count +
                         unclassified_action_count)
     consistency = "PASS" if classified_total == absorb_selected_count else "FAIL"
     print(f"    classified_total == selected_total           : {consistency} (classified: {classified_total}, selected: {absorb_selected_count})")
@@ -2057,6 +2057,124 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
         print(f"  had switch available                   : {had_switch_avail}")
     print("=" * 70)
 
+    # ===== Phase 6.3.7l.1: Dynamic Move Type Safety Report =====
+    print("\n" + "=" * 70)
+    print("  Dynamic Move Type Safety Report (Phase 6.3.7)")
+    print("=" * 70)
+
+    dt_selected = 0; dt_forms = {}
+    dt_absorb_blocked = 0; dt_absorb_selected = 0; dt_absorb_avoided = 0
+    dt_absorb_sel_wins = 0; dt_absorb_sel_losses = 0
+    dt_absorb_avd_wins = 0; dt_absorb_avd_losses = 0
+    dt_decl_eff = {}
+    dt_reasons = {}
+    dt_blocked_moves = {}
+    dt_targets = {}
+    dt_target_abilities = {}
+    dt_samples = []
+    MAX_SAMPLES = 10
+
+    for fp in filepath if isinstance(filepath, list) else [filepath]:
+        if not os.path.exists(fp): continue
+        with open(fp) as f:
+            for line in f:
+                if not line.strip(): continue
+                try: rec = json.loads(line)
+                except Exception: continue
+                bt = rec.get("battle_tag", ""); won = rec.get("won", False)
+                for td in rec.get("audit_turns", []):
+                    turn = td.get("turn", 0)
+                    selected_joint = td.get("selected_joint_order", "")
+                    our_active = td.get("our_active", [{}, {}])
+                    for sk_idx, sk in enumerate(("slot_0","slot_1")):
+                        s = td.get(sk, {})
+                        if not s: continue
+                        dyn = s.get("dynamic_move_type_applied", False)
+                        if dyn:
+                            dt_selected += 1
+                            declared = s.get("declared_move_type", "")
+                            effective = s.get("effective_move_type", "")
+                            if declared and effective:
+                                key = f'{declared} -> {effective}'
+                                dt_decl_eff[key] = dt_decl_eff.get(key, 0) + 1
+                        form = s.get("dynamic_move_type_form", "")
+                        if form: dt_forms[form] = dt_forms.get(form, 0) + 1
+
+                        if s.get("dynamic_type_absorb_candidate_blocked"):
+                            dt_absorb_blocked += 1
+                            if s.get("dynamic_type_absorb_selected"):
+                                dt_absorb_selected += 1
+                                if won: dt_absorb_sel_wins += 1
+                                else: dt_absorb_sel_losses += 1
+                            elif s.get("dynamic_type_absorb_avoided"):
+                                dt_absorb_avoided += 1
+                                if won: dt_absorb_avd_wins += 1
+                                else: dt_absorb_avd_losses += 1
+
+                            reason = s.get("dynamic_type_absorb_reason", "")
+                            if reason: dt_reasons[reason] = dt_reasons.get(reason, 0) + 1
+                            bm = s.get("dynamic_type_absorb_blocked_move_id", "")
+                            if bm: dt_blocked_moves[bm] = dt_blocked_moves.get(bm, 0) + 1
+                            tgt = s.get("dynamic_type_absorb_target_species", "")
+                            if tgt: dt_targets[tgt] = dt_targets.get(tgt, 0) + 1
+                            ta = s.get("dynamic_type_absorb_target_ability", "")
+                            if ta: dt_target_abilities[ta] = dt_target_abilities.get(ta, 0) + 1
+
+                            if len(dt_samples) < MAX_SAMPLES:
+                                attacker = ""
+                                try:
+                                    a_entry = our_active[sk_idx] if sk_idx < len(our_active) else None
+                                    attacker = a_entry.get("species", "") if isinstance(a_entry, dict) else ""
+                                except Exception:
+                                    pass
+                                dt_samples.append({
+                                    "bt": bt, "turn": turn, "slot": sk, "won": won,
+                                    "attacker": attacker,
+                                    "declared": s.get("declared_move_type", ""),
+                                    "effective": s.get("effective_move_type", ""),
+                                    "form": s.get("dynamic_move_type_form", ""),
+                                    "source": s.get("effective_move_type_source", ""),
+                                    "reason": reason,
+                                    "target_species": tgt,
+                                    "target_ability": ta,
+                                    "blocked_move": bm,
+                                    "blocked_score": s.get("dynamic_type_absorb_blocked_candidate_score", 0.0),
+                                    "selected": s.get("dynamic_type_absorb_selected", False),
+                                    "avoided": s.get("dynamic_type_absorb_avoided", False),
+                                    "joint_order": selected_joint,
+                                })
+
+    print(f"  dynamic type actions selected           : {dt_selected}")
+    print(f"  dynamic absorb candidates blocked       : {dt_absorb_blocked}")
+    print(f"  dynamic absorb candidates selected      : {dt_absorb_selected}")
+    print(f"  dynamic absorb candidates avoided       : {dt_absorb_avoided}")
+    print(f"  selected wins / losses                  : {dt_absorb_sel_wins} / {dt_absorb_sel_losses}")
+    print(f"  avoided  wins / losses                  : {dt_absorb_avd_wins} / {dt_absorb_avd_losses}")
+    print(f"  declared -> effective type split       : {dict(dt_decl_eff)}")
+    print(f"  observed forms                          : {dict(dt_forms)}")
+    print(f"  block reason split                      : {dict(dt_reasons)}")
+    print(f"  blocked move ID split                   : {dict(dt_blocked_moves)}")
+    print(f"  target species split                    : {dict(dt_targets)}")
+    print(f"  target ability split                    : {dict(dt_target_abilities)}")
+
+    acc_pass = (dt_absorb_blocked == dt_absorb_selected + dt_absorb_avoided)
+    print(f"\n  accounting invariant:")
+    print(f"    blocked == selected + avoided : {'PASS' if acc_pass else 'FAIL'}")
+    print(f"    ({dt_absorb_blocked} == {dt_absorb_selected} + {dt_absorb_avoided})")
+
+    if dt_samples:
+        print(f"\n  Sample cases (up to {len(dt_samples)}):")
+        for i, c in enumerate(dt_samples, 1):
+            outcome = "WIN" if c["won"] else "LOSS"
+            sel_status = "SELECTED" if c["selected"] else "AVOIDED" if c["avoided"] else "UNSET"
+            print(f"  #{i}: {c['bt']} t{c['turn']} {c['slot']} {outcome} {sel_status}")
+            print(f"       attacker: {c['attacker']}  blocked move: {c['blocked_move']}")
+            print(f"       declared: {c['declared']} -> effective: {c['effective']}")
+            print(f"       form: {c['form']}  source: {c['source']}  score: {c['blocked_score']}")
+            print(f"       target: {c['target_species']}  ability: {c['target_ability']}  reason: {c['reason']}")
+            print(f"       joint: {c['joint_order']}")
+    print("=" * 70)
+
     # ===== Phase 6.4.8: Disabled Safety Feature Attribution Report =====
     print("\n" + "=" * 70)
     print("  Disabled Safety Feature Attribution Report (Phase 6.4.8)")
@@ -2340,6 +2458,240 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
             print(f"       KnownBefore: {s['known']}  Repeat: {s['repeat']}  Reason: {s['reason']}")
     else:
         print("  (No ally redirection events)")
+    print("=" * 70)
+
+    # ===== Phase 6.3.8: Support Move Target Hard Safety Report =====
+    print("\n" + "=" * 70)
+    print("  Support Move Target Hard Safety Report (Phase 6.3.8)")
+    print("=" * 70)
+
+    st_candidates = 0; st_selected = 0; st_avoided = 0; st_only_legal = 0
+    st_heal_pulse_opp_sel = 0; st_heal_pulse_opp_avoided = 0
+    st_helping_hand_opp = 0; st_opp_disruption_ally = 0
+    st_wins = 0; st_losses = 0
+    st_move_split = {}; st_intended_split = {}; st_actual_split = {}
+    st_reason_split = {}; st_samples = []
+
+    for fp in filepath if isinstance(filepath, list) else [filepath]:
+        if not os.path.exists(fp): continue
+        with open(fp) as f:
+            for line in f:
+                if not line.strip(): continue
+                try: rec = json.loads(line)
+                except Exception: continue
+                bt = rec.get("battle_tag",""); won = rec.get("won",False)
+                for td in rec.get("audit_turns", []):
+                    for sk in ("slot_0","slot_1"):
+                        s = td.get(sk,{})
+                        if not s: continue
+                        cand = s.get("support_target_candidate_blocked", False)
+                        if not cand:
+                            continue
+                        st_candidates += 1
+
+                        sel = s.get("support_target_selected", False)
+                        avd = s.get("support_target_avoided", False)
+                        ol = s.get("support_target_only_legal", False)
+
+                        mid = s.get("support_target_move_id", "")
+                        i_side = s.get("support_target_intended_side", "")
+                        a_side = s.get("support_target_actual_side", "")
+                        reason = s.get("support_target_reason", "")
+                        src = s.get("support_target_classification_source", "")
+
+                        if sel:
+                            st_selected += 1
+                            if won: st_wins += 1
+                            else: st_losses += 1
+                            if mid == "healpulse" and a_side == "opponent":
+                                st_heal_pulse_opp_sel += 1
+                        if avd:
+                            st_avoided += 1
+                            if mid == "healpulse" and a_side == "opponent":
+                                st_heal_pulse_opp_avoided += 1
+                        if ol:
+                            st_only_legal += 1
+
+                        if mid in ("helpinghand",) and a_side == "opponent":
+                            st_helping_hand_opp += 1
+                        if i_side == "opponent" and a_side in ("ally", "self"):
+                            st_opp_disruption_ally += 1
+
+                        st_move_split[mid] = st_move_split.get(mid, 0) + 1
+                        st_intended_split[i_side] = st_intended_split.get(i_side, 0) + 1
+                        st_actual_split[a_side] = st_actual_split.get(a_side, 0) + 1
+                        st_reason_split[reason[:40]] = st_reason_split.get(reason[:40], 0) + 1
+
+                        if len(st_samples) < 10:
+                            st_samples.append({
+                                "bt": bt, "turn": td.get("turn",0), "slot": sk, "won": won,
+                                "cand": cand, "sel": sel, "avd": avd, "ol": ol,
+                                "move": mid, "intended": i_side, "actual": a_side,
+                                "reason": reason,
+                            })
+
+    print(f"  wrong-side candidates                  : {st_candidates}")
+    print(f"  wrong-side selected                   : {st_selected}")
+    print(f"  wrong-side avoided                    : {st_avoided}")
+    print(f"  only-legal                            : {st_only_legal}")
+    print(f"  Heal Pulse into opponent selected     : {st_heal_pulse_opp_sel}")
+    print(f"  Heal Pulse into opponent avoided      : {st_heal_pulse_opp_avoided}")
+    print(f"  Helping Hand into opponent            : {st_helping_hand_opp}")
+    print(f"  Opponent disruption into ally         : {st_opp_disruption_ally}")
+    print(f"  wins / losses                         : {st_wins} / {st_losses}")
+    print(f"  move split                            : {dict(sorted(st_move_split.items()))}")
+    print(f"  intended-side split                   : {dict(sorted(st_intended_split.items()))}")
+    print(f"  actual-side split                     : {dict(sorted(st_actual_split.items()))}")
+    print(f"  reason split (first 40 chars)         : {dict(sorted(st_reason_split.items()))}")
+
+    # Accounting invariant
+    acct_pass = (st_candidates == st_selected + st_avoided)
+    print(f"  accounting invariant (cand == sel + avoided): {'PASS' if acct_pass else 'FAIL'}")
+    print(f"    ({st_candidates} == {st_selected} + {st_avoided})")
+
+    # Mutual exclusion
+    mutual_excl = not (st_selected > 0 and st_avoided > 0 and any(
+        s.get("sel") and s.get("avd") for s in st_samples
+    ))
+    print(f"  selected/avoided mutual exclusion       : {'PASS' if mutual_excl else 'FAIL'}")
+
+    if st_samples:
+        print()
+        print("  Sample cases:")
+        for i, s in enumerate(st_samples, 1):
+            label = "SEL" if s["sel"] else ("AVD" if s["avd"] else "CAND")
+            print(f"    {i}. {s['bt'][:25]} t{s['turn']} {s['slot']} ({label}) {'WIN' if s['won'] else 'LOSS'}")
+            print(f"       Move: {s['move']}  Intended: {s['intended']}  Actual: {s['actual']}")
+            print(f"       Reason: {s['reason']}")
+    else:
+        print("  (No support move target events)")
+    print("=" * 70)
+
+    # ===== Phase 6.4.9: Voluntary Switch Quality Report =====
+    print("\n" + "=" * 70)
+    print("  Voluntary Switch Quality Report (Phase 6.4.9)")
+    print("=" * 70)
+
+    vsw_eligible = 0; vsw_selected = 0; vsw_unnecessary = 0
+    vsw_unsafe = 0; vsw_repeat = 0; vsw_sac_opp = 0
+    vsw_healthy_bench = 0; vsw_safer_avail = 0
+    vsw_sel_changed = 0; vsw_joint_changed = 0
+    vsw_wins = 0; vsw_losses = 0
+    vsw_total_risk_red = 0.0; vsw_cnt_risk_red = 0
+    vsw_total_best_stay = 0.0; vsw_cnt_best_stay = 0
+    vsw_total_score_adj = 0.0; vsw_cnt_score_adj = 0
+    vsw_reason_split = {}
+    vsw_samples = []
+
+    for fp in filepath if isinstance(filepath, list) else [filepath]:
+        if not os.path.exists(fp): continue
+        with open(fp) as f:
+            for line in f:
+                if not line.strip(): continue
+                try: rec = json.loads(line)
+                except Exception: continue
+                bt = rec.get("battle_tag",""); won = rec.get("won",False)
+                for td in rec.get("audit_turns", []):
+                    # Use authoritative fields directly
+                    eligible = td.get("voluntary_switch_decision_eligible", [False, False])
+                    selected = td.get("voluntary_switch_selected", [False, False])
+                    species = td.get("voluntary_switch_selected_species", ["", ""])
+                    unnecessary = td.get("voluntary_switch_unnecessary_selected", [False, False])
+                    unsafe = td.get("voluntary_switch_unsafe_candidate_selected", [False, False])
+                    repeat = td.get("voluntary_switch_repeat_selected", [False, False])
+                    sac_opp = td.get("voluntary_switch_sacrifice_opportunity", [False, False])
+                    healthy = td.get("voluntary_switch_healthy_bench_preserved", [False, False])
+                    safer = td.get("voluntary_switch_safer_candidate_available", [False, False])
+                    sel_changed = td.get("voluntary_switch_selection_changed", [False, False])
+                    joint_changed = td.get("voluntary_switch_joint_selection_changed", False)
+                    active_risk = td.get("voluntary_switch_selected_active_risk", [0.0, 0.0])
+                    cand_risk = td.get("voluntary_switch_selected_candidate_risk", [0.0, 0.0])
+                    risk_red = td.get("voluntary_switch_selected_risk_reduction", [0.0, 0.0])
+                    score_adj = td.get("voluntary_switch_selected_score_adjustment", [0.0, 0.0])
+                    best_stay = td.get("voluntary_switch_best_stay_score", [0.0, 0.0])
+                    reason_codes = td.get("voluntary_switch_reason_codes", [[], []])
+
+                    for si in (0, 1):
+                        if not (eligible[si] if si < len(eligible) else False):
+                            continue
+                        vsw_eligible += 1
+
+                        if selected[si] if si < len(selected) else False:
+                            vsw_selected += 1
+                            if won: vsw_wins += 1
+                            else: vsw_losses += 1
+
+                        if unnecessary[si] if si < len(unnecessary) else False:
+                            vsw_unnecessary += 1
+                        if unsafe[si] if si < len(unsafe) else False:
+                            vsw_unsafe += 1
+                        if repeat[si] if si < len(repeat) else False:
+                            vsw_repeat += 1
+                        if sac_opp[si] if si < len(sac_opp) else False:
+                            vsw_sac_opp += 1
+                        if healthy[si] if si < len(healthy) else False:
+                            vsw_healthy_bench += 1
+                        if safer[si] if si < len(safer) else False:
+                            vsw_safer_avail += 1
+                        if sel_changed[si] if si < len(sel_changed) else False:
+                            vsw_sel_changed += 1
+
+                        # Averages from authoritative fields
+                        if si < len(risk_red) and risk_red[si] != 0.0:
+                            vsw_total_risk_red += risk_red[si]
+                            vsw_cnt_risk_red += 1
+                        if si < len(score_adj):
+                            vsw_total_score_adj += score_adj[si]
+                            vsw_cnt_score_adj += 1
+                        if si < len(best_stay):
+                            vsw_total_best_stay += best_stay[si]
+                            vsw_cnt_best_stay += 1
+
+                        # Reason split
+                        rc = reason_codes[si] if si < len(reason_codes) else []
+                        for code in rc:
+                            vsw_reason_split[code] = vsw_reason_split.get(code, 0) + 1
+
+                    if joint_changed:
+                        vsw_joint_changed += 1
+
+                    if len(vsw_samples) < 10 and vsw_selected > len(vsw_samples):
+                        for si in (0, 1):
+                            sel = selected[si] if si < len(selected) else False
+                            if sel:
+                                spp = species[si] if si < len(species) else ""
+                                vsw_samples.append({
+                                    "bt": bt[:25], "turn": td.get("turn",0), "slot": f"slot_{si}",
+                                    "species": spp, "won": won,
+                                })
+
+    avg_risk_red = vsw_total_risk_red / max(vsw_cnt_risk_red, 1)
+    avg_best_stay = vsw_total_best_stay / max(vsw_cnt_best_stay, 1)
+    avg_score_adj = vsw_total_score_adj / max(vsw_cnt_score_adj, 1)
+
+    print(f"  eligible decisions                     : {vsw_eligible}")
+    print(f"  voluntary switches selected            : {vsw_selected}")
+    print(f"  unnecessary selections                 : {vsw_unnecessary}")
+    print(f"  unsafe selections                      : {vsw_unsafe}")
+    print(f"  repeat switches                        : {vsw_repeat}")
+    print(f"  sacrifice opportunities                : {vsw_sac_opp}")
+    print(f"  healthy bench preserved                : {vsw_healthy_bench}")
+    print(f"  safer candidate available              : {vsw_safer_avail}")
+    print(f"  per-slot selection changes             : {vsw_sel_changed}")
+    print(f"  joint selection changes                : {vsw_joint_changed}")
+    print(f"  wins / losses                          : {vsw_wins} / {vsw_losses}")
+    print(f"  avg risk reduction                     : {avg_risk_red:.2f}")
+    print(f"  avg best stay score                    : {avg_best_stay:.1f}")
+    print(f"  avg score adjustment                   : {avg_score_adj:.1f}")
+    if vsw_reason_split:
+        print(f"  reason split                           : {dict(sorted(vsw_reason_split.items()))}")
+    if vsw_samples:
+        print()
+        print("  Sample cases:")
+        for i, s in enumerate(vsw_samples, 1):
+            print(f"    {i}. {s['bt']} t{s['turn']} {s['slot']} {s['species']} ({'WIN' if s['won'] else 'LOSS'})")
+    else:
+        print("  (No voluntary switch events)")
     print("=" * 70)
 
 

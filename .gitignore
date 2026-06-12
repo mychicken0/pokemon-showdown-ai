@@ -13,6 +13,8 @@ logs/
 
 # Local scratch/output data
 scratch/
+data/vgc2026_topteams/cache/
+data/vgc2026_topteams/cache_rendered/
 
 # Editors and operating systems
 .idea/
@@ -25,4 +27,3 @@ scratch/
 .env
 .env.*
 !.env.example
-

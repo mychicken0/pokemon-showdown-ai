@@ -16,6 +16,8 @@ import poke_env_test_cleanup  # noqa: F401
 from bot_doubles_damage_aware import (
     DoublesDamageAwareConfig,
     is_type_immune,
+    is_type_consumed,
+    _TYPE_CONSUMING_MOVES,
     ability_hard_blocks_move,
 )
 
@@ -264,6 +266,83 @@ class TestNonImmune(unittest.TestCase):
         target = MockPokemon("swampert", ["WATER", "GROUND"])
         immune, _ = is_type_immune(move, None, target)
         self.assertFalse(immune)
+
+
+# ===== Phase 6.5: Type Consumption Tests =====
+
+class TestTypeConsumption(unittest.TestCase):
+    """Tests for type consumption tracking (Double Shock, Burn Up)."""
+
+    def _make_battle(self):
+        from unittest.mock import MagicMock
+        battle = MagicMock()
+        battle.battle_tag = "test_consumption"
+        battle._replay_data = []
+        def get_ident(pokemon):
+            return getattr(pokemon, "_identity", "")
+        battle.get_pokemon_identifier = get_ident
+        return battle
+
+    def _make_pokemon(self, species, identity, types=None):
+        from unittest.mock import MagicMock
+        p = MagicMock()
+        p.species = species
+        p._identity = identity
+        p.types = types or []
+        return p
+
+    def test_doubleshock_blocked_after_consumption(self):
+        move = MockMove("doubleshock", "ELECTRIC", base_power=120, category="PHYSICAL")
+        pawmot = self._make_pokemon("Pawmot", "p1a: Pawmot", ["ELECTRIC", "FIGHTING"])
+        battle = self._make_battle()
+        consumed_types = {battle.battle_tag: {"p1a: Pawmot": {"ELECTRIC"}}}
+        result = is_type_consumed(move, pawmot, battle, consumed_types)
+        self.assertTrue(result, "Double Shock should be blocked after Electric is consumed")
+
+    def test_doubleshock_legal_before_consumption(self):
+        move = MockMove("doubleshock", "ELECTRIC", base_power=120, category="PHYSICAL")
+        pawmot = self._make_pokemon("Pawmot", "p1a: Pawmot", ["ELECTRIC", "FIGHTING"])
+        battle = self._make_battle()
+        consumed_types = {battle.battle_tag: {}}
+        result = is_type_consumed(move, pawmot, battle, consumed_types)
+        self.assertFalse(result, "Double Shock should be legal before Electric is consumed")
+
+    def test_unrelated_move_not_blocked(self):
+        move = MockMove("thunderbolt", "ELECTRIC", base_power=90, category="SPECIAL")
+        pawmot = self._make_pokemon("Pawmot", "p1a: Pawmot", ["ELECTRIC", "FIGHTING"])
+        battle = self._make_battle()
+        consumed_types = {battle.battle_tag: {"p1a: Pawmot": {"ELECTRIC"}}}
+        result = is_type_consumed(move, pawmot, battle, consumed_types)
+        self.assertFalse(result, "Thunderbolt should not be blocked (not type-consuming)")
+
+    def test_burnup_blocked_after_consumption(self):
+        move = MockMove("burnup", "FIRE", base_power=130, category="SPECIAL")
+        mon = self._make_pokemon("Arcanine", "p1a: Arcanine", ["FIRE"])
+        battle = self._make_battle()
+        consumed_types = {battle.battle_tag: {"p1a: Arcanine": {"FIRE"}}}
+        result = is_type_consumed(move, mon, battle, consumed_types)
+        self.assertTrue(result, "Burn Up should be blocked after Fire is consumed")
+
+    def test_other_pokemon_unaffected(self):
+        move = MockMove("doubleshock", "ELECTRIC", base_power=120, category="PHYSICAL")
+        pawmot = self._make_pokemon("Pawmot", "p1a: Pawmot", ["ELECTRIC", "FIGHTING"])
+        other = self._make_pokemon("Pikachu", "p1b: Pikachu", ["ELECTRIC"])
+        battle = self._make_battle()
+        consumed_types = {battle.battle_tag: {"p1a: Pawmot": {"ELECTRIC"}}}
+        result_pawmot = is_type_consumed(move, pawmot, battle, consumed_types)
+        result_other = is_type_consumed(move, other, battle, consumed_types)
+        self.assertTrue(result_pawmot, "Pawmot should be blocked")
+        self.assertFalse(result_other, "Pikachu should not be blocked")
+
+    def test_consumed_types_config(self):
+        config = DoublesDamageAwareConfig()
+        self.assertTrue(config.enable_type_consumption_tracking)
+
+    def test_type_consuming_moves_set(self):
+        self.assertIn("doubleshock", _TYPE_CONSUMING_MOVES)
+        self.assertIn("burnup", _TYPE_CONSUMING_MOVES)
+        self.assertEqual(_TYPE_CONSUMING_MOVES["doubleshock"], "ELECTRIC")
+        self.assertEqual(_TYPE_CONSUMING_MOVES["burnup"], "FIRE")
 
 
 if __name__ == "__main__":

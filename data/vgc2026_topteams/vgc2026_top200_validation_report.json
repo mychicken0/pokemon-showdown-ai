@@ -1,0 +1,1307 @@
+{
+  "format": "gen9championsvgc2026regma",
+  "total_teams": 129,
+  "validatable_teams": 129,
+  "validated_teams": 129,
+  "valid_teams": 129,
+  "invalid_teams": 0,
+  "invalid_species": 0,
+  "invalid_items": 0,
+  "invalid_abilities": 0,
+  "invalid_moves": 0,
+  "missing_tera": 129,
+  "incomplete_pokemon": 0,
+  "teams_with_simulation_fields": 129,
+  "team_results": [
+    {
+      "id": "pikalytics_rank_001",
+      "rank": 1,
+      "player": "ARSAL PURI",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_003",
+      "rank": 3,
+      "player": "Wolfe Glick",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_004",
+      "rank": 4,
+      "player": "TingusThePingus",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_005",
+      "rank": 5,
+      "player": "ARegularGuy",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_006",
+      "rank": 6,
+      "player": "Altkyle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_007",
+      "rank": 7,
+      "player": "PokeReplay",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_008",
+      "rank": 8,
+      "player": "GielBakker",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_010",
+      "rank": 10,
+      "player": "Snorlaxpikachu1",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_011",
+      "rank": 11,
+      "player": "GengarIsMad",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_012",
+      "rank": 12,
+      "player": "Gabuu",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_013",
+      "rank": 13,
+      "player": "Michael Zhang",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_014",
+      "rank": 14,
+      "player": "Rezeptritter",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_015",
+      "rank": 15,
+      "player": "UsagiFoo",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_016",
+      "rank": 16,
+      "player": "SaviorofBiryani",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_017",
+      "rank": 17,
+      "player": "apfr",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_018",
+      "rank": 18,
+      "player": "Hrishi",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_019",
+      "rank": 19,
+      "player": "QueerCrocodile",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_020",
+      "rank": 20,
+      "player": "BatCoach",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_021",
+      "rank": 21,
+      "player": "Ksomon",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_022",
+      "rank": 22,
+      "player": "Altkyle",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_023",
+      "rank": 23,
+      "player": "Gabeeel",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_024",
+      "rank": 24,
+      "player": "katabo",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_025",
+      "rank": 25,
+      "player": "Rururinillo",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_026",
+      "rank": 26,
+      "player": "57 62",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_027",
+      "rank": 27,
+      "player": "vedantff12345",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_028",
+      "rank": 28,
+      "player": "PJoker",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_029",
+      "rank": 29,
+      "player": "Tabook",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_030",
+      "rank": 30,
+      "player": "aerxdri",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_032",
+      "rank": 32,
+      "player": "SuperDialga",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_033",
+      "rank": 33,
+      "player": "TypNull07",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_034",
+      "rank": 34,
+      "player": "sword",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_035",
+      "rank": 35,
+      "player": "Samuel T",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_036",
+      "rank": 36,
+      "player": "Daredevilzz26",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_037",
+      "rank": 37,
+      "player": "CptAuroOG",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_038",
+      "rank": 38,
+      "player": "Altkyle",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_039",
+      "rank": 39,
+      "player": "Kotori",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_040",
+      "rank": 40,
+      "player": "SoulVGC",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_041",
+      "rank": 41,
+      "player": "Sabo11",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_042",
+      "rank": 42,
+      "player": "Paghy",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_043",
+      "rank": 43,
+      "player": "Gustav H",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_044",
+      "rank": 44,
+      "player": "AntZim",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_045",
+      "rank": 45,
+      "player": "Hyokami",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_046",
+      "rank": 46,
+      "player": "Risten",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_047",
+      "rank": 47,
+      "player": "Olymak",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_048",
+      "rank": 48,
+      "player": "LenVGC",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_049",
+      "rank": 49,
+      "player": "Raichu123",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_050",
+      "rank": 50,
+      "player": "Kevmetal",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_051",
+      "rank": 51,
+      "player": "washy",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_053",
+      "rank": 53,
+      "player": "Magnetman",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_054",
+      "rank": 54,
+      "player": "Rahzar",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_055",
+      "rank": 55,
+      "player": "Altkyle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_056",
+      "rank": 56,
+      "player": "Gioc1902",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_057",
+      "rank": 57,
+      "player": "Draxolotl",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_058",
+      "rank": 58,
+      "player": "Renecuajo",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_060",
+      "rank": 60,
+      "player": "maxdeesevgc",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_061",
+      "rank": 61,
+      "player": "Altkyle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_062",
+      "rank": 62,
+      "player": "OrangeSteve",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_064",
+      "rank": 64,
+      "player": "merrypasta",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_065",
+      "rank": 65,
+      "player": "Kotori",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_066",
+      "rank": 66,
+      "player": "Eduardo Cunha",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_067",
+      "rank": 67,
+      "player": "Ciemmelle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_068",
+      "rank": 68,
+      "player": "Zachvgc2",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_069",
+      "rank": 69,
+      "player": "HeroicTitan",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_070",
+      "rank": 70,
+      "player": "yungelmersglue",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_071",
+      "rank": 71,
+      "player": "Aarubi",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_072",
+      "rank": 72,
+      "player": "LuckySama",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_073",
+      "rank": 73,
+      "player": "Lojica1",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_074",
+      "rank": 74,
+      "player": "merrypasta",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_075",
+      "rank": 75,
+      "player": "almondspy",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_076",
+      "rank": 76,
+      "player": "Faiyex",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_077",
+      "rank": 77,
+      "player": "gahelar",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_078",
+      "rank": 78,
+      "player": "AndruApple",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_080",
+      "rank": 80,
+      "player": "Pendraggon26",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_081",
+      "rank": 81,
+      "player": "ILS | L",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_082",
+      "rank": 82,
+      "player": "3cake",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_084",
+      "rank": 84,
+      "player": "Ally",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_085",
+      "rank": 85,
+      "player": "Zantut",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_086",
+      "rank": 86,
+      "player": "blueuak",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_088",
+      "rank": 88,
+      "player": "Jin-Hao Jiang",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_090",
+      "rank": 90,
+      "player": "Hush",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_092",
+      "rank": 92,
+      "player": "Arash Ommati",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_093",
+      "rank": 93,
+      "player": "WoChienReaction",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_095",
+      "rank": 95,
+      "player": "Gaty",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_096",
+      "rank": 96,
+      "player": "Noah Smith",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_097",
+      "rank": 97,
+      "player": "Teto2106VGC",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_098",
+      "rank": 98,
+      "player": "Kojay",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_099",
+      "rank": 99,
+      "player": "BobElephant",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_100",
+      "rank": 100,
+      "player": "MarvVGC",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_101",
+      "rank": 101,
+      "player": "Dirtyshirt",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_102",
+      "rank": 102,
+      "player": "JPXL",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_103",
+      "rank": 103,
+      "player": "gephicka",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_104",
+      "rank": 104,
+      "player": "QueerCrocodile",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_105",
+      "rank": 105,
+      "player": "Punihina",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_106",
+      "rank": 106,
+      "player": "Brent Santiago",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_107",
+      "rank": 107,
+      "player": "TinxoLibre",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_108",
+      "rank": 108,
+      "player": "FrostyDog69",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_109",
+      "rank": 109,
+      "player": "Altkyle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_110",
+      "rank": 110,
+      "player": "TerroneVGC",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_111",
+      "rank": 111,
+      "player": "Nutchup",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_112",
+      "rank": 112,
+      "player": "NMR | FelipeT",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_114",
+      "rank": 114,
+      "player": "Yegorushhka",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_115",
+      "rank": 115,
+      "player": "TayOpkMn",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_116",
+      "rank": 116,
+      "player": "Abe",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_118",
+      "rank": 118,
+      "player": "Altkyle",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_119",
+      "rank": 119,
+      "player": "a b \u200e",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_120",
+      "rank": 120,
+      "player": "WiseDraco2",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_121",
+      "rank": 121,
+      "player": "kaori_uy",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_122",
+      "rank": 122,
+      "player": "megacisco",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_123",
+      "rank": 123,
+      "player": "QueerCrocodile",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_124",
+      "rank": 124,
+      "player": "Samuel T",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_125",
+      "rank": 125,
+      "player": "TenkiPK",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_126",
+      "rank": 126,
+      "player": "Foghorn",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_127",
+      "rank": 127,
+      "player": "Drwildy",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_132",
+      "rank": 132,
+      "player": "Rosha Volari",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_134",
+      "rank": 134,
+      "player": "Cactusmax",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_135",
+      "rank": 135,
+      "player": "Stuart",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_138",
+      "rank": 138,
+      "player": "Lorbrun",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_144",
+      "rank": 144,
+      "player": "QueerCrocodile",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_145",
+      "rank": 145,
+      "player": "OrangePunk",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_146",
+      "rank": 146,
+      "player": "UncleSam",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_148",
+      "rank": 148,
+      "player": "BHelixB",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_149",
+      "rank": 149,
+      "player": "Lakenta",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_151",
+      "rank": 151,
+      "player": "ismaaelh",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_154",
+      "rank": 154,
+      "player": "mr_h",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_156",
+      "rank": 156,
+      "player": "Weeblewobs",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_157",
+      "rank": 157,
+      "player": "Carrotman",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_160",
+      "rank": 160,
+      "player": "Laxidaze3",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_161",
+      "rank": 161,
+      "player": "redpandavgc",
+      "parse_status": "partial_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    },
+    {
+      "id": "pikalytics_rank_162",
+      "rank": 162,
+      "player": "Lord_Jay",
+      "parse_status": "complete_ots",
+      "teams_count": 6,
+      "valid": true,
+      "error": "",
+      "errors_detail": []
+    }
+  ]
+}

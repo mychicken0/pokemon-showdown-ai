@@ -1,0 +1,6617 @@
+Venusaur @ Focus Sash
+Ability: Chlorophyll
+Level: 50
+Timid Nature
+- Sleep Powder
+- Sludge Bomb
+- Earth Power
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Solar Beam
+- Weather Ball
+- Protect
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Rock Slide
+- Stomping Tantrum
+- Dragon Claw
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Fake Out
+- Flare Blitz
+- Parting Shot
+- Throat Chop
+
+Floette [Eternal Flower] @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Calm Mind
+- Protect
+
+Sinistcha [Unremarkable Form] @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Relaxed Nature
+- Matcha Gotcha
+- Rage Powder
+- Trick Room
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Protect
+- Close Combat
+- Dire Claw
+- Fake Out
+
+Sinistcha [Unremarkable Form] @ Sitrus Berry
+Ability: Hospitality
+Level: 50
+Relaxed Nature
+- Rage Powder
+- Trick Room
+- Matcha Gotcha
+- Protect
+
+Talonflame @ Sharp Beak
+Ability: Gale Wings
+Level: 50
+Jolly Nature
+- Protect
+- Brave Bird
+- Flare Blitz
+- Swords Dance
+
+Steelix @ Steelixite
+Ability: Sturdy
+Level: 50
+Brave Nature
+- Protect
+- Heavy Slam
+- High Horsepower
+- Wide Guard
+
+Rotom [Wash Rotom] @ Leftovers
+Ability: Levitate
+Level: 50
+Bold Nature
+- Will-O-Wisp
+- Thunderbolt
+- Hydro Pump
+- Light Screen
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+Jolly Nature
+- Protect
+- Rock Slide
+- Knock Off
+- Dragon Dance
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Stomping Tantrum
+- Dragon Claw
+- Rock Slide
+- Iron Head
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Quick Attack
+- Hyper Beam
+- Detect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Moonblast
+- Detect
+- Quick Attack
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Poison Jab
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Tailwind
+- Moonblast
+- Encore
+- Grass Knot
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+- Dragon Pulse
+- Heat Wave
+- Thunderbolt
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+- Dragon Pulse
+- Hurricane
+- Tailwind
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Stomping Tantrum
+- Rock Slide
+- Dragon Claw
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Flare Blitz
+- Throat Chop
+- Fake Out
+- Parting Shot
+
+Venusaur @ Focus Sash
+Ability: Chlorophyll
+Level: 50
+Timid Nature
+- Sludge Bomb
+- Earth Power
+- Sleep Powder
+- Protect
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Matcha Gotcha
+- Rage Powder
+- Trick Room
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Calm Mind
+- Protect
+
+Gengar @ Gengarite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Protect
+- Shadow Ball
+- Perish Song
+- Disable
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Timid Nature
+- Dazzling Gleam
+- Moonblast
+- Light Of Ruin
+- Protect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+Relaxed Nature
+- Protect
+- Flare Blitz
+- Fake Out
+- Parting Shot
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Sucker Punch
+- Kowtow Cleave
+- Swords Dance
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Fake Out
+- Dire Claw
+- Close Combat
+- Protect
+
+Kommo-o @ Leftovers
+Ability: Soundproof
+Level: 50
+Modest Nature
+- Clanging Scales
+- Aura Sphere
+- Clangorous Soul
+- Protect
+
+Gardevoir @ Gardevoirite
+Ability: Trace
+Level: 50
+Timid Nature
+- Hyper Voice
+- Psyshock
+- Vacuum Wave
+- Protect
+
+Maushold @ Focus Sash
+Ability: Friend Guard
+Level: 50
+Timid Nature
+- Follow Me
+- Super Fang
+- Rain Dance
+- Protect
+
+Pelipper @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Bold Nature
+- Weather Ball
+- Hurricane
+- Tailwind
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Bold Nature
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Flip Turn
+- Aqua Jet
+
+Kangaskhan @ Kangaskhanite
+Ability: Scrappy
+Level: 50
+Adamant Nature
+- Fake Out
+- Double-edge
+- Crunch
+- Drain Punch
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Calm Nature
+- Protect
+- Psychic
+- Helping Hand
+- Trick Room
+
+Incineroar @ Charcoal
+Ability: Intimidate
+Level: 50
+Adamant Nature
+- Flare Blitz
+- Darkest Lariat
+- Fake Out
+- Parting Shot
+
+Camerupt @ Cameruptite
+Ability: Solid Rock
+Level: 50
+Quiet Nature
+- Protect
+- Heat Wave
+- Earth Power
+- Ancient Power
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Brave Nature
+- Swords Dance
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+Timid Nature
+- Rage Powder
+- Protect
+- Sleep Powder
+- Hurricane
+
+Crabominable @ Crabominite
+Ability: Hyper Cutter
+Level: 50
+Brave Nature
+- Protect
+- Close Combat
+- Ice Hammer
+- Mach Punch
+
+Blastoise @ Blastoisinite
+Ability: Torrent
+Level: 50
+- Protect
+- Water Spout
+- Dark Pulse
+- Shell Smash
+
+Sinistcha @ Sitrus Berry
+Ability: Hospitality
+Level: 50
+- Protect
+- Matcha Gotcha
+- Rage Powder
+- Life Dew
+
+Incineroar @ Leftovers
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+- Fake Out
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+- Protect
+- Hurricane
+- Sleep Powder
+- Rage Powder
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Earthquake
+- Stomping Tantrum
+- Rock Tomb
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Protect
+- Draining Kiss
+- Dazzling Gleam
+- Calm Mind
+
+Corviknight @ Occa Berry
+Ability: Mirror Armor
+Level: 50
+Adamant Nature
+- Brave Bird
+- Tailwind
+- Protect
+- Iron Head
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+Adamant Nature
+- Rock Slide
+- Knock Off
+- Protect
+- Low Kick
+
+Hydreigon @ Choice Scarf
+Ability: Levitate
+Level: 50
+Timid Nature
+- Dark Pulse
+- Draco Meteor
+- Earth Power
+- Snarl
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Blizzard
+- Protect
+- Shadow Ball
+- Weather Ball
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Protect
+
+Arcanine [Hisuian Form] @ Focus Sash
+Ability: Rock Head
+Level: 50
+Jolly Nature
+- Protect
+- Head Smash
+- Extreme Speed
+- Flare Blitz
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Kommo-o @ Leftovers
+Ability: Soundproof
+Level: 50
+- Clanging Scales
+- Aura Sphere
+- Clangorous Soul
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Throat Chop
+- Fake Out
+- Parting Shot
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+- Giga Drain
+- Sludge Bomb
+- Earth Power
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Gengar @ Gengarite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Shadow Ball
+- Sludge Bomb
+- Perish Song
+- Protect
+
+Sinistcha @ Colbur Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Matcha Gotcha
+- Trick Room
+- Rage Powder
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Calm Nature
+- Weather Ball
+- Hypnosis
+- Perish Song
+- Protect
+
+Incineroar @ Chople Berry
+Ability: Intimidate
+Level: 50
+Sassy Nature
+- Flare Blitz
+- Fake Out
+- Parting Shot
+- Protect
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Blizzard
+- Aurora Veil
+- Rain Dance
+- Protect
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Iron Head
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Poison Jab
+- Dragon Claw
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Calm Mind
+- Hyper Voice
+- Quick Attack
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Flip Turn
+- Aqua Jet
+- Last Respects
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Calm Nature
+- Leech Seed
+- Overheat
+- Rage Powder
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Drampa @ Sitrus Berry
+Ability: Berserk
+Level: 50
+- Dragon Pulse
+- Hyper Voice
+- Calm Mind
+- Protect
+
+Camerupt @ Cameruptite
+Ability: Solid Rock
+Level: 50
+- Earth Power
+- Eruption
+- Protect
+- Heat Wave
+
+Gourgeist @ Occa Berry
+Ability: Frisk
+Level: 50
+- Poltergeist
+- Trick Room
+- Protect
+- Power Whip
+
+Oranguru @ Colbur Berry
+Ability: Inner Focus
+Level: 50
+- Psychic
+- Trick Room
+- Instruct
+- Protect
+
+Abomasnow @ Abomasite
+Ability: Snow Warning
+Level: 50
+- Aurora Veil
+- Blizzard
+- Energy Ball
+- Protect
+
+Araquanid @ Mystic Water
+Ability: Water Bubble
+Level: 50
+- Liquidation
+- Leech Life
+- Wide Guard
+- Protect
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Calm Nature
+- Overheat
+- Protect
+- Leech Seed
+- Rage Powder
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Protect
+- Dual Wingbeat
+- Tailwind
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Dragon Claw
+- Earthquake
+- Protect
+- Poison Jab
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Last Respects
+- Wave Crash
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Iron Head
+- Low Kick
+- Sucker Punch
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Quick Attack
+- Calm Mind
+- Detect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Tailwind
+- Moonblast
+- Encore
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Rock Head
+Level: 50
+Jolly Nature
+- Rock Slide
+- Flare Blitz
+- Extreme Speed
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+Timid Nature
+- Draco Meteor
+- Flash Cannon
+- Aura Sphere
+- Protect
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Stomping Tantrum
+- Rock Slide
+- Protect
+
+Talonflame @ No Item
+Ability: Gale Wings
+Level: 50
+- Acrobatics
+- Tailwind
+- Flare Blitz
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Fake Out
+- Close Combat
+- Dire Claw
+- Protect
+
+Wash Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+- Hydro Pump
+- Thunderbolt
+- Will-o-wisp
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Weather Ball
+- Heat Wave
+- Solar Beam
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Last Respects
+- Liquidation
+- Aqua Jet
+- Protect
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Stomping Tantrum
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Flamethrower
+- Tailwind
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+Adamant Nature
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+Bold Nature
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Volcarona @ Leftovers
+Ability: Flame Body
+Level: 50
+Modest Nature
+- Heat Wave
+- Giga Drain
+- Quiver Dance
+- Protect
+
+Blastoise @ Blastoisinite
+Ability: Rain Dish
+Level: 50
+Modest Nature
+- Fake Out
+- Water Pulse
+- Ice Beam
+- Protect
+
+Meowscarada @ Focus Sash
+Ability: Overgrow
+Level: 50
+Jolly Nature
+- Flower Trick
+- Knock Off
+- Sucker Punch
+- Protect
+
+Tinkaton @ Sitrus Berry
+Ability: Mold Breaker
+Level: 50
+Jolly Nature
+- Fake Out
+- Gigaton Hammer
+- Feint
+- Encore
+
+Torterra @ White Herb
+Ability: Shell Armor
+Level: 50
+Brave Nature
+- Wood Hammer
+- Headlong Rush
+- Wide Guard
+- Protect
+
+Hatterene @ Fairy Feather
+Ability: Magic Bounce
+Level: 50
+Quiet Nature
+- Dazzling Gleam
+- Psychic
+- Trick Room
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Talonflame @ Sharp Beak
+Ability: Gale Wings
+Level: 50
+Timid Nature
+- Air Slash
+- Overheat
+- Tailwind
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Dragon Claw
+- Earthquake
+- Rock Slide
+- Poison Jab
+
+Maushold @ Focus Sash
+Ability: Friend Guard
+Level: 50
+Timid Nature
+- Super Fang
+- Follow Me
+- Encore
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Basculegion @ Sitrus Berry
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+- Sludge Bomb
+- Power Gem
+- Earth Power
+- Spiky Shield
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Last Respects
+- Wave Crash
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Tomb
+- Poison Jab
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Light Of Ruin
+- Moonblast
+- Dazzling Gleam
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+- Poison Jab
+- Earthquake
+- Rock Tomb
+- Dragon Tail
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+- Sleep Powder
+- Rage Powder
+- Hurricane
+- Protect
+
+Talonflame @ no item
+Ability: Gale Wings
+Level: 50
+- Tailwind
+- Acrobatics
+- Flare Blitz
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Fake Out
+- Dire Claw
+- Close Combat
+- Rock Tomb
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Iron Head
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+Adamant Nature
+- Poltergeist
+- Shadow Sneak
+- Sacred Sword
+- King's Shield
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Fake Out
+- Close Combat
+- Dire Claw
+- Protect
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Modest Nature
+- Psychic
+- Thunderbolt
+- Trick Room
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Garchomp @ Garchompite
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Stomping Tantrum
+- Dragon Claw
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Flamethrower
+- Ancient Power
+- Solar Beam
+- Protect
+
+Primarina @ Leftovers
+Ability: Liquid Voice
+Level: 50
+Modest Nature
+- Hyper Voice
+- Moonblast
+- Psychic
+- Protect
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Dragon Claw
+- Poison Jab
+- Earthquake
+- Rock Slide
+
+Kingambit @ Shuca Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+Impish Nature
+- Fake Out
+- Reflect
+- Light Screen
+- Will-o-wisp
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Sneasler @ Focus Sash
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Protect
+- Close Combat
+- Fake Out
+- Dire Claw
+
+Politoed @ Mystic Water
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Protect
+- Muddy Water
+- Weather Ball
+- Ice Beam
+
+Wash Rotom @ Sitrus Berry
+Ability: Levitate
+Level: 50
+Modest Nature
+- Hydro Pump
+- Thunderbolt
+- Will-o-wisp
+- Protect
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Calm Nature
+- Protect
+- Leech Seed
+- Rage Powder
+- Overheat
+
+Espathra @ Colbur Berry
+Ability: Speed Boost
+Level: 50
+Timid Nature
+- Protect
+- Lumina Crash
+- Calm Mind
+- Baton Pass
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Protect
+- Electro Shot
+- Flash Cannon
+- Dragon Pulse
+
+Chandelure @ Chandelurite
+Ability: Flash Fire
+Level: 50
+Modest Nature
+- Heat Wave
+- Shadow Ball
+- Minimize
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Close Combat
+- Dire Claw
+- Swords Dance
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Last Respects
+- Wave Crash
+- Flip Turn
+- Aqua Jet
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Modest Nature
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Hisuian Zoroark @ Spell Tag
+Ability: Illusion
+Level: 50
+Timid Nature
+- Bitter Malice
+- Icy Wind
+- Taunt
+- Protect
+
+Hatterene @ Fairy Feather
+Ability: Magic Bounce
+Level: 50
+Quiet Nature
+- Psychic
+- Dazzling Gleam
+- Trick Room
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Sucker Punch
+- Kowtow Cleave
+- Iron Head
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Last Respects
+- Wave Crash
+- Flip Turn
+- Aqua Jet
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+Modest Nature
+- Draco Meteor
+- Flash Cannon
+- Aura Sphere
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Rock Head
+Level: 50
+Adamant Nature
+- Flare Blitz
+- Rock Slide
+- Extreme Speed
+- Protect
+
+Excadrill @ Focus Sash
+Ability: Sand Rush
+Level: 50
+- Iron Head
+- Earthquake
+- Rock Slide
+- Protect
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+- Rock Slide
+- Knock Off
+- Low Kick
+- Protect
+
+Corviknight @ Leftovers
+Ability: Mirror Armor
+Level: 50
+- Brave Bird
+- Body Press
+- Bulk Up
+- Tailwind
+
+Hydreigon @ Choice Scarf
+Ability: Levitate
+Level: 50
+- Dark Pulse
+- Draco Meteor
+- Heat Wave
+- Snarl
+
+Wash Rotom @ Sitrus Berry
+Ability: Levitate
+Level: 50
+- Thunderbolt
+- Hydro Pump
+- Will-o-wisp
+- Protect
+
+Mimikyu @ Fairy Feather
+Ability: Disguise
+Level: 50
+- Shadow Claw
+- Shadow Sneak
+- Play Rough
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Endeavor
+- Tailwind
+- Encore
+
+Garchomp @ Sitrus Berry
+Ability: Sand Veil
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Tomb
+- Poison Jab
+
+Skarmory @ Skarmorite
+Ability: Sturdy
+Level: 50
+- Brave Bird
+- Iron Head
+- Rock Slide
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Solar Beam
+- Weather Ball
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Garchomp @ White Herb
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Swords Dance
+- Protect
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+- Poltergeist
+- Iron Head
+- King's Shield
+- Shadow Sneak
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Light Of Ruin
+- Moonblast
+- Dazzling Gleam
+- Protect
+
+Wash Rotom @ Sitrus Berry
+Ability: Levitate
+Level: 50
+- Thunderbolt
+- Hydro Pump
+- Will-o-wisp
+- Protect
+
+Incineroar @ Charcoal
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Darkest Lariat
+- Fake Out
+- Parting Shot
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Swords Dance
+- Protect
+
+Sneasler @ Focus Sash
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Fake Out
+- Dire Claw
+- Close Combat
+- Protect
+
+Delphox @ Delphoxite
+Ability: Blaze
+Level: 50
+Timid Nature
+- Heat Wave
+- Psychic
+- Substitute
+- Protect
+
+Clefable @ Sitrus Berry
+Ability: Unaware
+Level: 50
+Bold Nature
+- Follow Me
+- Helping Hand
+- Moonblast
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Dual Wingbeat
+- Rock Slide
+- Tailwind
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Flip Turn
+- Aqua Jet
+- Last Respects
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Dragon Claw
+- Rock Slide
+- Earthquake
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Swift Swim
+Level: 50
+Adamant Nature
+- Waterfall
+- Last Respects
+- Aqua Jet
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Flamethrower
+- Tailwind
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+Adamant Nature
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+Bold Nature
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Whimsicott @ Sitrus Berry
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Tickle
+- Light Screen
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+- Darkest Lariat
+- Fake Out
+- Flare Blitz
+- Parting Shot
+
+Garchomp @ White Herb
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Stomping Tantrum
+- Rock Tomb
+- Protect
+
+Maushold @ Chople Berry
+Ability: Friend Guard
+Level: 50
+- Super Fang
+- Feint
+- Follow Me
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Dazzling Gleam
+- Calm Mind
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Aqua Jet
+- Last Respects
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Quiet Nature
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Garchomp @ Focus Sash
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Dragon Claw
+- Stomping Tantrum
+- Protect
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Bold Nature
+- Twin Beam
+- Helping Hand
+- Trick Room
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+- Protect
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+- Earth Power
+- Giga Drain
+- Sludge Bomb
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+- Aura Sphere
+- Electro Shot
+- Flash Cannon
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Flip Turn
+- Wave Crash
+- Last Respects
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Encore
+- Tailwind
+- Endeavor
+- Moonblast
+
+Pelipper @ Charti Berry
+Ability: Drizzle
+Level: 50
+- Weather Ball
+- Hurricane
+- Wide Guard
+- Tailwind
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Extreme Speed
+- Flare Blitz
+- Rock Slide
+- Protect
+
+Incineroar @ Chople Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Parting Shot
+- Will-o-wisp
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Draining Kiss
+- Dazzling Gleam
+- Calm Mind
+- Protect
+
+Sinistcha @ Colbur Berry
+Ability: Hospitality
+Level: 50
+- Matcha Gotcha
+- Rage Powder
+- Trick Room
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+- Flash Cannon
+- Electro Shot
+- Aura Sphere
+- Protect
+
+Pelipper @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+- Tailwind
+- Weather Ball
+- Hurricane
+- Rain Dance
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Flip Turn
+- Aqua Jet
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Stomping Tantrum
+- Rock Slide
+- Protect
+
+Wash Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+- Hydro Pump
+- Thunderbolt
+- Will-o-wisp
+- Protect
+
+Talonflame @ Sharp Beak
+Ability: Gale Wings
+Level: 50
+- Brave Bird
+- Flare Blitz
+- Tailwind
+- Protect
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+Bold Nature
+- Protect
+- Sludge Bomb
+- Giga Drain
+- Leech Seed
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+Timid Nature
+- Mortal Spin
+- Spiky Shield
+- Earth Power
+- Power Gem
+
+Toxapex @ Sitrus Berry
+Ability: Regenerator
+Level: 50
+Bold Nature
+- Recover
+- Infestation
+- Toxic
+- Wide Guard
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Sucker Punch
+- Kowtow Cleave
+- Low Kick
+- Protect
+
+Heat Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+Calm Nature
+- Volt Switch
+- Electroweb
+- Overheat
+- Will-o-wisp
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Hex
+- Aurora Veil
+- Protect
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+Adamant Nature
+- Rock Slide
+- Knock Off
+- Low Kick
+- Protect
+
+Excadrill @ Focus Sash
+Ability: Sand Rush
+Level: 50
+Jolly Nature
+- Earthquake
+- Rock Slide
+- Iron Head
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Hyper Beam
+- Yawn
+- Detect
+
+Milotic @ Sitrus Berry
+Ability: Competitive
+Level: 50
+Modest Nature
+- Scald
+- Icy Wind
+- Life Dew
+- Protect
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Matcha Gotcha
+- Strength Sap
+- Rage Powder
+- Trick Room
+
+Skarmory @ Skarmorite
+Ability: Sturdy
+Level: 50
+Adamant Nature
+- Brave Bird
+- Iron Head
+- Tailwind
+- Protect
+
+Corviknight @ Occa Berry
+Ability: Mirror Armor
+Level: 50
+Adamant Nature
+- Protect
+- Tailwind
+- Brave Bird
+- Iron Head
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+Adamant Nature
+- Protect
+- Rock Slide
+- Knock Off
+- Low Kick
+
+Hydreigon @ Choice Scarf
+Ability: Levitate
+Level: 50
+Timid Nature
+- Dark Pulse
+- Snarl
+- Draco Meteor
+- Earth Power
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Protect
+- Weather Ball
+- Blizzard
+- Shadow Ball
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Protect
+
+Hisuian Arcanine @ Focus Sash
+Ability: Rock Head
+Level: 50
+Jolly Nature
+- Protect
+- Extreme Speed
+- Head Smash
+- Flare Blitz
+
+Gardevoir @ Gardevoirite
+Ability: Synchronize
+Level: 50
+Modest Nature
+- Hyper Voice
+- Psyshock
+- Trick Room
+- Protect
+
+Maushold @ Chople Berry
+Ability: Friend Guard
+Level: 50
+Jolly Nature
+- Follow Me
+- After You
+- Protect
+- Super Fang
+
+Torkoal @ Charcoal
+Ability: Drought
+Level: 50
+Modest Nature
+- Eruption
+- Heat Wave
+- Ancient Power
+- Protect
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+Jolly Nature
+- Scale Shot
+- Low Kick
+- Tailwind
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Venusaur @ Occa Berry
+Ability: Chlorophyll
+Level: 50
+Timid Nature
+- Sleep Powder
+- Sludge Bomb
+- Energy Ball
+- Protect
+
+Gengar @ Gengarite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Shadow Ball
+- Disable
+- Perish Song
+- Protect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+Relaxed Nature
+- Fake Out
+- Throat Chop
+- Parting Shot
+- Protect
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Relaxed Nature
+- Matcha Gotcha
+- Life Dew
+- Rage Powder
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Bold Nature
+- Weather Ball
+- Encore
+- Perish Song
+- Protect
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+Relaxed Nature
+- Will-o-wisp
+- Reflect
+- Light Screen
+- Rain Dance
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Flash Cannon
+- Electro Shot
+- Protect
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Flip Turn
+- Aqua Jet
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Heat Wave
+- Tailwind
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Bold Nature
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+- Protect
+
+Pelipper @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Bold Nature
+- Wide Guard
+- Tailwind
+- Weather Ball
+- Hurricane
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Poison Jab
+- Protect
+- Earthquake
+- Rock Slide
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Protect
+- Encore
+- Tailwind
+- Moonblast
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Calm Mind
+- Dazzling Gleam
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+- Iron Head
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+Modest Nature
+- Weather Ball
+- Heat Wave
+- Protect
+- Solar Beam
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Last Respects
+- Flip Turn
+- Wave Crash
+- Aqua Jet
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Wide Guard
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Dragon Claw
+- Rock Tomb
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Liquidation
+- Aqua Jet
+- Last Respects
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Quick Attack
+- Hyper Beam
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Hurricane
+- Tailwind
+- Weather Ball
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Electro Shot
+- Flash Cannon
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+Sassy Nature
+- Rain Dance
+- Encore
+- Light Screen
+- Will-o-wisp
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+Modest Nature
+- Draco Meteor
+- Tailwind
+- Hurricane
+- Protect
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+Modest Nature
+- Giga Drain
+- Sludge Bomb
+- Protect
+- Earth Power
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Modest Nature
+- Extreme Speed
+- Dragon Pulse
+- Thunderbolt
+- Flamethrower
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Timid Nature
+- Weather Ball
+- Solar Beam
+- Heat Wave
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Earthquake
+- Poison Jab
+- Rock Slide
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+- Dragon Pulse
+- Hurricane
+- Flamethrower
+- Tailwind
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Protect
+- Earthquake
+- Rock Slide
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+- Spiky Shield
+- Power Gem
+- Sludge Bomb
+- Earth Power
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Weather Ball
+- Heat Wave
+- Protect
+- Solar Beam
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Flip Turn
+- Last Respects
+- Wave Crash
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Encore
+- Tailwind
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Charizard @ Charizardite X
+Ability: Blaze
+Level: 50
+Adamant Nature
+- Protect
+- Flare Blitz
+- Dragon Claw
+- Dragon Dance
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Impish Nature
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Milotic @ Leftovers
+Ability: Competitive
+Level: 50
+Calm Nature
+- Muddy Water
+- Coil
+- Hypnosis
+- Recover
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Protect
+- Matcha Gotcha
+- Life Dew
+- Rage Powder
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Protect
+- Moonblast
+- Dazzling Gleam
+- Calm Mind
+
+Sneasler @ Focus Sash
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Fake Out
+- Close Combat
+- Dire Claw
+- Coaching
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Heat Wave
+- Protect
+- Tailwind
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+Adamant Nature
+- Bullet Punch
+- Bug Bite
+- Protect
+- Swords Dance
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Flash Cannon
+- Electro Shot
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Swift Swim
+Level: 50
+Adamant Nature
+- Wave Crash
+- Aqua Jet
+- Last Respects
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Weather Ball
+- Hurricane
+- Wide Guard
+- Tailwind
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Close Combat
+- Dire Claw
+- Protect
+- Fake Out
+
+Pikachu @ Light Ball
+Ability: Lightning Rod
+Level: 50
+Modest Nature
+- Fake Out
+- Thunder
+- Alluring Voice
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Hurricane
+- Weather Ball
+- Wide Guard
+- Tailwind
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Talonflame @ Sharp Beak
+Ability: Gale Wings
+Level: 50
+Jolly Nature
+- Dual Wingbeat
+- Tailwind
+- Rain Dance
+- Quick Guard
+
+Archaludon @ Sitrus Berry
+Ability: Stamina
+Level: 50
+Modest Nature
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+- Protect
+
+Blastoise @ Blastoisinite
+Ability: Rain Dish
+Level: 50
+Modest Nature
+- Water Spout
+- Aura Sphere
+- Dark Pulse
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+- Dragon Pulse
+- Hurricane
+- Flamethrower
+- Tailwind
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Glimmora @ Glimmoranite
+Ability: Toxic Debris
+Level: 50
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Spiky Shield
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Tomb
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Sunny Day
+- Tailwind
+- Encore
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Wave Crash
+- Flip Turn
+- Last Respects
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Sucker Punch
+- Kowtow Cleave
+- Protect
+- Low Kick
+
+Gallade @ Galladite
+Ability: Justified
+Level: 50
+Adamant Nature
+- Drain Punch
+- Zen Headbutt
+- Protect
+- Bulk Up
+
+Araquanid @ Mystic Water
+Ability: Water Bubble
+Level: 50
+Brave Nature
+- Liquidation
+- Leech Life
+- Protect
+- Wide Guard
+
+Kangaskhan @ Leftovers
+Ability: Scrappy
+Level: 50
+Adamant Nature
+- Double-edge
+- Drain Punch
+- Protect
+- Fake Out
+
+Tsareena @ White Herb
+Ability: Queenly Majesty
+Level: 50
+Adamant Nature
+- Trop Kick
+- Triple Axel
+- Protect
+- Taunt
+
+Chandelure @ Chandelurite
+Ability: Flash Fire
+Level: 50
+Modest Nature
+- Heat Wave
+- Shadow Ball
+- Protect
+- Trick Room
+
+Hisuian Goodra @ Sitrus Berry
+Ability: Gooey
+Level: 50
+Modest Nature
+- Draco Meteor
+- Thunderbolt
+- Protect
+- Flamethrower
+
+Charizard @ Charizardite Y
+Ability: Drought
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+Impish Nature
+- Darkest Lariat
+- Fake Out
+- Flare Blitz
+- Parting Shot
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Bold Nature
+- Hyper Voice
+- Psychic
+- Trick Room
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Quiet Nature
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Detect
+
+Gengar @ Gengarite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Shadow Ball
+- Perish Song
+- Disable
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Hyper Beam
+- Yawn
+- Detect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+Sassy Nature
+- Darkest Lariat
+- Parting Shot
+- Fake Out
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Calm Nature
+- Weather Ball
+- Perish Song
+- Encore
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Flash Cannon
+- Electro Shot
+- Protect
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+Timid Nature
+- Hurricane
+- Sleep Powder
+- Rage Powder
+- Protect
+
+Basculegion @ Spell Tag
+Ability: Swift Swim
+Level: 50
+- Last Respects
+- Protect
+- Aqua Jet
+- Wave Crash
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Weather Ball
+- Heat Wave
+- Solar Beam
+- Protect
+
+Pelipper @ Mystic Water
+Ability: Drizzle
+Level: 50
+- Weather Ball
+- Hurricane
+- Muddy Water
+- Protect
+
+Whimsicott @ Mental Herb
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Kleavor @ Focus Sash
+Ability: Sharpness
+Level: 50
+- Stone Axe
+- Feint
+- X-scissor
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+- Iron Head
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Protect
+- Heat Wave
+- Solar Beam
+- Weather Ball
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+- Spiky Shield
+- Power Gem
+- Sludge Bomb
+- Earth Power
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Protect
+- Tailwind
+- Moonblast
+- Encore
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Protect
+- Dragon Claw
+- Earthquake
+- Rock Slide
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Protect
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+- Protect
+- Aqua Jet
+- Wave Crash
+- Last Respects
+
+Gyarados @ Gyaradosite
+Ability: Intimidate
+Level: 50
+- Waterfall
+- Crunch
+- Dragon Dance
+- Protect
+
+Glimmora @ Glimmoranite
+Ability: Toxic Debris
+Level: 50
+- Sludge Bomb
+- Power Gem
+- Earth Power
+- Spiky Shield
+
+Alolan Ninetales @ Choice Scarf
+Ability: Snow Warning
+Level: 50
+- Blizzard
+- Freeze-dry
+- Icy Wind
+- Psyshock
+
+Sinistcha @ Sitrus Berry
+Ability: Hospitality
+Level: 50
+- Matcha Gotcha
+- Strength Sap
+- Rage Powder
+- Trick Room
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+- Foul Play
+- Fake Out
+- Quash
+- Will-o-wisp
+
+Heat Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+- Overheat
+- Thunderbolt
+- Helping Hand
+- Protect
+
+Talonflame @ Sharp Beak
+Ability: Gale Wings
+Level: 50
+Jolly Nature
+- Brave Bird
+- Will-o-wisp
+- Tailwind
+- Protect
+
+Garchomp @ Soft Sand
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Dragon Claw
+- Earthquake
+- Rock Slide
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Liquidation
+- Aqua Jet
+- Last Respects
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Timid Nature
+- Dazzling Gleam
+- Draining Kiss
+- Calm Mind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Impish Nature
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+- Fake Out
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Matcha Gotcha
+- Life Dew
+- Rage Powder
+- Trick Room
+
+Snorlax @ Leftovers
+Ability: Thick Fat
+Level: 50
+- Fissure
+- Stockpile
+- Body Press
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+- Weather Ball
+- Encore
+- Perish Song
+- Protect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Parting Shot
+- Protect
+- Throat Chop
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+- Matcha Gotcha
+- Trick Room
+- Rage Powder
+- Protect
+
+Gengar @ Gengarite
+Ability: Cursed Body
+Level: 50
+- Shadow Ball
+- Perish Song
+- Protect
+- Disable
+
+Hawlucha @ Hawluchanite
+Ability: Limber
+Level: 50
+- Entrainment
+- Close Combat
+- Brave Bird
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Protect
+- Dual Wingbeat
+- Tailwind
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Incineroar @ Chople Berry
+Ability: Intimidate
+Level: 50
+- Throat Chop
+- Flare Blitz
+- Parting Shot
+- Fake Out
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Last Respects
+- Liquidation
+- Protect
+- Aqua Jet
+
+Kommo-o @ Leftovers
+Ability: Soundproof
+Level: 50
+- Protect
+- Clangorous Soul
+- Clanging Scales
+- Aura Sphere
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+- Protect
+- Earth Power
+- Sludge Bomb
+- Giga Drain
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Froslass @ Froslassite
+Ability: Snow Warning
+Level: 50
+Timid Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Timid Nature
+- Dragon Pulse
+- Flamethrower
+- Thunderbolt
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Close Combat
+- Dire Claw
+- Protect
+- Fake Out
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Dragon Claw
+- Earthquake
+- Rock Slide
+- Poison Jab
+
+Lopunny @ Lopunnite
+Ability: Limber
+Level: 50
+- Close Combat
+- Fake Out
+- Protect
+- Triple Axel
+
+Volcarona @ Leftovers
+Ability: Flame Body
+Level: 50
+- Heat Wave
+- Giga Drain
+- Protect
+- Quiver Dance
+
+Primarina @ Mystic Water
+Ability: Liquid Voice
+Level: 50
+- Hyper Voice
+- Moonblast
+- Protect
+- Hydro Pump
+
+Meowscarada @ Focus Sash
+Ability: Overgrow
+Level: 50
+- Flower Trick
+- Knock Off
+- Protect
+- Sucker Punch
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+- Scale Shot
+- Stomping Tantrum
+- Protect
+- Tailwind
+
+Orthworm @ Sitrus Berry
+Ability: Earth Eater
+Level: 50
+- Body Press
+- Heavy Slam
+- Protect
+- Shed Tail
+
+Charizard @ Charizardite X
+Ability: Blaze
+Level: 50
+Adamant Nature
+- Flare Blitz
+- Dragon Claw
+- Dragon Dance
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Dazzling Gleam
+- Draining Kiss
+- Calm Mind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Flare Blitz
+- Throat Chop
+- Fake Out
+- Parting Shot
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Calm Nature
+- Matcha Gotcha
+- Rage Powder
+- Trick Room
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+- Giga Drain
+- Sludge Bomb
+- Earth Power
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+- Fake Out
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Stomping Tantrum
+- Dragon Claw
+- Rock Tomb
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+- Poltergeist
+- Iron Head
+- Shadow Sneak
+- King's Shield
+
+Wash Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+- Hydro Pump
+- Volt Switch
+- Will-o-wisp
+- Protect
+
+Hydreigon @ Haban Berry
+Ability: Levitate
+Level: 50
+- Draco Meteor
+- Snarl
+- Tailwind
+- Protect
+
+Charizard @ Charizardite X
+Ability: Blaze
+Level: 50
+Jolly Nature
+- Flare Blitz
+- Breaking Swipe
+- Roost
+- Protect
+
+Empoleon @ Sitrus Berry
+Ability: Competitive
+Level: 50
+Modest Nature
+- Hydro Pump
+- Flash Cannon
+- Icy Wind
+- Protect
+
+Meowscarada @ Choice Scarf
+Ability: Protean
+Level: 50
+Adamant Nature
+- Flower Trick
+- Knock Off
+- Triple Axel
+- Low Kick
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+Timid Nature
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Spiky Shield
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Detect
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+Adamant Nature
+- Scale Shot
+- Stomping Tantrum
+- Tailwind
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Tailwind
+- Moonblast
+- Encore
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Jolly Nature
+- Rock Slide
+- Flare Blitz
+- Extreme Speed
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+Timid Nature
+- Aura Sphere
+- Draco Meteor
+- Flash Cannon
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Solar Beam
+- Protect
+- Weather Ball
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Thunderbolt
+- Protect
+- Shadow Ball
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Whimsicott @ Coba Berry
+Ability: Prankster
+Level: 50
+Timid Nature
+- Tailwind
+- Moonblast
+- Protect
+- Encore
+
+Kleavor @ Focus Sash
+Ability: Sharpness
+Level: 50
+Jolly Nature
+- Stone Axe
+- Close Combat
+- Night Slash
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Dazzling Gleam
+- Draining Kiss
+- Calm Mind
+- Protect
+
+Excadrill @ Focus Sash
+Ability: Sand Rush
+Level: 50
+Adamant Nature
+- Iron Head
+- High Horsepower
+- Rock Slide
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Impish Nature
+- Flare Blitz
+- Fake Out
+- Throat Chop
+- Parting Shot
+
+Sinistcha @ Kasib Berry
+Ability: Hospitality
+Level: 50
+Bold Nature
+- Matcha Gotcha
+- Life Dew
+- Rage Powder
+- Protect
+
+Wash Rotom @ Leftovers
+Ability: Levitate
+Level: 50
+Calm Nature
+- Hydro Pump
+- Volt Switch
+- Will-o-wisp
+- Protect
+
+Tyranitar @ Tyranitarite
+Ability: Sand Stream
+Level: 50
+Jolly Nature
+- Rock Slide
+- Knock Off
+- Dragon Dance
+- Protect
+
+Blastoise @ Blastoisinite
+Ability: Rain Dish
+Level: 50
+Modest Nature
+- Water Spout
+- Ice Beam
+- Shell Smash
+- Protect
+
+Vivillon @ Focus Sash
+Ability: Friend Guard
+Level: 50
+Timid Nature
+- Pollen Puff
+- Rage Powder
+- Tailwind
+- Protect
+
+Clefable @ Leftovers
+Ability: Unaware
+Level: 50
+Bold Nature
+- Moonblast
+- Follow Me
+- Life Dew
+- Protect
+
+Meowscarada @ Choice Scarf
+Ability: Protean
+Level: 50
+Adamant Nature
+- Flower Trick
+- Knock Off
+- Sucker Punch
+- U-turn
+
+Luxray @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Brave Nature
+- Wild Charge
+- Volt Switch
+- Snarl
+- Baby-doll Eyes
+
+Ceruledge @ Passho Berry
+Ability: Flash Fire
+Level: 50
+Adamant Nature
+- Bitter Blade
+- Shadow Sneak
+- Swords Dance
+- Protect
+
+Talonflame @ none
+Ability: Gale Wings
+Level: 50
+Adamant Nature
+- Acrobatics
+- Tailwind
+- Flare Blitz
+- Protect
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+Timid Nature
+- Protect
+- Hurricane
+- Rage Powder
+- Sleep Powder
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Timid Nature
+- Protect
+- Light Of Ruin
+- Dazzling Gleam
+- Moonblast
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Protect
+- Rock Tomb
+- Dire Claw
+- Close Combat
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Protect
+- Sucker Punch
+- Iron Head
+- Kowtow Cleave
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Protect
+- Aqua Jet
+- Wave Crash
+- Last Respects
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Protect
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Wide Guard
+- Tailwind
+- Weather Ball
+- Hurricane
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Calm Nature
+- Protect
+- Leech Seed
+- Rage Powder
+- Overheat
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Protect
+- Fake Out
+- Close Combat
+- Dire Claw
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Modest Nature
+- Protect
+- Dragon Pulse
+- Hurricane
+- Flamethrower
+
+Espathra @ Sitrus Berry
+Ability: Speed Boost
+Level: 50
+Timid Nature
+- Protect
+- Lumina Crash
+- Calm Mind
+- Baton Pass
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Dire Claw
+- Close Combat
+- Protect
+- Fake Out
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Timid Nature
+- Protect
+- Moonblast
+- Tailwind
+- Encore
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Protect
+- Swords Dance
+- Sucker Punch
+- Kowtow Cleave
+
+Kleavor @ Choice Scarf
+Ability: Sharpness
+Level: 50
+Jolly Nature
+- Stone Axe
+- U-turn
+- Close Combat
+- Rock Slide
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Protect
+- Aqua Jet
+- Last Respects
+- Liquidation
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Dire Claw
+- Rock Tomb
+- Fake Out
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Protect
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Dazzling Gleam
+- Protect
+- Light Of Ruin
+
+Talonflame @ no item
+Ability: Gale Wings
+Level: 50
+- Protect
+- Acrobatics
+- Tailwind
+- Flare Blitz
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+- Sleep Powder
+- Hurricane
+- Rage Powder
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+- Poison Jab
+- Rock Tomb
+- Earthquake
+- Dragon Claw
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Gunk Shot
+- Fake Out
+- Protect
+
+Charizard @ Charizardite X
+Ability: Blaze
+Level: 50
+- Flare Blitz
+- Dragon Claw
+- Dragon Dance
+- Protect
+
+Incineroar @ Passho Berry
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Helping Hand
+- Fake Out
+- Parting Shot
+
+Sinistcha @ Coba Berry
+Ability: Hospitality
+Level: 50
+- Matcha Gotcha
+- Rage Powder
+- Trick Room
+- Protect
+
+Scizor @ Metal Coat
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Hydreigon @ Choice Scarf
+Ability: Levitate
+Level: 50
+- Dark Pulse
+- Draco Meteor
+- Snarl
+- Head Smash
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Dual Wingbeat
+- Ice Fang
+- Tailwind
+- Rock Slide
+
+Garchomp @ Soft Sand
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Protect
+- Rock Slide
+- Dragon Claw
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Liquidation
+- Protect
+- Last Respects
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Protect
+- Weather Ball
+- Solar Beam
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+- Trick Room
+- Hyper Voice
+- Helping Hand
+- Psychic
+
+Krookodile @ Choice Scarf
+Ability: Intimidate
+Level: 50
+Jolly Nature
+- Earthquake
+- Knock Off
+- Rock Slide
+- High Horsepower
+
+Pinsir @ Pinsirite
+Ability: Hyper Cutter
+Level: 50
+Jolly Nature
+- Body Slam
+- Quick Attack
+- Protect
+- Lunge
+
+Salazzle @ Focus Sash
+Ability: Corrosion
+Level: 50
+Hasty Nature
+- Fake Out
+- Heat Wave
+- Sludge Bomb
+- Protect
+
+Hydrapple @ Sitrus Berry
+Ability: Regenerator
+Level: 50
+Quiet Nature
+- Giga Drain
+- Fickle Beam
+- Protect
+- Earth Power
+
+Slowbro @ Colbur Berry
+Ability: Regenerator
+Level: 50
+Modest Nature
+- Trick Room
+- Scald
+- Psychic
+- Slack Off
+
+Steelix @ Steelixite
+Ability: Sturdy
+Level: 50
+Impish Nature
+- Heavy Slam
+- High Horsepower
+- Protect
+- Wide Guard
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+- Hurricane
+- Dragon Pulse
+- Tailwind
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Last Respects
+- Wave Crash
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Bug Bite
+- Swords Dance
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+- Electro Shot
+- Draco Meteor
+- Aura Sphere
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Meganium @ Meganiumite
+Ability: Leaf Guard
+Level: 50
+- Solar Beam
+- Dazzling Gleam
+- Weather Ball
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+- Weather Ball
+- Ice Beam
+- Muddy Water
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Swift Swim
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Dual Wingbeat
+- Rock Slide
+- Tailwind
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Aqua Jet
+- Last Respects
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Detect
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+- Protect
+- Helping Hand
+- Psychic
+- Trick Room
+
+Garchomp @ Soft Sand
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Rock Tomb
+- Earthquake
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Protect
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+
+Politoed @ Mystic Water
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Protect
+- Muddy Water
+- Weather Ball
+- Ice Beam
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Calm Nature
+- Protect
+- Leech Seed
+- Rage Powder
+- Overheat
+
+Sneasler @ Focus Sash
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Protect
+- Fake Out
+- Close Combat
+- Dire Claw
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Modest Nature
+- Protect
+- Dragon Pulse
+- Hurricane
+- Extreme Speed
+
+Espathra @ Sitrus Berry
+Ability: Speed Boost
+Level: 50
+Timid Nature
+- Protect
+- Lumina Crash
+- Calm Mind
+- Baton Pass
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Hisuian Arcanine @ Focus Sash
+Ability: Rock Head
+Level: 50
+Jolly Nature
+- Protect
+- Head Smash
+- Extreme Speed
+- Flare Blitz
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Dire Claw
+- Protect
+- Fake Out
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Farigiraf @ Colbur Berry
+Ability: Armor Tail
+Level: 50
+- Sunny Day
+- Psychic
+- Trick Room
+- Helping Hand
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Parting Shot
+- Darkest Lariat
+- Flare Blitz
+- Fake Out
+
+Torkoal @ Charcoal
+Ability: Drought
+Level: 50
+- Heat Wave
+- Eruption
+- Earth Power
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Dual Wingbeat
+- Rock Slide
+- Ice Fang
+- Protect
+
+Venusaur @ Focus Sash
+Ability: Chlorophyll
+Level: 50
+- Energy Ball
+- Sludge Bomb
+- Sleep Powder
+- Protect
+
+Crabominable @ Crabominite
+Ability: Hyper Cutter
+Level: 50
+- Drain Punch
+- Ice Hammer
+- Mach Punch
+- Protect
+
+Delphox @ Delphoxite
+Ability: Blaze
+Level: 50
+Timid Nature
+- Protect
+- Heat Wave
+- Substitute
+- Psychic
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Protect
+- Dragon Claw
+- Earthquake
+- Rock Slide
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+Brave Nature
+- King's Shield
+- Poltergeist
+- Sacred Sword
+- Shadow Sneak
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Protect
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+
+Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Protect
+- Dazzling Gleam
+- Moonblast
+- Calm Mind
+
+Vivillon @ Focus Sash
+Ability: Compound Eyes
+Level: 50
+Timid Nature
+- Protect
+- Rage Powder
+- Sleep Powder
+- Hurricane
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+- Scale Shot
+- Stomping Tantrum
+- Protect
+- Tailwind
+
+Basculegion ♀ @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Glimmora @ Glimmoranite
+Ability: Toxic Debris
+Level: 50
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Spiky Shield
+
+Clefable @ Babiri Berry
+Ability: Unaware
+Level: 50
+- Moonblast
+- Follow Me
+- Protect
+- Life Dew
+
+Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Extreme Speed
+- Howl
+- Protect
+
+Mow Rotom @ Choice Scarf
+Ability: Levitate
+Level: 50
+- Thunderbolt
+- Leaf Storm
+- Electroweb
+- Volt Switch
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Tailwind
+- Moonblast
+- Encore
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Rock Slide
+- Flare Blitz
+- Extreme Speed
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+- Draco Meteor
+- Flash Cannon
+- Aura Sphere
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Protect
+- Solar Beam
+
+Paldean Tauros Aqua Breed @ Mystic Water
+Ability: Intimidate
+Level: 50
+- Wave Crash
+- Close Combat
+- Protect
+- Aqua Jet
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Encore
+- Protect
+- Tailwind
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Stomping Tantrum
+- Protect
+- Rock Slide
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+- Iron Head
+
+Farigiraf @ Colbur Berry
+Ability: Armor Tail
+Level: 50
+- Psyshock
+- Trick Room
+- Protect
+- Helping Hand
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Protect
+- Encore
+- Tailwind
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Poison Jab
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+- Draco Meteor
+- Flamethrower
+- Thunderbolt
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Quick Attack
+- Moonblast
+- Detect
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Weather Ball
+- Heat Wave
+- Solar Beam
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Low Kick
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+
+Glimmora @ Glimmoranite
+Ability: Toxic Debris
+Level: 50
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Spiky Shield
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Moonblast
+- Hyper Beam
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Whimsicott @ Coba Berry
+Ability: Prankster
+Level: 50
+Bold Nature
+- Moonblast
+- Encore
+- Tailwind
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Earthquake
+- Dragon Claw
+- Rock Slide
+- Protect
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+Timid Nature
+- Sludge Bomb
+- Power Gem
+- Earth Power
+- Spiky Shield
+
+Dragonite @ Dragoninite
+Ability: Inner Focus
+Level: 50
+- Dragon Pulse
+- Hurricane
+- Flamethrower
+- Tailwind
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+- Bullet Punch
+- Close Combat
+- Swords Dance
+- Protect
+
+Archaludon @ Chople Berry
+Ability: Stamina
+Level: 50
+- Electro Shot
+- Dragon Pulse
+- Aura Sphere
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+- Hurricane
+- Weather Ball
+- Tailwind
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Flare Blitz
+- Throat Chop
+- Parting Shot
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+- Protect
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Stomping Tantrum
+- Earthquake
+- Rock Slide
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Solar Beam
+- Weather Ball
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Moonblast
+- Quick Attack
+- Detect
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+- Psychic
+- Helping Hand
+- Trick Room
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Tailwind
+- Rock Slide
+- Dual Wingbeat
+- Protect
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+- Sludge Bomb
+- Giga Drain
+- Protect
+- Earth Power
+
+Kommo-o @ Leftovers
+Ability: Soundproof
+Level: 50
+- Clanging Scales
+- Clangorous Soul
+- Aura Sphere
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Moonblast
+- Protect
+- Quick Attack
+
+Incineroar @ Chople Berry
+Ability: Intimidate
+Level: 50
+- Fake Out
+- Throat Chop
+- Flare Blitz
+- Parting Shot
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Liquidation
+- Last Respects
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Wave Crash
+- Last Respects
+- Flip Turn
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Mystical Fire
+- Hyper Voice
+- Protect
+- Quick Attack
+
+Aerodactyl @ Focus Sash
+Ability: Rock Head
+Level: 50
+- Rock Slide
+- Protect
+- Wide Guard
+- Tailwind
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Protect
+- Solar Beam
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+- Iron Head
+
+Garchomp @ Dragon Fang
+Ability: Rough Skin
+Level: 50
+- Scale Shot
+- Earthquake
+- Stomping Tantrum
+- Protect
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Hisuian Arcanine @ Focus Sash
+Ability: Rock Head
+Level: 50
+- Rock Slide
+- Flare Blitz
+- Head Smash
+- Protect
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Gyarados @ Gyaradosite
+Ability: Intimidate
+Level: 50
+- Waterfall
+- Dragon Dance
+- Protect
+- Crunch
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Heat Wave
+- Solar Beam
+- Weather Ball
+- Protect
+
+Garchomp @ Lum Berry
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Scale Shot
+- Rock Slide
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Tailwind
+- Sunny Day
+- Moonblast
+- Encore
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Fake Out
+- Dire Claw
+- Close Combat
+- Protect
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+- Shadow Sneak
+- Sacred Sword
+- Poltergeist
+- Wide Guard
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Protect
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Dual Wingbeat
+- Ice Fang
+- Tailwind
+- Rock Slide
+
+Garchomp @ Soft Sand
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Protect
+- Rock Slide
+- Dragon Claw
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Aqua Jet
+- Liquidation
+- Protect
+- Last Respects
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Protect
+- Weather Ball
+- Solar Beam
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Bold Nature
+- Trick Room
+- Hyper Voice
+- Helping Hand
+- Psychic
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Tailwind
+- Moonblast
+- Encore
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Rock Slide
+- Flare Blitz
+- Extreme Speed
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+- Draco Meteor
+- Flash Cannon
+- Aura Sphere
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Detect
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+- Psychic
+- Helping Hand
+- Trick Room
+- Roar
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Aqua Jet
+- Last Respects
+- Protect
+
+Garchomp @ Soft Sand
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Rock Tomb
+- Dragon Claw
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Protect
+- Iron Head
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Timid Nature
+- Dragon Pulse
+- Thunderbolt
+- Flamethrower
+- Protect
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Modest Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Garchomp @ Roseli Berry
+Ability: Rough Skin
+Level: 50
+Jolly Nature
+- Dragon Claw
+- Earthquake
+- Rock Slide
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Light Of Ruin
+- Moonblast
+- Dazzling Gleam
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Fake Out
+- Dire Claw
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Sucker Punch
+- Kowtow Cleave
+- Low Kick
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Flip Turn
+- Last Respects
+- Aqua Jet
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Light Of Ruin
+- Moonblast
+- Dazzling Gleam
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+Modest Nature
+- Tailwind
+- Fake Tears
+- Moonblast
+- Encore
+
+Farigiraf @ Sitrus Berry
+Ability: Armor Tail
+Level: 50
+Modest Nature
+- Hyper Voice
+- Thunderbolt
+- Helping Hand
+- Trick Room
+
+Incineroar @ Charcoal
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Fake Out
+- Parting Shot
+- Flare Blitz
+- Protect
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+Adamant Nature
+- Poltergeist
+- Iron Head
+- Shadow Sneak
+- King's Shield
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Close Combat
+- Fake Out
+- Gunk Shot
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Dazzling Gleam
+- Calm Mind
+- Protect
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Tailwind
+- Moonblast
+- Encore
+- Protect
+
+Hisuian Arcanine @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Rock Slide
+- Flare Blitz
+- Extreme Speed
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Flip Turn
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Archaludon @ White Herb
+Ability: Sturdy
+Level: 50
+- Aura Sphere
+- Draco Meteor
+- Flash Cannon
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Aegislash @ Spell Tag
+Ability: Stance Change
+Level: 50
+- Poltergeist
+- Iron Head
+- King's Shield
+- Shadow Sneak
+
+Wash Rotom @ Sitrus Berry
+Ability: Levitate
+Level: 50
+- Thunderbolt
+- Will-o-wisp
+- Protect
+- Hydro Pump
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Light Of Ruin
+- Moonblast
+- Dazzling Gleam
+- Protect
+
+Garchomp @ White Herb
+Ability: Rough Skin
+Level: 50
+- Earthquake
+- Swords Dance
+- Dragon Claw
+- Protect
+
+Incineroar @ Charcoal
+Ability: Intimidate
+Level: 50
+- Flare Blitz
+- Darkest Lariat
+- Fake Out
+- Parting Shot
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Heat Wave
+- Solar Beam
+- Weather Ball
+- Protect
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Spiky Shield
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Earthquake
+- Protect
+- Rock Tomb
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Iron Head
+
+Sneasler @ Focus Sash
+Ability: Poison Touch
+Level: 50
+Jolly Nature
+- Fake Out
+- Close Combat
+- Dire Claw
+- Protect
+
+Espathra @ Sitrus Berry
+Ability: Speed Boost
+Level: 50
+Timid Nature
+- Calm Mind
+- Lumina Crash
+- Protect
+- Baton Pass
+
+Politoed @ Mystic Water
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Weather Ball
+- Muddy Water
+- Ice Beam
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Electro Shot
+- Flash Cannon
+- Aura Sphere
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Modest Nature
+- Dragon Pulse
+- Hurricane
+- Protect
+- Extreme Speed
+
+Scovillain @ Scovillainite
+Ability: Moody
+Level: 50
+Bold Nature
+- Rage Powder
+- Protect
+- Giga Drain
+- Flamethrower
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+Adamant Nature
+- Dragon Claw
+- Extreme Speed
+- Tailwind
+- Protect
+
+Mamoswine @ Focus Sash
+Ability: Oblivious
+Level: 50
+Adamant Nature
+- Ice Shard
+- Icicle Spear
+- Earthquake
+- Protect
+
+Hydreigon @ Haban Berry
+Ability: Levitate
+Level: 50
+Timid Nature
+- Dark Pulse
+- Flamethrower
+- Protect
+- Draco Meteor
+
+Scizor @ Metal Coat
+Ability: Technician
+Level: 50
+Adamant Nature
+- Bullet Punch
+- Bug Bite
+- Close Combat
+- Protect
+
+Glimmora @ Glimmoranite
+Ability: Toxic Debris
+Level: 50
+Timid Nature
+- Power Gem
+- Sludge Bomb
+- Earth Power
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Last Respects
+- Wave Crash
+- Flip Turn
+- Aqua Jet
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+Timid Nature
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Hisuian Arcanine @ Focus Sash
+Ability: Rock Head
+Level: 50
+Jolly Nature
+- Flare Blitz
+- Rock Slide
+- Extreme Speed
+- Protect
+
+Hisuian Samurott @ Black Glasses
+Ability: Sharpness
+Level: 50
+Adamant Nature
+- Aqua Cutter
+- Sucker Punch
+- Night Slash
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Protect
+- Close Combat
+- Fake Out
+- Dire Claw
+
+Whimsicott @ Occa Berry
+Ability: Prankster
+Level: 50
+Bold Nature
+- Protect
+- Encore
+- Tailwind
+- Moonblast
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Protect
+- Dragon Claw
+- Earthquake
+- Rock Slide
+
+Meganium @ Meganiumite
+Ability: Leaf Guard
+Level: 50
+- Solar Beam
+- Dazzling Gleam
+- Weather Ball
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+- Protect
+
+Politoed @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+- Weather Ball
+- Ice Beam
+- Muddy Water
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Swift Swim
+Level: 50
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Jolly Nature
+- Fake Out
+- Dire Claw
+- Close Combat
+- Feint
+
+Blastoise @ Blastoisinite
+Ability: Mega Launcher
+Level: 50
+Modest Nature
+- Water Spout
+- Dark Pulse
+- Shell Smash
+- Fake Out
+
+Vivillon @ Choice Scarf
+Ability: Compound Eyes
+Level: 50
+Timid Nature
+- Sleep Powder
+- Hurricane
+- Rain Dance
+- Rage Powder
+
+Farigiraf @ Colbur Berry
+Ability: Armor Tail
+Level: 50
+Modest Nature
+- Trick Room
+- Psychic
+- Hyper Voice
+- Protect
+
+Skarmory @ Skarmorite
+Ability: Sturdy
+Level: 50
+Jolly Nature
+- Brave Bird
+- Iron Head
+- Rock Tomb
+- Tailwind
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Tailwind
+- Hurricane
+- Weather Ball
+- Protect
+
+Gardevoir @ Gardevoirite
+Ability: Trace
+Level: 50
+- Protect
+- Trick Room
+- Psyshock
+- Hyper Voice
+
+Maushold @ Focus Sash
+Ability: Friend Guard
+Level: 50
+- Protect
+- Feint
+- Super Fang
+- Follow Me
+
+Pelipper @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+- Protect
+- Tailwind
+- Weather Ball
+- Wide Guard
+
+Ceruledge @ Colbur Berry
+Ability: Flash Fire
+Level: 50
+- Protect
+- Swords Dance
+- Bitter Blade
+- Shadow Sneak
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Protect
+- Sucker Punch
+- Kowtow Cleave
+- Iron Head
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Wave Crash
+- Last Respects
+- Flip Turn
+- Aqua Jet
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+Modest Nature
+- Sludge Bomb
+- Giga Drain
+- Earth Power
+- Protect
+
+Skarmory @ Skarmorite
+Ability: Sturdy
+Level: 50
+Jolly Nature
+- Brave Bird
+- Iron Head
+- Tailwind
+- Protect
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+Sassy Nature
+- Foul Play
+- Rain Dance
+- Reflect
+- Light Screen
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Electro Shot
+- Flash Cannon
+- Draco Meteor
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Dragonite @ Dragon Fang
+Ability: Multiscale
+Level: 50
+Jolly Nature
+- Dragon Claw
+- Extreme Speed
+- Low Kick
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Protect
+- Heat Wave
+- Air Slash
+- Solar Beam
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Protect
+- Sucker Punch
+- Iron Head
+- Kowtow Cleave
+
+Whimsicott @ Focus Sash
+Ability: Prankster
+Level: 50
+- Moonblast
+- Protect
+- Encore
+- Tailwind
+
+Wash Rotom @ Sitrus Berry
+Ability: Levitate
+Level: 50
+- Electroweb
+- Hydro Pump
+- Will-o-wisp
+- Protect
+
+Garchomp @ White Herb
+Ability: Rough Skin
+Level: 50
+- Scale Shot
+- Protect
+- Stomping Tantrum
+- Rock Slide
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+- Flip Turn
+- Aqua Jet
+- Wave Crash
+- Last Respects
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+Modest Nature
+- Protect
+- Sludge Bomb
+- Giga Drain
+- Earth Power
+
+Wash Rotom @ Choice Scarf
+Ability: Levitate
+Level: 50
+Timid Nature
+- Hydro Pump
+- Volt Switch
+- Thunderbolt
+- Will-o-wisp
+
+Aerodactyl @ Aerodactylite
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Protect
+- Rock Slide
+- Dual Wingbeat
+- Tailwind
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Dragon Claw
+- Earthquake
+- Rock Slide
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Low Kick
+- Sucker Punch
+- Protect
+
+Incineroar @ Shuca Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Flare Blitz
+- Darkest Lariat
+- Parting Shot
+- Fake Out
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+Jolly Nature
+- Rock Slide
+- Tailwind
+- Wide Guard
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Kowtow Cleave
+- Sucker Punch
+- Iron Head
+- Low Kick
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Earthquake
+- Stomping Tantrum
+- Dragon Claw
+- Stone Edge
+
+Sylveon @ Fairy Feather
+Ability: Pixilate
+Level: 50
+Modest Nature
+- Hyper Voice
+- Hyper Beam
+- Quick Attack
+- Detect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+- Moonblast
+- Light Of Ruin
+- Dazzling Gleam
+- Protect
+
+Kingambit @ Black Glasses
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Iron Head
+- Sucker Punch
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Solar Power
+Level: 50
+- Weather Ball
+- Heat Wave
+- Solar Beam
+- Protect
+
+Garchomp @ Dragon Fang
+Ability: Rough Skin
+Level: 50
+- Scale Shot
+- Rock Slide
+- Earthquake
+- Protect
+
+Aerodactyl @ Focus Sash
+Ability: Unnerve
+Level: 50
+- Rock Slide
+- Tailwind
+- Wide Guard
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Froslass @ Froslassite
+Ability: Cursed Body
+Level: 50
+- Blizzard
+- Shadow Ball
+- Aurora Veil
+- Protect
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+- Close Combat
+- Dire Claw
+- Fake Out
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Basculegion @ Focus Sash
+Ability: Adaptability
+Level: 50
+- Liquidation
+- Last Respects
+- Aqua Jet
+- Protect
+
+Hisuian Arcanine @ Hard Stone
+Ability: Rock Head
+Level: 50
+- Rock Slide
+- Flare Blitz
+- Head Smash
+- Protect
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Tailwind
+- Encore
+- Protect
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Bold Nature
+- Flash Cannon
+- Protect
+- Electro Shot
+- Dragon Pulse
+
+Kingambit @ Focus Sash
+Ability: Defiant
+Level: 50
+Brave Nature
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Flip Turn
+- Aqua Jet
+- Wave Crash
+- Last Respects
+
+Pelipper @ Sitrus Berry
+Ability: Drizzle
+Level: 50
+Bold Nature
+- Tailwind
+- Weather Ball
+- Hurricane
+- Wide Guard
+
+Sableye @ Roseli Berry
+Ability: Prankster
+Level: 50
+Sassy Nature
+- Encore
+- Disable
+- Rain Dance
+- Will-o-wisp
+
+Venusaur @ Venusaurite
+Ability: Chlorophyll
+Level: 50
+Modest Nature
+- Protect
+- Giga Drain
+- Earth Power
+- Sludge Bomb
+
+Scizor @ Scizorite
+Ability: Technician
+Level: 50
+Adamant Nature
+- Bullet Punch
+- Bug Bite
+- Swords Dance
+- Protect
+
+Pelipper @ Focus Sash
+Ability: Drizzle
+Level: 50
+Modest Nature
+- Hurricane
+- Weather Ball
+- Tailwind
+- Wide Guard
+
+Sneasler @ White Herb
+Ability: Unburden
+Level: 50
+Adamant Nature
+- Dire Claw
+- Close Combat
+- Fake Out
+- Protect
+
+Dragonite @ Dragoninite
+Ability: Multiscale
+Level: 50
+Modest Nature
+- Protect
+- Dragon Pulse
+- Thunderbolt
+- Hurricane
+
+Archaludon @ Leftovers
+Ability: Stamina
+Level: 50
+Modest Nature
+- Electro Shot
+- Dragon Pulse
+- Flash Cannon
+- Protect
+
+Basculegion @ Choice Scarf
+Ability: Adaptability
+Level: 50
+Jolly Nature
+- Wave Crash
+- Aqua Jet
+- Flip Turn
+- Last Respects
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+Modest Nature
+- Sludge Bomb
+- Power Gem
+- Earth Power
+- Spiky Shield
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+Bold Nature
+- Moonblast
+- Tailwind
+- Protect
+- Encore
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Wave Crash
+- Last Respects
+- Aqua Jet
+- Protect
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Moonblast
+- Dazzling Gleam
+- Light Of Ruin
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Brave Nature
+- Kowtow Cleave
+- Iron Head
+- Low Kick
+- Sucker Punch
+
+Farigiraf @ Colbur Berry
+Ability: Armor Tail
+Level: 50
+Quiet Nature
+- Twin Beam
+- Thunderbolt
+- Trick Room
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+- Air Slash
+- Heat Wave
+- Solar Beam
+- Protect
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+- Power Gem
+- Sludge Bomb
+- Spiky Shield
+- Earth Power
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+- Moonblast
+- Encore
+- Tailwind
+- Protect
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+- Kowtow Cleave
+- Sucker Punch
+- Low Kick
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+- Aqua Jet
+- Wave Crash
+- Last Respects
+- Protect
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+- Dragon Claw
+- Poison Jab
+- Rock Slide
+- Stomping Tantrum
+
+Delphox @ Delphoxite
+Ability: Blaze
+Level: 50
+Timid Nature
+- Nasty Plot
+- Heat Wave
+- Psychic
+- Protect
+
+Incineroar @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+Careful Nature
+- Fake Out
+- Darkest Lariat
+- Flare Blitz
+- Parting Shot
+
+Eternal Flower Floette @ Floettite
+Ability: Flower Veil
+Level: 50
+Modest Nature
+- Dazzling Gleam
+- Calm Mind
+- Draining Kiss
+- Protect
+
+Sinistcha @ Colbur Berry
+Ability: Hospitality
+Level: 50
+Calm Nature
+- Rage Powder
+- Matcha Gotcha
+- Life Dew
+- Trick Room
+
+Vivillon @ Focus Sash
+Ability: Shield Dust
+Level: 50
+Timid Nature
+- Rage Powder
+- Protect
+- Pollen Puff
+- Sleep Powder
+
+Maushold @ Chople Berry
+Ability: Friend Guard
+Level: 50
+Jolly Nature
+- Follow Me
+- Encore
+- Super Fang
+- Protect
+
+Meowscarada @ Choice Scarf
+Ability: Protean
+Level: 50
+- Flower Trick
+- Knock Off
+- Low Kick
+- Triple Axel
+
+Tinkaton @ Shuca Berry
+Ability: Own Tempo
+Level: 50
+- Fake Out
+- Play Rough
+- Gigaton Hammer
+- Encore
+
+Volcarona @ Charcoal
+Ability: Flame Body
+Level: 50
+- Fiery Dance
+- Rage Powder
+- Quiver Dance
+- Protect
+
+Ampharos @ Ampharosite
+Ability: Static
+Level: 50
+- Thunderbolt
+- Dragon Pulse
+- Electroweb
+- Protect
+
+Gyarados @ Sitrus Berry
+Ability: Intimidate
+Level: 50
+- Waterfall
+- Power Whip
+- Icy Wind
+- Protect
+
+Palafin @ Mystic Water
+Ability: Zero to Hero
+Level: 50
+- Wave Crash
+- Ice Punch
+- Jet Punch
+- Protect
+
+Charizard @ Charizardite Y
+Ability: Blaze
+Level: 50
+Modest Nature
+- Heat Wave
+- Weather Ball
+- Solar Beam
+- Protect
+
+Basculegion @ Mystic Water
+Ability: Adaptability
+Level: 50
+Adamant Nature
+- Last Respects
+- Aqua Jet
+- Wave Crash
+- Protect
+
+Whimsicott @ Fairy Feather
+Ability: Prankster
+Level: 50
+Timid Nature
+- Tailwind
+- Protect
+- Encore
+- Moonblast
+
+Glimmora @ Focus Sash
+Ability: Toxic Debris
+Level: 50
+Timid Nature
+- Earth Power
+- Spiky Shield
+- Sludge Bomb
+- Power Gem
+
+Garchomp @ Sitrus Berry
+Ability: Rough Skin
+Level: 50
+Adamant Nature
+- Stomping Tantrum
+- Poison Jab
+- Dragon Claw
+- Rock Slide
+
+Kingambit @ Chople Berry
+Ability: Defiant
+Level: 50
+Adamant Nature
+- Sucker Punch
+- Iron Head
+- Kowtow Cleave
+- Protect

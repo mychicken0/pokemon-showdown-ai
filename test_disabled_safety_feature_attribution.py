@@ -202,7 +202,7 @@ class TestNoMutation(unittest.TestCase):
         from bot_doubles_damage_aware import DoublesDamageAwareConfig
         c = DoublesDamageAwareConfig()
         defaults = {
-            "enable_forced_switch_replacement_safety": False,
+            "enable_forced_switch_replacement_safety": True,  # adopted in Phase 6.4.4e
             "enable_stale_target_after_ally_ko_safety": False,
             "enable_stat_drop_switch_scoring": False,
             "enable_ability_awareness": False,

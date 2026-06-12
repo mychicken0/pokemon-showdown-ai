@@ -86,7 +86,7 @@ class TestConfigPreservation(unittest.TestCase):
 
     def test_no_hidden_features_enabled(self):
         c = DoublesDamageAwareConfig()
-        self.assertFalse(c.enable_forced_switch_replacement_safety)
+        self.assertTrue(c.enable_forced_switch_replacement_safety)  # adopted in Phase 6.4.4e
         self.assertFalse(c.enable_stale_target_after_ally_ko_safety)
         self.assertFalse(c.enable_ability_awareness)
 

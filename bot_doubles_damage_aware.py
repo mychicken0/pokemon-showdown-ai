@@ -3,25 +3,28 @@ import random
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
-from poke_env.player import Player
+
 from poke_env import AccountConfiguration
 from poke_env.battle.abstract_battle import AbstractBattle
 from poke_env.battle.double_battle import DoubleBattle
-from poke_env.battle.pokemon import Pokemon
 from poke_env.battle.move import Move
+from poke_env.battle.pokemon import Pokemon
 from poke_env.battle.target import Target
+from poke_env.player import Player
 from poke_env.player.battle_order import (
     BattleOrder,
+    DefaultBattleOrder,
     DoubleBattleOrder,
-    SingleBattleOrder,
     PassBattleOrder,
-    DefaultBattleOrder
+    SingleBattleOrder,
 )
-from doubles_battle_logger import DoublesBattleLogger
-from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+
 import ability_rules
 import meta_model
 import random_set_model
+from doubles_battle_logger import DoublesBattleLogger
+from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+
 
 @dataclass
 class DoublesDamageAwareConfig:
@@ -44,25 +47,37 @@ class DoublesDamageAwareConfig:
 
     # Phase 5.3: Variant control flags (all default to Phase 5.2 behavior)
     # -- Rule enable/disable --
-    rs_enable_protect_overcommit_penalty: bool = True   # Rule 1: penalize joint double-target when Protect likely
-    rs_enable_fakeout_bonus: bool = True                 # Rule 2: Protect bonus when opponent likely has Fake Out
-    rs_enable_priority_bonus: bool = True                # Rule 3: Protect bonus when opponent has priority + we are low HP
-    rs_enable_spread_bonus: bool = True                  # Rule 4: Protect bonus when opponent has spread + we are low HP
-    rs_enable_setup_targeting: bool = True               # Rule 5: small targeting bonus when opponent likely has setup move
-    rs_enable_speed_control_bonus: bool = True           # Rule 6: Protect bonus when opponent has speed control + we are low HP
+    rs_enable_protect_overcommit_penalty: bool = (
+        True  # Rule 1: penalize joint double-target when Protect likely
+    )
+    rs_enable_fakeout_bonus: bool = (
+        True  # Rule 2: Protect bonus when opponent likely has Fake Out
+    )
+    rs_enable_priority_bonus: bool = (
+        True  # Rule 3: Protect bonus when opponent has priority + we are low HP
+    )
+    rs_enable_spread_bonus: bool = (
+        True  # Rule 4: Protect bonus when opponent has spread + we are low HP
+    )
+    rs_enable_setup_targeting: bool = (
+        True  # Rule 5: small targeting bonus when opponent likely has setup move
+    )
+    rs_enable_speed_control_bonus: bool = (
+        True  # Rule 6: Protect bonus when opponent has speed control + we are low HP
+    )
     # -- Per-rule thresholds (overrides random_set_probability_threshold if > 0) --
-    rs_protect_threshold: float = 0.0    # 0 = use global threshold
+    rs_protect_threshold: float = 0.0  # 0 = use global threshold
     rs_fakeout_threshold: float = 0.0
     rs_priority_threshold: float = 0.0
     rs_spread_threshold: float = 0.0
     rs_setup_threshold: float = 0.0
     rs_speed_control_threshold: float = 0.0
     # -- Per-rule deltas (0 = use built-in defaults) --
-    rs_protect_overcommit_delta: float = 0.0   # built-in: -12
-    rs_fakeout_protect_delta: float = 0.0      # built-in: +18
-    rs_priority_protect_delta: float = 0.0     # built-in: +20
-    rs_spread_protect_delta: float = 0.0       # built-in: +12
-    rs_setup_targeting_delta: float = 0.0      # built-in: +8
+    rs_protect_overcommit_delta: float = 0.0  # built-in: -12
+    rs_fakeout_protect_delta: float = 0.0  # built-in: +18
+    rs_priority_protect_delta: float = 0.0  # built-in: +20
+    rs_spread_protect_delta: float = 0.0  # built-in: +12
+    rs_setup_targeting_delta: float = 0.0  # built-in: +8
     rs_speed_control_protect_delta: float = 0.0  # built-in: +8
     # -- Spread danger HP threshold (separate from priority's 0.20) --
     rs_spread_hp_threshold: float = 0.30
@@ -204,13 +219,13 @@ class DoublesDamageAwareConfig:
     # Phase 6.4.3a.3: Decision Timing Diagnostics (disabled by default)
     enable_decision_timing_diagnostics: bool = False
 
-    # Phase 6.4.4: Forced Switch Replacement Safety (disabled by default)
-    enable_forced_switch_replacement_safety: bool = False
-    forced_switch_super_effective_penalty: float = 90.0
-    forced_switch_quad_weak_penalty: float = 180.0
-    forced_switch_double_threat_penalty: float = 120.0
-    forced_switch_resistance_bonus: float = 25.0
-    forced_switch_immunity_bonus: float = 35.0
+    # Phase 6.4.4: Forced Switch Replacement Safety (adopted)
+    enable_forced_switch_replacement_safety: bool = True
+    forced_switch_super_effective_penalty: float = 50.0
+    forced_switch_quad_weak_penalty: float = 100.0
+    forced_switch_double_threat_penalty: float = 70.0
+    forced_switch_resistance_bonus: float = 15.0
+    forced_switch_immunity_bonus: float = 20.0
     forced_switch_low_hp_penalty: float = 30.0
     forced_switch_fainted_or_unavailable_penalty: float = 9999.0
 
@@ -218,6 +233,531 @@ class DoublesDamageAwareConfig:
     enable_stale_target_after_ally_ko_safety: bool = False
     stale_target_after_ally_ko_penalty: float = 120.0
     stale_target_type_immune_penalty: float = 250.0
+
+    # Phase 6.4.10b: All-Target Immune Spread Joint Penalty
+    all_target_immune_spread_joint_penalty: float = 1000.0
+
+    # Phase 6.5: Type Consumption Tracking (Double Shock, Burn Up)
+    enable_type_consumption_tracking: bool = True
+
+    # Phase 6.3.8: Support Move Target Hard Safety
+    enable_support_move_target_hard_safety: bool = False
+    support_move_wrong_side_block_score: float = 0.0
+    support_move_allow_only_legal_wrong_side: bool = True
+
+    # Phase 6.4.9: Voluntary Switch Quality and Sacrifice Awareness
+    enable_voluntary_switch_quality_diagnostics: bool = True
+    enable_voluntary_switch_quality_scoring: bool = True
+    voluntary_switch_min_risk_reduction: float = 1.0
+    voluntary_switch_tempo_penalty: float = 35.0
+    voluntary_switch_unsafe_candidate_penalty: float = 120.0
+    voluntary_switch_double_threat_penalty: float = 160.0
+    voluntary_switch_quad_weak_penalty: float = 180.0
+    voluntary_switch_low_hp_candidate_penalty: float = 35.0
+    voluntary_switch_repeat_penalty: float = 80.0
+    voluntary_switch_sacrifice_hp_threshold: float = 0.15
+    voluntary_switch_useful_action_threshold: float = 40.0
+    voluntary_switch_high_value_action_threshold: float = 120.0
+    voluntary_switch_sacrifice_preserve_bench_bonus: float = 70.0
+    # Phase 6.4.9k: Redesigned scoring formula (additive bonus + stay penalty)
+    voluntary_switch_risk_reduction_multiplier: float = 0.5
+    voluntary_switch_stay_penalty: float = 100.0
+
+
+# Phase 6.3.8: Support move target intent classification
+_SUPPORT_ALLY_BENEFICIAL_SINGLE = {
+    "healpulse",
+    "floralhealing",
+    "decorate",
+}
+_SUPPORT_ALLY_BENEFICIAL_SINGLE_REASON = {
+    "healpulse": "Heal Pulse restores HP; intended for ally",
+    "floralhealing": "Floral Healing restores HP; intended for ally",
+    "decorate": "Decorate sharply boosts ally's stats",
+}
+_SUPPORT_ALLY_BENEFICIAL_ALLIES = {
+    "helpinghand",
+    "coaching",
+    "howl",
+    "lifedew",
+}
+_SUPPORT_ALLY_BENEFICIAL_ALLIES_REASON = {
+    "helpinghand": "Helping Hand boosts ally's move power",
+    "coaching": "Coaching boosts ally's Attack and Defense",
+    "howl": "Howl boosts ally's Attack",
+    "lifedew": "Life Dew heals all allies",
+}
+_SUPPORT_ALLY_BENEFICIAL_TEAM = {
+    "aromatherapy",
+    "healbell",
+}
+_SUPPORT_ALLY_BENEFICIAL_TEAM_REASON = {
+    "aromatherapy": "Aromatherapy cures team status",
+    "healbell": "Heal Bell cures team status",
+}
+
+_SUPPORT_OPPONENT_DISRUPTIVE_SINGLE = {
+    "taunt",
+    "encore",
+    "disable",
+    "torment",
+    "thunderwave",
+    "willowisp",
+    "toxic",
+    "spore",
+    "sleeppowder",
+    "charm",
+    "scaryface",
+    "screech",
+    "faketears",
+    "metalsound",
+    "gastroacid",
+}
+_SUPPORT_OPPONENT_DISRUPTIVE_REASON = {
+    "taunt": "Taunt disables opponent's status moves",
+    "encore": "Encore locks opponent into a repeated move",
+    "disable": "Disable temporarily prevents opponent from using a move",
+    "torment": "Torment prevents opponent from using the same move twice",
+    "thunderwave": "Thunder Wave paralyzes opponent",
+    "willowisp": "Will-o-Wisp burns opponent",
+    "toxic": "Toxic badly poisons opponent",
+    "spore": "Spore puts opponent to sleep",
+    "sleeppowder": "Sleep Powder puts opponent to sleep",
+    "charm": "Charm sharply lowers opponent's Attack",
+    "scaryface": "Scary Face sharply lowers opponent's Speed",
+    "screech": "Screech sharply lowers opponent's Defense",
+    "faketears": "Fake Tears sharply lowers opponent's Sp.Def",
+    "metalsound": "Metal Sound sharply lowers opponent's Sp.Def",
+    "gastroacid": "Gastro Acid removes opponent's ability",
+}
+# Skill Swap is excluded from opponent-disruptive because it can
+# legitimately target an ally (e.g., give them a useful ability).
+
+# Moves with legitimate dual-side tactical use remain unclassified.
+_SUPPORT_EITHER_MOVE_IDS = {
+    "skillswap",
+}
+_SUPPORT_EITHER_REASON = {
+    "skillswap": "Skill Swap can target ally or opponent strategically",
+}
+
+# Phase 6.5: Moves that consume the user's type
+_TYPE_CONSUMING_MOVES = {
+    "doubleshock": "ELECTRIC",
+    "burnup": "FIRE",
+}
+
+# Pollen Puff is special: damaging vs opponent, healing vs ally
+_POLLEN_PUFF_MOVE_ID = "pollenpuff"
+
+
+def classify_support_move_target_intent(move) -> dict:
+    """Classify a move's intended target side based on its known behavior.
+
+    Returns:
+        dict with keys:
+            classified (bool): True if we can determine the intent
+            intended_side (str): "ally" | "opponent" | "self" | "field" | "either" | "unknown"
+            reason (str): Human-readable explanation
+            source (str): "move_metadata" | "explicit_allowlist" | "unclassified"
+    """
+    if not move:
+        return {
+            "classified": False,
+            "intended_side": "unknown",
+            "reason": "No move object",
+            "source": "unclassified",
+        }
+
+    move_id = getattr(move, "id", "")
+    if not move_id:
+        return {
+            "classified": False,
+            "intended_side": "unknown",
+            "reason": "Move has no ID",
+            "source": "unclassified",
+        }
+
+    # Pollen Puff: dual-purpose, handled separately
+    if move_id == _POLLEN_PUFF_MOVE_ID:
+        return {
+            "classified": True,
+            "intended_side": "either",
+            "reason": "Pollen Puff damages opponents, heals allies",
+            "source": "explicit_allowlist",
+        }
+
+    # Check metadata first
+    target_str = (
+        str(getattr(move, "target", "") or "").lower().replace("_", "").replace(" ", "")
+    )
+    deduced_target = getattr(move, "deduced_target", None)
+    deduced_str = str(deduced_target or "").lower().replace("_", "").replace(" ", "")
+
+    # Self-targeting moves
+    if target_str in ("self",) or deduced_str in ("self",):
+        return {
+            "classified": True,
+            "intended_side": "self",
+            "reason": "Move targets the user (metadata: self)",
+            "source": "move_metadata",
+        }
+
+    # Ally-only targeting (adjacentAlly)
+    if target_str in ("adjacentally",) or deduced_str in ("adjacentally",):
+        return {
+            "classified": True,
+            "intended_side": "ally",
+            "reason": "Move only targets ally (metadata: adjacentAlly)",
+            "source": "move_metadata",
+        }
+
+    # Allies team-wide (allies, allySide, allyTeam)
+    if target_str in ("allies", "allyside", "allyteam") or deduced_str in (
+        "allies",
+        "allyside",
+        "allyteam",
+    ):
+        return {
+            "classified": True,
+            "intended_side": "field",
+            "reason": "Move targets/allies team side (metadata)",
+            "source": "move_metadata",
+        }
+
+    # Field-wide (all, allAdjacent, allAdjacentFoes, foeSide)
+    if target_str in (
+        "all",
+        "alladjacent",
+        "alladjacentfoes",
+        "foeside",
+        "randomnormal",
+        "scripted",
+    ) or deduced_str in (
+        "all",
+        "alladjacent",
+        "alladjacentfoes",
+        "foeside",
+        "randomnormal",
+        "scripted",
+    ):
+        return {
+            "classified": True,
+            "intended_side": "field",
+            "reason": f"Field-wide/automatic targeting move (metadata: {target_str})",
+            "source": "move_metadata",
+        }
+
+    # Adjacent Foe only (adjacentFoe)
+    if target_str in ("adjacentfoe",) or deduced_str in ("adjacentfoe",):
+        return {
+            "classified": True,
+            "intended_side": "opponent",
+            "reason": "Move only targets adjacent foes (metadata: adjacentFoe)",
+            "source": "move_metadata",
+        }
+
+    # Adjacent Ally Or Self (ADJACENT_ALLY_OR_SELF)
+    if target_str in ("adjacentallyorself",) or deduced_str in ("adjacentallyorself",):
+        return {
+            "classified": True,
+            "intended_side": "ally",
+            "reason": "Move targets ally or self (metadata: adjacentAllyOrSelf)",
+            "source": "move_metadata",
+        }
+
+    # Now use explicit allowlists for moves with "normal" or "any" target
+    # that have a clear intended direction
+
+    # Ally-beneficial single-target moves
+    if move_id in _SUPPORT_ALLY_BENEFICIAL_SINGLE:
+        reason = _SUPPORT_ALLY_BENEFICIAL_SINGLE_REASON.get(
+            move_id, "Ally-beneficial support move"
+        )
+        return {
+            "classified": True,
+            "intended_side": "ally",
+            "reason": reason,
+            "source": "explicit_allowlist",
+        }
+
+    if move_id in _SUPPORT_ALLY_BENEFICIAL_ALLIES:
+        reason = _SUPPORT_ALLY_BENEFICIAL_ALLIES_REASON.get(
+            move_id, "Ally-boosting support move"
+        )
+        return {
+            "classified": True,
+            "intended_side": "ally",
+            "reason": reason,
+            "source": "explicit_allowlist",
+        }
+
+    if move_id in _SUPPORT_ALLY_BENEFICIAL_TEAM:
+        reason = _SUPPORT_ALLY_BENEFICIAL_TEAM_REASON.get(
+            move_id, "Team-curing support move"
+        )
+        return {
+            "classified": True,
+            "intended_side": "field",
+            "reason": reason,
+            "source": "explicit_allowlist",
+        }
+
+    # Moves that can legitimately target either side
+    if move_id in _SUPPORT_EITHER_MOVE_IDS:
+        reason = _SUPPORT_EITHER_REASON.get(move_id, "Move can target either side")
+        return {
+            "classified": True,
+            "intended_side": "either",
+            "reason": reason,
+            "source": "explicit_allowlist",
+        }
+
+    # Opponent-directed disruptive status moves
+    if move_id in _SUPPORT_OPPONENT_DISRUPTIVE_SINGLE:
+        reason = _SUPPORT_OPPONENT_DISRUPTIVE_REASON.get(
+            move_id, "Opponent-disruptive status move"
+        )
+        return {
+            "classified": True,
+            "intended_side": "opponent",
+            "reason": reason,
+            "source": "explicit_allowlist",
+        }
+
+    # Not classified
+    return {
+        "classified": False,
+        "intended_side": "unknown",
+        "reason": "Move not in classification lists",
+        "source": "unclassified",
+    }
+
+
+def build_support_target_candidate_table(
+    valid_orders_slot, slot_idx, battle, config=None
+) -> list:
+    """Build a candidate table of support-target orders for a slot-turn.
+
+    Each row contains:
+        move_id, attacker_species, target_position, target_side, target_species,
+        intended_side, classification_source, blocked, block_reason,
+        candidate_score, selected
+
+    Deduplicated by (move_id, target_position).
+    Only includes orders that have a classified intended side (opponent or ally).
+    """
+    rows = []
+    seen = set()
+    if not valid_orders_slot:
+        return rows
+    active_mon = (
+        battle.active_pokemon[slot_idx]
+        if slot_idx < len(battle.active_pokemon)
+        else None
+    )
+    attacker_species = getattr(active_mon, "species", "") if active_mon else ""
+
+    for order in valid_orders_slot:
+        if not order or not hasattr(order, "order") or not hasattr(order.order, "id"):
+            continue
+        move = order.order
+        move_id = getattr(move, "id", "")
+        classification = classify_support_move_target_intent(move)
+        if not classification["classified"]:
+            continue
+        intended_side = classification["intended_side"]
+        # Only include ally/opponent classified moves
+        if intended_side not in ("ally", "opponent"):
+            continue
+        target_pos = getattr(order, "move_target", 0)
+        dedup_key = (move_id, target_pos)
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
+        target_info = resolve_order_target_side(order, slot_idx, battle)
+        blocked = False
+        block_reason = ""
+        if config and getattr(config, "enable_support_move_target_hard_safety", False):
+            blocked, block_reason = support_move_wrong_side_block(
+                order, slot_idx, battle, config=config
+            )
+        rows.append(
+            {
+                "move_id": move_id,
+                "attacker_species": attacker_species,
+                "target_position": target_pos,
+                "target_side": target_info.get("side", "unknown"),
+                "target_species": target_info.get("target_species", ""),
+                "intended_side": intended_side,
+                "classification_source": classification.get("source", ""),
+                "blocked": blocked,
+                "block_reason": block_reason,
+                "selected": False,
+            }
+        )
+    return rows
+
+
+def resolve_order_target_side(order, slot_idx, battle) -> dict:
+    """Resolve which side an order targets.
+
+    Returns:
+        dict with keys:
+            side (str): "ally" | "opponent" | "self" | "field" | "unknown"
+            target_position (int | None): the move_target value
+            target_species (str): species name of the target
+            target_identity (str): identity string of the target
+    """
+    result = {
+        "side": "unknown",
+        "target_position": None,
+        "target_species": "",
+        "target_identity": "",
+    }
+    if not order or not battle:
+        return result
+
+    target_pos = getattr(order, "move_target", 0)
+    result["target_position"] = target_pos
+
+    if target_pos == 0:
+        result["side"] = "field"
+        return result
+
+    # Our side: negative positions
+    if target_pos in (-1, -2):
+        ally_idx = abs(target_pos) - 1  # -1 -> 0, -2 -> 1
+        result["side"] = (
+            "self" if target_pos == (-1 if slot_idx == 0 else -2) else "ally"
+        )
+        # self = targeting your own slot; ally = targeting your partner's slot
+        if ally_idx < len(battle.active_pokemon):
+            mon = battle.active_pokemon[ally_idx]
+            if mon:
+                result["target_species"] = getattr(mon, "species", "")
+                result["target_identity"] = getattr(
+                    mon, "ident", getattr(mon, "name", "")
+                )
+        return result
+
+    # Opponent side: positive positions
+    if target_pos in (1, 2):
+        result["side"] = "opponent"
+        opp_idx = target_pos - 1
+        if opp_idx < len(battle.opponent_active_pokemon):
+            mon = battle.opponent_active_pokemon[opp_idx]
+            if mon:
+                result["target_species"] = getattr(mon, "species", "")
+                result["target_identity"] = getattr(
+                    mon, "ident", getattr(mon, "name", "")
+                )
+        return result
+
+    return result
+
+
+def support_move_wrong_side_block(order, slot_idx, battle, config=None) -> tuple:
+    """Check if an order is a wrong-side support move that should be blocked.
+
+    Args:
+        order: SingleBattleOrder to check
+        slot_idx: which of our slots (0 or 1)
+        battle: DoubleBattle instance
+        config: DoublesDamageAwareConfig (or None to check defaults)
+
+    Returns:
+        tuple[bool, str]: (blocked, reason)
+    """
+    if not order or not battle:
+        return (False, "")
+
+    if config is None:
+        from dataclasses import dataclass
+
+        c = DoublesDamageAwareConfig()
+        if not c.enable_support_move_target_hard_safety:
+            return (False, "")
+    else:
+        if not config.enable_support_move_target_hard_safety:
+            return (False, "")
+
+    move = getattr(order, "order", None)
+    if not move or not hasattr(move, "id"):
+        return (False, "")
+
+    # Only applies to Move orders
+    if not isinstance(move, Move):
+        return (False, "")
+
+    # Skip damaging moves that are not Pollen Puff
+    base_power = getattr(move, "base_power", 0)
+    category = getattr(move, "category", None)
+    category_name = getattr(category, "name", "STATUS") if category else "STATUS"
+
+    move_id = getattr(move, "id", "")
+
+    # Pollen Puff is special
+    if move_id == _POLLEN_PUFF_MOVE_ID:
+        target_pos = getattr(order, "move_target", 0)
+        if target_pos in (1, 2):
+            # Targeting opponent: damaging move, not blocked
+            return (False, "")
+        elif target_pos in (-1, -2):
+            # Targeting ally: healing, not blocked (correct usage)
+            return (False, "")
+        else:
+            return (False, "")
+
+    # Only block STATUS moves (or moves with 0 base_power that are also status)
+    if category_name != "STATUS" and base_power > 0:
+        return (False, "")
+
+    # Also block damaging moves with dual heal/damage behavior that are NOT
+    # handled above — currently only Pollen Puff is classified as either.
+    # Any future dual-purpose damaging moves would be added here.
+
+    classification = classify_support_move_target_intent(move)
+    if not classification["classified"]:
+        return (False, "")
+
+    intended_side = classification["intended_side"]
+    target_side_info = resolve_order_target_side(order, slot_idx, battle)
+    actual_side = target_side_info["side"]
+
+    # Field/team/either/unknown moves are never blocked
+    if intended_side in ("field", "either", "unknown"):
+        return (False, "")
+
+    if intended_side == "self":
+        if actual_side != "self":
+            return (
+                True,
+                f"Self-targeting move {move_id} targeting {actual_side} instead of self",
+            )
+        return (False, "")
+
+    if intended_side == "ally":
+        # Ally-beneficial: targeting opponent is wrong, targeting self might be OK
+        if actual_side == "opponent":
+            target_species = target_side_info.get("target_species", "?")
+            return (
+                True,
+                f"Ally-beneficial move {move_id} targeting opponent ({target_species}): {classification.get('reason', '')}",
+            )
+        return (False, "")
+
+    if intended_side == "opponent":
+        # Opponent-disruptive: targeting ally/self is wrong
+        if actual_side in ("ally", "self"):
+            target_species = target_side_info.get("target_species", "?")
+            return (
+                True,
+                f"Opponent-disruptive move {move_id} targeting {actual_side} ({target_species}): {classification.get('reason', '')}",
+            )
+        return (False, "")
+
+    return (False, "")
 
 
 def _normalize_ability_name(ability) -> str:
@@ -239,7 +779,7 @@ def normalize_possible_abilities(raw) -> list[str]:
         values_to_process = list(raw)
     else:
         values_to_process = [raw]
-    
+
     norm_possible = []
     for ab in values_to_process:
         if ab:
@@ -278,19 +818,26 @@ def evaluate_priority_move_legality(
     is_status = getattr(move, "category", None)
     if is_status:
         is_status_str = getattr(is_status, "name", str(is_status)).upper()
-        if is_status_str == "STATUS" and getattr(attacker, "ability", None) == "prankster":
+        if (
+            is_status_str == "STATUS"
+            and getattr(attacker, "ability", None) == "prankster"
+        ):
             priority += 1
-            
+
     move_type = getattr(move, "type", None)
     if move_type:
-        m_type = move_type.name.upper() if hasattr(move_type, "name") else str(move_type).upper()
+        m_type = (
+            move_type.name.upper()
+            if hasattr(move_type, "name")
+            else str(move_type).upper()
+        )
         if m_type == "FLYING" and getattr(attacker, "ability", None) == "galewings":
             if getattr(attacker, "current_hp_fraction", 0) == 1.0:
                 priority += 1
-                
+
     result["priority"] = priority
-    result["is_priority_move"] = (priority > 0)
-    
+    result["is_priority_move"] = priority > 0
+
     if priority <= 0:
         return result
 
@@ -317,17 +864,20 @@ def evaluate_priority_move_legality(
         if opp and not getattr(opp, "fainted", False):
             res = resolve_known_ability(opp, battle, config)
             opp_ability = res["ability"]
-            if opp_ability in ("armortail", "queenlymajesty", "dazzling") and not res["is_currently_suppressed"]:
+            if (
+                opp_ability in ("armortail", "queenlymajesty", "dazzling")
+                and not res["is_currently_suppressed"]
+            ):
                 blocking_ability = opp_ability
                 blocking_source = res["source"]
                 break
-                
+
     if blocking_ability:
         result["known_side_blocking_ability"] = True
         result["blocking_ability"] = blocking_ability
         result["blocking_ability_source"] = blocking_source
 
-    is_opponent = (intended_target in battle.opponent_active_pokemon)
+    is_opponent = intended_target in battle.opponent_active_pokemon
     if is_opponent:
         if blocking_ability:
             result["blocked"] = True
@@ -365,7 +915,9 @@ def _pokemon_replay_names(pokemon) -> set[str]:
             if normalized:
                 names.add(normalized)
             if ":" in str(value):
-                suffix = "".join(c for c in str(value).split(":", 1)[1].lower() if c.isalnum())
+                suffix = "".join(
+                    c for c in str(value).split(":", 1)[1].lower() if c.isalnum()
+                )
                 if suffix:
                     names.add(suffix)
     return names
@@ -376,7 +928,9 @@ def _pokemon_is_on_our_team(pokemon, battle) -> bool:
         return False
     for collection_name in ("active_pokemon", "team"):
         collection = getattr(battle, collection_name, None)
-        values = collection.values() if isinstance(collection, dict) else (collection or [])
+        values = (
+            collection.values() if isinstance(collection, dict) else (collection or [])
+        )
         if any(mon is pokemon for mon in values if mon):
             return True
     return False
@@ -387,8 +941,15 @@ def get_known_ability(pokemon, battle=None) -> str | None:
         return None
     try:
         ability = _normalize_ability_name(getattr(pokemon, "ability", None))
-        replay_data = getattr(battle, "_replay_data", None) if battle is not None else None
-        if battle is None or replay_data is None or getattr(battle, "battle_tag", None) == "test" or _pokemon_is_on_our_team(pokemon, battle):
+        replay_data = (
+            getattr(battle, "_replay_data", None) if battle is not None else None
+        )
+        if (
+            battle is None
+            or replay_data is None
+            or getattr(battle, "battle_tag", None) == "test"
+            or _pokemon_is_on_our_team(pokemon, battle)
+        ):
             return ability or None
 
         # Opponent Pokemon objects can contain request-derived ability data. Treat it
@@ -406,7 +967,7 @@ def get_known_ability(pokemon, battle=None) -> str | None:
             # NOTE: event[0] is the empty prefix from the "|" split.
             # Protocol events like "-ability" appear at event[1].
             subject_str = event[1] if len(event) > 1 else ""
-            
+
             # Check if there is an '[of] ...' element
             of_target = None
             for part in event:
@@ -416,14 +977,13 @@ def get_known_ability(pokemon, battle=None) -> str | None:
                 elif part.startswith("of]"):
                     of_target = part[3:].strip()
                     break
-                    
+
             if of_target:
                 subject_str = of_target
-                
+
             subject_norm = "".join(c for c in subject_str.lower() if c.isalnum())
             matches_pokemon = any(
-                name == subject_norm or subject_norm.endswith(name)
-                for name in names
+                name == subject_norm or subject_norm.endswith(name) for name in names
             )
             if not matches_pokemon:
                 continue
@@ -441,16 +1001,18 @@ def get_known_ability(pokemon, battle=None) -> str | None:
                     break
             if ability_idx is not None and ability_idx + 2 < len(event):
                 revealed_ab = _normalize_ability_name(event[ability_idx + 2])
-                
+
             # Check [from] ability: in -heal or -damage events
             # e.g., ["", "-heal", "pokemon", "100/100", "[from] ability: Storm Drain"]
             if not revealed_ab:
                 for part in event:
                     lower = part.lower()
                     if "ability:" in lower:
-                        revealed_ab = _normalize_ability_name(lower.split("ability:", 1)[1])
+                        revealed_ab = _normalize_ability_name(
+                            lower.split("ability:", 1)[1]
+                        )
                         break
-                        
+
             if revealed_ab:
                 return revealed_ab
         return None
@@ -557,7 +1119,7 @@ def classify_known_ally_redirection_error(
     is_our_action: bool,
 ) -> tuple[bool, bool]:
     """Pure helper: classify our/opponent error for known ally redirection.
-    
+
     Returns (our_error, opponent_error).
     - Our selected error: selected + known_before + our action
     - Reveal-after-decision: neither error
@@ -569,6 +1131,308 @@ def classify_known_ally_redirection_error(
     if selected and known_before_decision:
         return (True, False)
     return (False, False)
+
+
+_ALLOWED_DYNAMIC_ABSORB_REASONS = frozenset(
+    {
+        "water_into_waterabsorb",
+        "water_into_stormdrain",
+        "water_into_dryskin",
+        "electric_into_voltabsorb",
+        "electric_into_motordrive",
+        "electric_into_lightningrod",
+        "fire_into_flashfire",
+        "fire_into_wellbakedbody",
+        "grass_into_sapsipper",
+    }
+)
+
+
+def find_protocol_ability_reveal_turn(
+    battle,
+    target,
+    ability_name: str,
+) -> int | None:
+    """Scan battle replay events for the exact turn an ability was protocol-revealed.
+
+    Reads only replay/protocol events up to battle.turn.  Matches the exact
+    target Pokemon via battle.get_pokemon(), never by species substring.
+    Recognizes |-ability|IDENT|Ability and [from] ability: Ability patterns.
+
+    Returns the turn number (int) or None if no explicit reveal exists.
+    """
+    if not battle or not target or not ability_name:
+        return None
+    events = getattr(battle, "_replay_data", []) or []
+    if not events:
+        return None
+    decision_turn = getattr(battle, "turn", 0)
+    ability_lower = _normalize_protocol_token(ability_name)
+    current_turn = 0
+    for event in events:
+        if not isinstance(event, list) or len(event) < 2:
+            continue
+        try:
+            if event[1] == "turn" and len(event) >= 3:
+                try:
+                    current_turn = int(event[2])
+                except (ValueError, TypeError):
+                    pass
+                continue
+            if current_turn > decision_turn and current_turn > 0:
+                continue
+            if event[1] == "-ability" and len(event) >= 4:
+                ident = event[2]
+                resolved = _get_pokemon_by_ident(battle, ident)
+                if resolved is not target:
+                    continue
+                evt_ability = _normalize_protocol_token(event[3])
+                if evt_ability == ability_lower:
+                    return (
+                        current_turn
+                        if current_turn > 0 and current_turn <= decision_turn
+                        else None
+                    )
+            elif any(str(e).lower().startswith("[from] ability:") for e in event):
+                event_type = str(event[1])
+                from_ability = ""
+                for part in event:
+                    part_str = str(part)
+                    if part_str.lower().startswith("[from] ability:"):
+                        from_ability = _normalize_protocol_token(
+                            part_str.split(":", 1)[1]
+                        )
+                        break
+                if from_ability != ability_lower:
+                    continue
+                owner_ident = None
+                for e in event:
+                    e_str = str(e)
+                    if e_str.startswith("[of]"):
+                        owner_ident = e_str[4:].strip()
+                        break
+                if (
+                    owner_ident is None
+                    and event_type in {"-heal", "-immune", "-boost", "-unboost"}
+                    and len(event) >= 3
+                ):
+                    owner_ident = event[2]
+                if not owner_ident:
+                    continue
+                resolved = _get_pokemon_by_ident(battle, owner_ident)
+                if resolved is not target:
+                    continue
+                return (
+                    current_turn
+                    if current_turn > 0 and current_turn <= decision_turn
+                    else None
+                )
+        except Exception:
+            continue
+    return None
+
+
+def _normalize_protocol_token(value) -> str:
+    return "".join(c for c in str(value).lower() if c.isalnum())
+
+
+def _get_pokemon_by_ident(battle, ident: str):
+    """Resolve a protocol identity string to a Pokemon object."""
+    if not battle or not ident:
+        return None
+    try:
+        return battle.get_pokemon(ident)
+    except Exception:
+        return None
+
+
+def _get_battle_pokemon_identity(battle, pokemon) -> str:
+    """Return the stable battle-team key for an exact Pokemon object."""
+    if not battle or not pokemon:
+        return ""
+    for collection_name in ("team", "opponent_team", "_team", "_opponent_team"):
+        collection = getattr(battle, collection_name, None)
+        if not isinstance(collection, dict):
+            continue
+        for ident, candidate in collection.items():
+            if candidate is pokemon:
+                return str(ident)
+    return ""
+
+
+def classify_dynamic_type_absorb_candidates(
+    valid_orders,
+    selected_order,
+    attacker,
+    opponent_targets,
+    battle,
+    config,
+    candidate_scores,
+) -> dict:
+    """Classify dynamic-type absorb candidates for audit."""
+    result = {
+        "candidate_blocked": False,
+        "selected": False,
+        "avoided": False,
+        "reason": "",
+        "target_species": "",
+        "target_ability": "",
+        "blocked_order_id": "",
+        "blocked_candidate_score": 0.0,
+        "dynamic_candidate_available": False,
+        "dynamic_candidate_move_id": "",
+        "dynamic_candidate_declared_type": "",
+        "dynamic_candidate_effective_type": "",
+        "dynamic_candidate_form": "",
+        "dynamic_candidate_source": "",
+        "dynamic_candidate_target_table": [],
+    }
+    if not attacker or not valid_orders:
+        return result
+    selected_meta = None
+    best_blocked_score = float("-inf")
+    best_meta = None
+    seen_opportunity = set()
+    table_rows = {}
+    for cand in valid_orders or []:
+        if not cand or not hasattr(cand, "order"):
+            continue
+        move = getattr(cand, "order", None)
+        if not move or getattr(move, "base_power", 0) <= 0:
+            continue
+        t_pos = getattr(cand, "move_target", None)
+        if t_pos not in (1, 2):
+            continue
+        t_mon = (
+            opponent_targets[t_pos - 1]
+            if opponent_targets and len(opponent_targets) >= t_pos
+            else None
+        )
+        if not t_mon or getattr(t_mon, "fainted", False):
+            continue
+        resolved = resolve_effective_move_type(move, attacker, battle)
+        if not resolved["dynamic_applied"]:
+            continue
+
+        move_id = getattr(move, "id", "")
+        form = resolved.get("observed_form", "")
+        target_key = (move_id, form, t_pos)
+        is_sel = cand is selected_order
+        blocked, reason = ability_hard_blocks_move(
+            move, attacker, t_mon, battle, config=config
+        )
+        absorb_blocked = blocked and reason in _ALLOWED_DYNAMIC_ABSORB_REASONS
+        sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
+        tgt_ability = get_known_ability(t_mon, battle) or ""
+        tgt_resolution = resolve_known_ability(t_mon, battle, config)
+        decision_turn = int(getattr(battle, "turn", 0))
+        reveal_turn_val = (
+            find_protocol_ability_reveal_turn(battle, t_mon, tgt_ability)
+            if tgt_ability
+            else None
+        )
+        known_before = bool(
+            tgt_ability
+            and tgt_resolution["source"] == "protocol_revealed"
+            and reveal_turn_val is not None
+            and reveal_turn_val <= decision_turn
+        )
+        row_data = {
+            "move_id": move_id,
+            "declared_type": resolved.get("declared_type", ""),
+            "effective_type": resolved.get("effective_type", ""),
+            "form": form,
+            "source": resolved.get("source", ""),
+            "target_position": t_pos,
+            "target_species": getattr(t_mon, "species", ""),
+            "target_identity": _get_battle_pokemon_identity(battle, t_mon),
+            "target_known_ability": tgt_ability,
+            "target_known_ability_source": tgt_resolution["source"]
+            if tgt_ability
+            else "",
+            "target_ability_known_before_decision": known_before,
+            "target_ability_reveal_turn": reveal_turn_val,
+            "decision_turn": decision_turn,
+            "selected": is_sel,
+            "ability_blocked": absorb_blocked,
+            "block_reason": reason if absorb_blocked else "",
+            "candidate_score": sc,
+        }
+        if target_key in table_rows:
+            existing = table_rows[target_key]
+            if is_sel:
+                existing["selected"] = True
+                existing["candidate_score"] = sc
+            else:
+                existing["candidate_score"] = max(existing["candidate_score"], sc)
+            existing["ability_blocked"] = existing["ability_blocked"] or absorb_blocked
+            if absorb_blocked and not existing["block_reason"]:
+                existing["block_reason"] = reason
+        else:
+            table_rows[target_key] = row_data
+
+        opp_key = (move_id, form)
+        if (
+            not result["dynamic_candidate_available"]
+            and opp_key not in seen_opportunity
+        ):
+            result["dynamic_candidate_available"] = True
+            result["dynamic_candidate_move_id"] = move_id
+            result["dynamic_candidate_declared_type"] = resolved.get(
+                "declared_type", ""
+            )
+            result["dynamic_candidate_effective_type"] = resolved.get(
+                "effective_type", ""
+            )
+            result["dynamic_candidate_form"] = form
+            result["dynamic_candidate_source"] = resolved.get("source", "")
+        seen_opportunity.add(opp_key)
+
+        blocked, reason = ability_hard_blocks_move(
+            move, attacker, t_mon, battle, config=config
+        )
+        if not blocked:
+            continue
+        if reason not in _ALLOWED_DYNAMIC_ABSORB_REASONS:
+            continue
+        result["candidate_blocked"] = True
+        is_sel = cand is selected_order
+        if is_sel:
+            result["selected"] = True
+            sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
+            selected_meta = {
+                "reason": reason,
+                "target_species": getattr(t_mon, "species", ""),
+                "target_ability": get_known_ability(t_mon, battle) or "",
+                "order_id": getattr(move, "id", ""),
+                "blocked_candidate_score": sc,
+            }
+        sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
+        if sc > best_blocked_score:
+            best_blocked_score = sc
+            best_meta = {
+                "reason": reason,
+                "target_species": getattr(t_mon, "species", ""),
+                "target_ability": get_known_ability(t_mon, battle) or "",
+                "order_id": getattr(move, "id", ""),
+                "blocked_candidate_score": sc,
+            }
+    result["dynamic_candidate_target_table"] = list(table_rows.values())
+    if result["candidate_blocked"] and not result["selected"]:
+        result["avoided"] = True
+    if result["selected"] and selected_meta:
+        result["reason"] = selected_meta["reason"]
+        result["target_species"] = selected_meta["target_species"]
+        result["target_ability"] = selected_meta["target_ability"]
+        result["blocked_order_id"] = selected_meta["order_id"]
+        result["blocked_candidate_score"] = selected_meta["blocked_candidate_score"]
+    elif best_meta:
+        result["reason"] = best_meta["reason"]
+        result["target_species"] = best_meta["target_species"]
+        result["target_ability"] = best_meta["target_ability"]
+        result["blocked_order_id"] = best_meta["order_id"]
+        result["blocked_candidate_score"] = best_blocked_score
+    return result
 
 
 def is_gravity_active(battle) -> bool:
@@ -584,7 +1448,7 @@ def is_gravity_active(battle) -> bool:
 
 def get_max_type_threat(our_active, opponent, battle=None) -> float:
     """Get the maximum type effectiveness of any of the opponents  types against our active.
-    
+
     Uses both type_1 and type_2 of the opponent. Returns the max multiplier.
     Never calculates from type_1 alone."""
     if not our_active or not opponent:
@@ -618,6 +1482,140 @@ DYNAMIC_TYPE_MOVES = {
 }
 
 
+# Phase 6.3.7h: Object-identity form tracker
+# _pokemon_forms: (battle_tag, id(pokemon)) -> observed_form
+# _ident_to_obj: (battle_tag, normalized_ident) -> id(pokemon)
+_pokemon_forms: dict = {}
+_ident_to_obj: dict = {}
+_replay_cursors: dict = {}
+
+
+def _normalize_form_name(s) -> str:
+    return str(s).lower().replace("-", "").replace("_", "").replace(" ", "")
+
+
+def _normalize_ident(ident) -> str:
+    return str(ident).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def record_observed_form_change(
+    battle_tag: str, ident: str, new_form: str, pokemon=None
+):
+    bt = str(battle_tag)
+    nf = _normalize_form_name(new_form)
+    if pokemon is not None:
+        key = (bt, id(pokemon))
+        _pokemon_forms[key] = nf
+    id_key = (bt, _normalize_ident(ident))
+    _ident_to_obj[id_key] = id(pokemon) if pokemon is not None else 0
+
+
+def get_observed_form(battle, pokemon) -> str | None:
+    if battle is None or pokemon is None:
+        return None
+    bt = str(getattr(battle, "battle_tag", ""))
+    # First try exact object lookup
+    obj_key = (bt, id(pokemon))
+    if obj_key in _pokemon_forms:
+        return _pokemon_forms[obj_key]
+    # Fall back to ident-based lookup via _ident_to_obj
+    for (tag, ident), oid in _ident_to_obj.items():
+        if tag == bt and oid == id(pokemon):
+            obj_fallback = (bt, oid)
+            if obj_fallback in _pokemon_forms:
+                return _pokemon_forms[obj_fallback]
+    return None
+
+
+def clear_observed_form_state(battle_tag: str):
+    bt = str(battle_tag)
+    for k in list(_pokemon_forms.keys()):
+        if k[0] == bt:
+            del _pokemon_forms[k]
+    for k in list(_ident_to_obj.keys()):
+        if k[0] == bt:
+            del _ident_to_obj[k]
+    if bt in _replay_cursors:
+        del _replay_cursors[bt]
+
+
+def _scan_replay_for_form_changes(battle):
+    replay = getattr(battle, "_replay_data", None)
+    if not replay:
+        return
+    bt = str(getattr(battle, "battle_tag", ""))
+    cursor = _replay_cursors.get(bt, 0)
+    for idx in range(cursor, len(replay)):
+        event = replay[idx]
+        if not isinstance(event, list) or len(event) < 4:
+            continue
+        if event[1] in ("-formechange", "detailschange"):
+            ident = event[2]
+            species_str = event[3].split(",")[0]
+            new_form = _normalize_form_name(species_str)
+            pokemon = None
+            try:
+                pokemon = battle.get_pokemon(ident)
+            except Exception:
+                pass
+            record_observed_form_change(bt, ident, new_form, pokemon=pokemon)
+    _replay_cursors[bt] = len(replay)
+
+
+def _scan_replay_for_type_consumption(battle, consumed_types):
+    """Scan replay for type-consumption events (Double Shock, Burn Up).
+
+    Updates consumed_types dict in place: consumed_types[battle_tag][pokemon_ident] = set of types.
+    """
+    replay = getattr(battle, "_replay_data", None)
+    if not replay:
+        return
+    bt = str(getattr(battle, "battle_tag", ""))
+    cursor = _replay_cursors.get(bt + "_type", 0)
+    for idx in range(cursor, len(replay)):
+        event = replay[idx]
+        if not isinstance(event, list) or len(event) < 3:
+            continue
+        # Format: ["", "-usedup", "p1a: Pawmot", "Electric"]
+        if event[1] == "-usedup":
+            ident = event[2]
+            consumed_type = event[3].upper().strip() if len(event) > 3 else ""
+            if ident and consumed_type:
+                if bt not in consumed_types:
+                    consumed_types[bt] = {}
+                if ident not in consumed_types[bt]:
+                    consumed_types[bt][ident] = set()
+                consumed_types[bt][ident].add(consumed_type)
+    _replay_cursors[bt + "_type"] = len(replay)
+
+
+def is_type_consumed(move, attacker, battle, consumed_types) -> bool:
+    """Check if a move is blocked because the attacker consumed its required type.
+
+    Moves like Double Shock require Electric type. If the user already used
+    Double Shock, it loses its Electric type and the move will fail.
+    """
+    if not move or not attacker or not battle:
+        return False
+    move_id = getattr(move, "id", "")
+    if not move_id or move_id not in _TYPE_CONSUMING_MOVES:
+        return False
+    bt = str(getattr(battle, "battle_tag", ""))
+    if bt not in consumed_types:
+        return False
+    # Get the attacker's identity
+    try:
+        ident = battle.get_pokemon_identifier(attacker)
+    except Exception:
+        return False
+    if not ident or ident not in consumed_types[bt]:
+        return False
+    needed_type = _TYPE_CONSUMING_MOVES[move_id]
+    if needed_type in consumed_types[bt][ident]:
+        return True
+    return False
+
+
 def resolve_effective_move_type(move, attacker=None, battle=None) -> dict:
     """Resolve the effective move type accounting for dynamic form changes.
 
@@ -648,13 +1646,28 @@ def resolve_effective_move_type(move, attacker=None, battle=None) -> dict:
     if move_id in DYNAMIC_TYPE_MOVES and attacker:
         config = DYNAMIC_TYPE_MOVES[move_id]
         attacker_base = config["attacker_base_species"]
+        form_map = config["form_map"]
+
+        # Priority 1: Protocol-observed form from form tracker
+        observed = get_observed_form(battle, attacker)
+        if observed and observed in form_map:
+            result["effective_type"] = form_map[observed]
+            result["source"] = f"protocol_formechange:{observed}"
+            result["dynamic_applied"] = True
+            result["observed_form"] = observed
+            return result
+
+        # Priority 2: Attacker species (set by next request after forme_change)
         attacker_species = getattr(attacker, "species", "")
-        if attacker_species and attacker_base in attacker_species.lower().replace("-", "").replace("_", ""):
-            form_key = attacker_species.lower().replace("-", "").replace("_", "").strip()
-            form_map = config["form_map"]
+        if attacker_species and attacker_base in attacker_species.lower().replace(
+            "-", ""
+        ).replace("_", ""):
+            form_key = (
+                attacker_species.lower().replace("-", "").replace("_", "").strip()
+            )
             if form_key in form_map:
                 result["effective_type"] = form_map[form_key]
-                result["source"] = f"dynamic_form:{form_key}"
+                result["source"] = f"species:{form_key}"
                 result["dynamic_applied"] = True
                 result["observed_form"] = attacker_species
                 return result
@@ -684,7 +1697,7 @@ def get_effective_move_type(move, attacker=None, battle=None) -> str:
 
 def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
     """Resolve the known ability of a Pokemon.
-    
+
     Returns:
         dict with keys: ability, source, possible_abilities, is_deterministic,
         is_currently_suppressed, suppression_reason
@@ -697,17 +1710,17 @@ def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
         "is_currently_suppressed": False,
         "suppression_reason": "",
     }
-    
+
     if not pokemon:
         return result
-    
+
     # 1. Check if this is our own team's Pokemon (always known)
     if _pokemon_is_on_our_team(pokemon, battle):
         result["ability"] = _normalize_ability_name(getattr(pokemon, "ability", None))
         result["source"] = "our_team_known"
         result["is_deterministic"] = True
         return result
-    
+
     # 2. Check explicit protocol reveal
     revealed = get_known_ability(pokemon, battle)
     if revealed:
@@ -715,7 +1728,7 @@ def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
         result["source"] = "protocol_revealed"
         result["is_deterministic"] = True
         return result
-    
+
     # 3. Check for temporary ability changes (Trace, Skill Swap, etc.)
     temp_ability = getattr(pokemon, "temporary_ability", None)
     if temp_ability:
@@ -725,41 +1738,49 @@ def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
             result["source"] = "temporary_changed"
             result["is_deterministic"] = True
             return result
-    
+
     # 4. Check for Gastro Acid suppression
     # (would be tracked as a status condition)
     status = getattr(pokemon, "status", None)
     if status and _normalize_ability_name(str(status)) == "gastroacid":
         result["is_currently_suppressed"] = True
         result["suppression_reason"] = "gastro_acid"
-    
+
     # 5. Check for Neutralizing Gas on field
     if battle:
         fields = getattr(battle, "fields", {}) or {}
         for field in fields:
-            fname = getattr(field, "name", str(field)) if hasattr(field, "name") else str(field)
+            fname = (
+                getattr(field, "name", str(field))
+                if hasattr(field, "name")
+                else str(field)
+            )
             if _normalize_ability_name(fname) == "neutralizinggas":
                 result["is_currently_suppressed"] = True
                 result["suppression_reason"] = "neutralizing_gas"
                 break
-    
+
     # 6. Deterministic singleton deduction (only when flag enabled)
     allow_singleton = False
     if config:
-        allow_singleton = getattr(config, "ability_hard_safety_allow_singleton_deduction", False)
-    
+        allow_singleton = getattr(
+            config, "ability_hard_safety_allow_singleton_deduction", False
+        )
+
     if allow_singleton and not result["is_currently_suppressed"]:
         try:
             possible = getattr(pokemon, "possible_abilities", None)
             if possible is not None:
                 norm_possible = normalize_possible_abilities(possible)
                 result["possible_abilities"] = norm_possible
-                
+
                 # Check if exactly one distinct ability
                 if len(norm_possible) == 1:
                     the_ability = norm_possible[0]
-                    current_ability = _normalize_ability_name(getattr(pokemon, "ability", None))
-                    
+                    current_ability = _normalize_ability_name(
+                        getattr(pokemon, "ability", None)
+                    )
+
                     # pokemon.ability should be empty or match the singleton
                     if not current_ability or current_ability == the_ability:
                         result["ability"] = the_ability
@@ -767,11 +1788,13 @@ def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
                         result["is_deterministic"] = True
         except Exception:
             pass
-    
+
     return result
 
 
-def ability_hard_blocks_move(move, attacker, target, battle=None, config=None) -> tuple[bool, str]:
+def ability_hard_blocks_move(
+    move, attacker, target, battle=None, config=None
+) -> tuple[bool, str]:
     if not target or not move:
         return False, ""
     try:
@@ -810,11 +1833,15 @@ def ability_hard_blocks_move(move, attacker, target, battle=None, config=None) -
                         val = getattr(target, attr, None)
                         if val:
                             if isinstance(val, dict):
-                                if any("smackdown" in str(k).lower() for k in val.keys()):
+                                if any(
+                                    "smackdown" in str(k).lower() for k in val.keys()
+                                ):
                                     is_grounded = True
                                     break
                             elif isinstance(val, (list, tuple, set)):
-                                if any("smackdown" in str(item).lower() for item in val):
+                                if any(
+                                    "smackdown" in str(item).lower() for item in val
+                                ):
                                     is_grounded = True
                                     break
                             elif "smackdown" in str(val).lower():
@@ -869,14 +1896,22 @@ def ability_hard_blocks_move(move, attacker, target, battle=None, config=None) -
             return True, "sound_into_soundproof"
         if t_ability == "bulletproof" and "bullet" in flags:
             return True, "bullet_into_bulletproof"
-        if t_ability == "damp" and move_id in ("explosion", "selfdestruct", "mindblown", "mistyexplosion"):
+        if t_ability == "damp" and move_id in (
+            "explosion",
+            "selfdestruct",
+            "mindblown",
+            "mistyexplosion",
+        ):
             return True, "explosion_into_damp"
 
     except Exception:
         pass
     return False, ""
 
-def direct_known_absorb_blocks_move(move, attacker, target, battle=None, order=None) -> tuple[bool, str]:
+
+def direct_known_absorb_blocks_move(
+    move, attacker, target, battle=None, order=None
+) -> tuple[bool, str]:
     if not move or not target:
         return False, ""
     try:
@@ -884,14 +1919,16 @@ def direct_known_absorb_blocks_move(move, attacker, target, battle=None, order=N
         base_power = getattr(move, "base_power", 0)
         if base_power <= 0:
             return False, ""
-            
+
         # Do not call is_opponent_spread_move(move) without order context.
         # Gate direct safety using order context.
         if order is not None and is_opponent_spread_move(move, order):
             return False, ""
-            
+
         # ALLOWLIST: protocol-revealed-only direct absorb check
-        blocks, reason = ability_hard_blocks_move(move, attacker, target, battle, config=None)
+        blocks, reason = ability_hard_blocks_move(
+            move, attacker, target, battle, config=None
+        )
         if blocks:
             t_ability = get_known_ability(target, battle)
             if t_ability in (
@@ -903,12 +1940,13 @@ def direct_known_absorb_blocks_move(move, attacker, target, battle=None, order=N
                 "lightningrod",
                 "flashfire",
                 "wellbakedbody",
-                "sapsipper"
+                "sapsipper",
             ):
                 return True, reason
     except Exception:
         pass
     return False, ""
+
 
 def ability_redirects_single_target_move(
     move, intended_target, opponent_targets, attacker=None, battle=None
@@ -916,13 +1954,19 @@ def ability_redirects_single_target_move(
     if not move or not intended_target:
         return False, ""
     try:
-        if is_opponent_spread_move(move) or attacker_ignores_target_ability(attacker, battle):
+        if is_opponent_spread_move(move) or attacker_ignores_target_ability(
+            attacker, battle
+        ):
             return False, ""
         move_id = getattr(move, "id", "").lower()
         m_type = ""
         m_type_obj = getattr(move, "type", None)
         if m_type_obj:
-            m_type = m_type_obj.name.upper() if hasattr(m_type_obj, "name") else str(m_type_obj).upper()
+            m_type = (
+                m_type_obj.name.upper()
+                if hasattr(m_type_obj, "name")
+                else str(m_type_obj).upper()
+            )
 
         for opp in opponent_targets:
             if opp and opp != intended_target and not getattr(opp, "fainted", False):
@@ -936,6 +1980,7 @@ def ability_redirects_single_target_move(
     except Exception:
         pass
     return False, ""
+
 
 def ally_ability_makes_safe(ally, move, battle=None) -> tuple[bool, str]:
     if not ally or not move:
@@ -951,15 +1996,27 @@ def ally_ability_makes_safe(ally, move, battle=None) -> tuple[bool, str]:
         m_type = ""
         m_type_obj = getattr(move, "type", None)
         if m_type_obj:
-            m_type = m_type_obj.name.upper() if hasattr(m_type_obj, "name") else str(m_type_obj).upper()
+            m_type = (
+                m_type_obj.name.upper()
+                if hasattr(m_type_obj, "name")
+                else str(m_type_obj).upper()
+            )
 
-        if ally_ab == "levitate" and m_type == "GROUND" and move_id != "thousandarrows" and not is_gravity_active(battle):
+        if (
+            ally_ab == "levitate"
+            and m_type == "GROUND"
+            and move_id != "thousandarrows"
+            and not is_gravity_active(battle)
+        ):
             return True, "levitate"
         if ally_ab == "eartheater" and m_type == "GROUND":
             return True, "eartheater"
         if ally_ab in ("waterabsorb", "stormdrain", "dryskin") and m_type == "WATER":
             return True, ally_ab
-        if ally_ab in ("voltabsorb", "lightningrod", "motordrive") and m_type == "ELECTRIC":
+        if (
+            ally_ab in ("voltabsorb", "lightningrod", "motordrive")
+            and m_type == "ELECTRIC"
+        ):
             return True, ally_ab
         if ally_ab in ("flashfire", "wellbakedbody") and m_type == "FIRE":
             return True, ally_ab
@@ -973,7 +2030,11 @@ def ally_ability_makes_safe(ally, move, battle=None) -> tuple[bool, str]:
 def _ability_block_enabled(config, reason: str) -> bool:
     if not config or not getattr(config, "enable_ability_hard_safety_only", False):
         return False
-    if reason in ("sound_into_soundproof", "bullet_into_bulletproof", "explosion_into_damp"):
+    if reason in (
+        "sound_into_soundproof",
+        "bullet_into_bulletproof",
+        "explosion_into_damp",
+    ):
         return False
     absorb_prefixes = ("water_into_", "electric_into_", "fire_into_", "grass_into_")
     if reason.startswith(absorb_prefixes):
@@ -991,6 +2052,7 @@ def _order_action_key(order) -> tuple:
     if order is None:
         return ("none", "", 0)
     from poke_env.battle.double_battle import SingleBattleOrder
+
     if isinstance(order, SingleBattleOrder):
         inner = order.order
         if inner is None:
@@ -1002,7 +2064,9 @@ def _order_action_key(order) -> tuple:
     return ("unknown", str(order) if order is not None else "", 0)
 
 
-def classify_only_legal(joint_orders, slot_idx, selected_order, safety_blocked=None) -> bool:
+def classify_only_legal(
+    joint_orders, slot_idx, selected_order, safety_blocked=None
+) -> bool:
     """Production helper: True when the selected blocked action has no
     non-safety-blocked alternative for *slot_idx* across all joint orders.
 
@@ -1044,10 +2108,9 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
     Used by both actual choose_move selection and pure counterfactual selection.
     """
     _direct_absorb_blocked = {}
-    _direct_absorb_enabled = (
-        getattr(config, "enable_ability_hard_safety_only", False)
-        and getattr(config, "ability_hard_safety_direct_absorb_only", False)
-    )
+    _direct_absorb_enabled = getattr(
+        config, "enable_ability_hard_safety_only", False
+    ) and getattr(config, "ability_hard_safety_direct_absorb_only", False)
     if _direct_absorb_enabled:
         for slot_idx, orders in enumerate(valid_orders):
             for ord in orders:
@@ -1084,7 +2147,9 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
 
                         is_blocked = False
                         if category_name == "STATUS" or base_power == 0:
-                            if getattr(config, "enable_priority_field_hard_safety", False):
+                            if getattr(
+                                config, "enable_priority_field_hard_safety", False
+                            ):
                                 priority_res = evaluate_priority_move_legality(
                                     move, active_mon, target_mon, battle, config
                                 )
@@ -1093,15 +2158,20 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
                         else:
                             blocks = False
                             reason = ""
-                            if getattr(config, "enable_ability_hard_safety_only", False):
+                            if getattr(
+                                config, "enable_ability_hard_safety_only", False
+                            ):
                                 blocks, reason = ability_hard_blocks_move(
                                     move, active_mon, target_mon, battle, config=config
                                 )
                             applies = blocks and _ability_block_enabled(config, reason)
 
                             applies_direct = False
-                            if (getattr(config, "enable_ability_hard_safety_only", False)
-                                    and getattr(config, "ability_hard_safety_direct_absorb_only", False)):
+                            if getattr(
+                                config, "enable_ability_hard_safety_only", False
+                            ) and getattr(
+                                config, "ability_hard_safety_direct_absorb_only", False
+                            ):
                                 if not is_opponent_spread_move(move, ord):
                                     blocks_direct, _ = direct_known_absorb_blocks_move(
                                         move, active_mon, target_mon, battle, ord
@@ -1110,7 +2180,9 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
                                         applies_direct = True
 
                             applies_priority = False
-                            if getattr(config, "enable_priority_field_hard_safety", False):
+                            if getattr(
+                                config, "enable_priority_field_hard_safety", False
+                            ):
                                 priority_res = evaluate_priority_move_legality(
                                     move, active_mon, target_mon, battle, config
                                 )
@@ -1120,42 +2192,93 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
                             if applies or applies_direct or applies_priority:
                                 is_blocked = True
 
-                            if (not is_blocked
-                                    and getattr(config, "enable_ability_hard_safety_only", False)
-                                    and getattr(config, "ability_hard_safety_avoid_redirection", False)):
-                                redirects, red_reason = ability_redirects_single_target_move(
-                                    move, target_mon, battle.opponent_active_pokemon,
-                                    active_mon, battle
+                            if (
+                                not is_blocked
+                                and getattr(
+                                    config, "enable_ability_hard_safety_only", False
+                                )
+                                and getattr(
+                                    config,
+                                    "ability_hard_safety_avoid_redirection",
+                                    False,
+                                )
+                            ):
+                                redirects, red_reason = (
+                                    ability_redirects_single_target_move(
+                                        move,
+                                        target_mon,
+                                        battle.opponent_active_pokemon,
+                                        active_mon,
+                                        battle,
+                                    )
                                 )
                                 if redirects:
                                     red_target = None
                                     for opp in battle.opponent_active_pokemon:
-                                        if (opp and opp != target_mon
-                                                and not getattr(opp, "fainted", False)):
+                                        if (
+                                            opp
+                                            and opp != target_mon
+                                            and not getattr(opp, "fainted", False)
+                                        ):
                                             opp_ability = get_known_ability(opp, battle)
-                                            if opp_ability in ("stormdrain", "lightningrod"):
+                                            if opp_ability in (
+                                                "stormdrain",
+                                                "lightningrod",
+                                            ):
                                                 red_target = opp
                                                 break
                                     if red_target:
-                                        blocks_red, reason_red = ability_hard_blocks_move(
-                                            move, active_mon, red_target, battle, config=config
+                                        blocks_red, reason_red = (
+                                            ability_hard_blocks_move(
+                                                move,
+                                                active_mon,
+                                                red_target,
+                                                battle,
+                                                config=config,
+                                            )
                                         )
-                                        if blocks_red and _ability_block_enabled(config, reason_red):
+                                        if blocks_red and _ability_block_enabled(
+                                            config, reason_red
+                                        ):
                                             is_blocked = True
 
                         if is_blocked:
                             _safety_blocked[id(ord)] = True
+
+    # Phase 6.3.8: Support Move Target Hard Safety
+    _support_target_blocked = {}
+    _support_target_reasons = {}
+    if getattr(config, "enable_support_move_target_hard_safety", False):
+        for slot_idx, orders in enumerate(valid_orders):
+            if not orders:
+                continue
+            for ord_obj in orders:
+                if ord_obj and hasattr(ord_obj.order, "id"):
+                    blocked, reason = support_move_wrong_side_block(
+                        ord_obj, slot_idx, battle, config=config
+                    )
+                    if blocked:
+                        _support_target_blocked[id(ord_obj)] = True
+                        _support_target_reasons[id(ord_obj)] = reason
 
     _ally_redirect_blocked = {}
     _ally_redirect_blocked_meta = {}
     if getattr(config, "enable_known_ally_redirection_hard_safety", False):
         for slot_idx, orders in enumerate(valid_orders):
             for ord in orders:
-                if ord and hasattr(ord.order, "base_power") and getattr(ord.order, "base_power", 0) > 0:
+                if (
+                    ord
+                    and hasattr(ord.order, "base_power")
+                    and getattr(ord.order, "base_power", 0) > 0
+                ):
                     t_pos = ord.move_target
                     if t_pos in (1, 2):
                         ally_idx = 1 - slot_idx
-                        ally = battle.active_pokemon[ally_idx] if ally_idx < len(battle.active_pokemon) else None
+                        ally = (
+                            battle.active_pokemon[ally_idx]
+                            if ally_idx < len(battle.active_pokemon)
+                            else None
+                        )
                         if ally and not getattr(ally, "fainted", False):
                             redirects, reason = ally_redirects_our_single_target_move(
                                 ord.order, battle.active_pokemon[slot_idx], ally, battle
@@ -1165,28 +2288,45 @@ def _compute_order_safety_blocks(battle, config, valid_orders):
                                 _ally_redirect_blocked[oid] = True
                                 target_opp = None
                                 if len(battle.opponent_active_pokemon) > t_pos - 1:
-                                    target_opp = battle.opponent_active_pokemon[t_pos - 1]
+                                    target_opp = battle.opponent_active_pokemon[
+                                        t_pos - 1
+                                    ]
                                 ally_ab = get_known_ability(ally, battle) or ""
                                 _ally_redirect_blocked_meta[oid] = {
                                     "move_id": getattr(ord.order, "id", ""),
-                                    "attacker_species": getattr(battle.active_pokemon[slot_idx], "species", ""),
-                                    "target_species": getattr(target_opp, "species", "") if target_opp else "",
-                                    "ally_species": getattr(ally, "species", "") if ally else "",
+                                    "attacker_species": getattr(
+                                        battle.active_pokemon[slot_idx], "species", ""
+                                    ),
+                                    "target_species": getattr(target_opp, "species", "")
+                                    if target_opp
+                                    else "",
+                                    "ally_species": getattr(ally, "species", "")
+                                    if ally
+                                    else "",
                                     "ally_ability": ally_ab,
                                     "reason": reason,
                                     "known_before_decision": bool(ally_ab),
                                 }
 
-    return _direct_absorb_blocked, _safety_blocked, _ally_redirect_blocked, _ally_redirect_blocked_meta
+    return (
+        _direct_absorb_blocked,
+        _safety_blocked,
+        _ally_redirect_blocked,
+        _ally_redirect_blocked_meta,
+        _support_target_blocked,
+        _support_target_reasons,
+    )
 
 
-def get_spread_target_effectiveness_with_ability(move, attacker, opponent_targets, config, battle=None) -> dict:
+def get_spread_target_effectiveness_with_ability(
+    move, attacker, opponent_targets, config, battle=None
+) -> dict:
     total_targets = 0
     immune_targets = 0
     damaged_targets = 0
     immune_target_names = []
     damaged_target_names = []
-    
+
     for opp in opponent_targets:
         if opp:
             total_targets += 1
@@ -1202,22 +2342,24 @@ def get_spread_target_effectiveness_with_ability(move, attacker, opponent_target
                             is_immune = True
                     except Exception:
                         pass
-                        
+
             if not is_immune and config and config.enable_ability_hard_safety_only:
-                blocks, reason = ability_hard_blocks_move(move, attacker, opp, battle, config=config)
+                blocks, reason = ability_hard_blocks_move(
+                    move, attacker, opp, battle, config=config
+                )
                 if blocks and _ability_block_enabled(config, reason):
                     is_immune = True
-                    
+
             if is_immune:
                 immune_targets += 1
                 immune_target_names.append(opp.species)
             else:
                 damaged_targets += 1
                 damaged_target_names.append(opp.species)
-                
-    all_targets_immune = (total_targets > 0 and immune_targets == total_targets)
-    partial_immunity = (total_targets > 1 and immune_targets > 0 and damaged_targets > 0)
-    
+
+    all_targets_immune = total_targets > 0 and immune_targets == total_targets
+    partial_immunity = total_targets > 1 and immune_targets > 0 and damaged_targets > 0
+
     return {
         "total_targets": total_targets,
         "immune_targets": immune_targets,
@@ -1225,11 +2367,13 @@ def get_spread_target_effectiveness_with_ability(move, attacker, opponent_target
         "immune_target_names": immune_target_names,
         "damaged_target_names": damaged_target_names,
         "all_targets_immune": all_targets_immune,
-        "partial_immunity": partial_immunity
+        "partial_immunity": partial_immunity,
     }
 
 
-def get_spread_ability_partial_immunity(move, attacker, opponent_targets, config, battle=None) -> bool:
+def get_spread_ability_partial_immunity(
+    move, attacker, opponent_targets, config, battle=None
+) -> bool:
     if not opponent_targets or not move:
         return False
     total_targets = 0
@@ -1238,12 +2382,18 @@ def get_spread_ability_partial_immunity(move, attacker, opponent_targets, config
     for opp in opponent_targets:
         if opp:
             total_targets += 1
-            blocks_flag, reason = ability_hard_blocks_move(move, attacker, opp, battle, config=config)
+            blocks_flag, reason = ability_hard_blocks_move(
+                move, attacker, opp, battle, config=config
+            )
             if blocks_flag and _ability_block_enabled(config, reason):
                 ability_blocked_targets += 1
             else:
                 non_ability_blocked_targets += 1
-    return total_targets > 1 and ability_blocked_targets > 0 and non_ability_blocked_targets > 0
+    return (
+        total_targets > 1
+        and ability_blocked_targets > 0
+        and non_ability_blocked_targets > 0
+    )
 
 
 def is_known_absorb_ability(ability_name: str) -> bool:
@@ -1251,13 +2401,21 @@ def is_known_absorb_ability(ability_name: str) -> bool:
         return False
     normalized = "".join(c for c in str(ability_name).lower() if c.isalnum())
     return normalized in (
-        "waterabsorb", "stormdrain", "dryskin",
-        "voltabsorb", "motordrive", "lightningrod",
-        "flashfire", "wellbakedbody", "sapsipper"
+        "waterabsorb",
+        "stormdrain",
+        "dryskin",
+        "voltabsorb",
+        "motordrive",
+        "lightningrod",
+        "flashfire",
+        "wellbakedbody",
+        "sapsipper",
     )
 
 
-def is_alternative_safe_damaging_predicate(alt_order, active_mon, battle, config=None) -> bool:
+def is_alternative_safe_damaging_predicate(
+    alt_order, active_mon, battle, config=None
+) -> bool:
     """Pure safety predicate: returns True if the candidate order is safe to use.
 
     Safety means:
@@ -1288,7 +2446,9 @@ def is_alternative_safe_damaging_predicate(alt_order, active_mon, battle, config
             return False
 
         # Is not blocked by a known ability
-        blocked, _ = ability_hard_blocks_move(alt_move, active_mon, alt_target, battle, config=config)
+        blocked, _ = ability_hard_blocks_move(
+            alt_move, active_mon, alt_target, battle, config=config
+        )
         if blocked:
             return False
 
@@ -1304,16 +2464,24 @@ def is_alternative_safe_damaging_predicate(alt_order, active_mon, battle, config
                     if opp_ability in ("stormdrain", "lightningrod"):
                         red_target = opp
                         break
-            if red_target and is_known_absorb_ability(get_known_ability(red_target, battle)):
+            if red_target and is_known_absorb_ability(
+                get_known_ability(red_target, battle)
+            ):
                 return False
 
     elif is_opponent_spread_move(alt_move, alt_order):
-        opponents = [opp for opp in battle.opponent_active_pokemon if opp and not getattr(opp, "fainted", False)]
+        opponents = [
+            opp
+            for opp in battle.opponent_active_pokemon
+            if opp and not getattr(opp, "fainted", False)
+        ]
         if not opponents:
             return False
         any_hit = False
         for opp in opponents:
-            opp_blocks, _ = ability_hard_blocks_move(alt_move, active_mon, opp, battle, config=config)
+            opp_blocks, _ = ability_hard_blocks_move(
+                alt_move, active_mon, opp, battle, config=config
+            )
             opp_type_imm, _ = is_type_immune(alt_move, active_mon, opp, battle)
             if not opp_blocks and not opp_type_imm:
                 any_hit = True
@@ -1326,14 +2494,26 @@ def is_alternative_safe_damaging_predicate(alt_order, active_mon, battle, config
     return True
 
 
-def is_alternative_safe_damaging(alt_order, idx, active_mon, battle, config, player) -> tuple[bool, float]:
+def is_alternative_safe_damaging(
+    alt_order, idx, active_mon, battle, config, player
+) -> tuple[bool, float]:
     """Compatibility wrapper retained for any callers outside choose_move.
     Uses score_action to compute the score. For choose_move, prefer the
     canonical slot_scores path to avoid re-evaluation side effects.
     """
-    if not is_alternative_safe_damaging_predicate(alt_order, active_mon, battle, config=config):
+    if not is_alternative_safe_damaging_predicate(
+        alt_order, active_mon, battle, config=config
+    ):
         return False, 0.0
-    alt_score = player.score_action(alt_order, idx, battle, with_tiebreaker=False, is_selected=False, in_spread_check=True, config=config)
+    alt_score = player.score_action(
+        alt_order,
+        idx,
+        battle,
+        with_tiebreaker=False,
+        is_selected=False,
+        in_spread_check=True,
+        config=config,
+    )
     if alt_score <= 0.0:
         return False, 0.0
     return True, alt_score
@@ -1380,25 +2560,47 @@ def is_type_immune(move, attacker, target, battle=None) -> tuple[bool, str]:
                     a_ability = a_ability.name
             elif isinstance(attacker, str):
                 a_ability = attacker
-            
+
             if isinstance(a_ability, str):
-                a_ability = a_ability.lower().replace(" ", "").replace("-", "").replace("_", "").strip()
+                a_ability = (
+                    a_ability.lower()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
+                    .strip()
+                )
 
         # 4. Check exceptions
         # Move ID exceptions
         move_id = ""
         if move is not None:
             if hasattr(move, "id") and move.id:
-                move_id = move.id.lower().replace(" ", "").replace("-", "").replace("_", "").strip()
+                move_id = (
+                    move.id.lower()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
+                    .strip()
+                )
             elif isinstance(move, str):
-                move_id = move.lower().replace(" ", "").replace("-", "").replace("_", "").strip()
+                move_id = (
+                    move.lower()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
+                    .strip()
+                )
 
         # Exception 1: Thousand Arrows can hit Flying targets.
         if move_id == "thousandarrows" and m_type == "GROUND" and "FLYING" in t_types:
             return False, ""
 
         # Exception 2: Scrappy / Mind's Eye allow Normal and Fighting to hit Ghost.
-        if a_ability in ("scrappy", "mindseye") and m_type in ("NORMAL", "FIGHTING") and "GHOST" in t_types:
+        if (
+            a_ability in ("scrappy", "mindseye")
+            and m_type in ("NORMAL", "FIGHTING")
+            and "GHOST" in t_types
+        ):
             return False, ""
 
         # Exception 3: Gravity allows Ground moves to hit Flying targets.
@@ -1420,15 +2622,19 @@ def is_type_immune(move, attacker, target, battle=None) -> tuple[bool, str]:
                     mult = target.damage_multiplier(move)
                 else:
                     from poke_env.battle.pokemon_type import PokemonType
+
                     try:
                         p_type = PokemonType[m_type]
                         mult = target.damage_multiplier(p_type)
                     except Exception:
                         pass
-                
+
                 if mult is not None:
                     if mult == 0.0:
-                        return True, f"[Mechanics] type immunity: {m_type} vs {', '.join(t_types)} -> score 0"
+                        return (
+                            True,
+                            f"[Mechanics] type immunity: {m_type} vs {', '.join(t_types)} -> score 0",
+                        )
                     else:
                         return False, ""
             except Exception:
@@ -1443,14 +2649,17 @@ def is_type_immune(move, attacker, target, battle=None) -> tuple[bool, str]:
             "ELECTRIC": {"GROUND"},
             "PSYCHIC": {"DARK"},
             "POISON": {"STEEL"},
-            "DRAGON": {"FAIRY"}
+            "DRAGON": {"FAIRY"},
         }
 
         if m_type in IMMUNITY_TABLE:
             immune_targets = IMMUNITY_TABLE[m_type]
             for t_type in t_types:
                 if t_type in immune_targets:
-                    return True, f"[Mechanics] type immunity: {m_type} vs {t_type} -> score 0"
+                    return (
+                        True,
+                        f"[Mechanics] type immunity: {m_type} vs {t_type} -> score 0",
+                    )
 
         return False, ""
 
@@ -1458,17 +2667,37 @@ def is_type_immune(move, attacker, target, battle=None) -> tuple[bool, str]:
         return False, ""
 
 
-def get_self_stat_drop_penalty(attacker, move, expected_ko=False, has_reasonable_alternative=True) -> tuple[float, str]:
+def get_self_stat_drop_penalty(
+    attacker, move, expected_ko=False, has_reasonable_alternative=True
+) -> tuple[float, str]:
     try:
         # Normalize move ID
         move_id = ""
         if move is not None:
             if hasattr(move, "id") and move.id:
-                move_id = move.id.lower().replace(" ", "").replace("-", "").replace("_", "").strip()
+                move_id = (
+                    move.id.lower()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
+                    .strip()
+                )
             elif isinstance(move, str):
-                move_id = move.lower().replace(" ", "").replace("-", "").replace("_", "").strip()
+                move_id = (
+                    move.lower()
+                    .replace(" ", "")
+                    .replace("-", "")
+                    .replace("_", "")
+                    .strip()
+                )
 
-        HARSH_DROP_MOVES = {"dracometeor", "overheat", "leafstorm", "fleurcannon", "psychoboost"}
+        HARSH_DROP_MOVES = {
+            "dracometeor",
+            "overheat",
+            "leafstorm",
+            "fleurcannon",
+            "psychoboost",
+        }
         LIGHT_DROP_MOVES = {"makeitrain"}
 
         if move_id not in HARSH_DROP_MOVES and move_id not in LIGHT_DROP_MOVES:
@@ -1493,9 +2722,15 @@ def get_self_stat_drop_penalty(attacker, move, expected_ko=False, has_reasonable
 
         # Apply penalty
         if move_id in HARSH_DROP_MOVES:
-            return 0.35, f"[Mechanics] self stat drop penalty for {move_id}: SpA={spa_boost} -> multiplier 0.35"
+            return (
+                0.35,
+                f"[Mechanics] self stat drop penalty for {move_id}: SpA={spa_boost} -> multiplier 0.35",
+            )
         elif move_id in LIGHT_DROP_MOVES:
-            return 0.65, f"[Mechanics] self stat drop penalty for {move_id}: SpA={spa_boost} -> multiplier 0.65"
+            return (
+                0.65,
+                f"[Mechanics] self stat drop penalty for {move_id}: SpA={spa_boost} -> multiplier 0.65",
+            )
 
         return 1.0, ""
     except Exception:
@@ -1508,7 +2743,12 @@ def is_opponent_only_spread_move(move, order=None) -> bool:
             # Check target string directly
             target_str = getattr(move, "target", "")
             if isinstance(target_str, str):
-                target_str_clean = target_str.lower().replace(" ", "").replace("_", "").replace("-", "")
+                target_str_clean = (
+                    target_str.lower()
+                    .replace(" ", "")
+                    .replace("_", "")
+                    .replace("-", "")
+                )
                 if target_str_clean == "alladjacentfoes":
                     return True
             # Check deduced target
@@ -1517,15 +2757,32 @@ def is_opponent_only_spread_move(move, order=None) -> bool:
                 target_str = str(target_type).upper()
                 if "ALLADJACENTFOES" in target_str or "ALL_ADJACENT_FOES" in target_str:
                     return True
-                    
+
             # Known opponent-only spread move list fallback
             move_id = getattr(move, "id", "")
             if isinstance(move_id, str):
-                move_id_clean = move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                move_id_clean = (
+                    move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                )
                 KNOWN_OPPONENT_ONLY_SPREAD = {
-                    "hypervoice", "rockslide", "heatwave", "blizzard", "clangsour", "clangingscales",
-                    "dazzlinggleam", "muddywater", "snarl", "expandforce", "makeitrain", "glare",
-                    "icywind", "acidspray", "strugglebug", "waterspout", "eruption", "dragondarts"
+                    "hypervoice",
+                    "rockslide",
+                    "heatwave",
+                    "blizzard",
+                    "clangsour",
+                    "clangingscales",
+                    "dazzlinggleam",
+                    "muddywater",
+                    "snarl",
+                    "expandforce",
+                    "makeitrain",
+                    "glare",
+                    "icywind",
+                    "acidspray",
+                    "strugglebug",
+                    "waterspout",
+                    "eruption",
+                    "dragondarts",
                 }
                 if move_id_clean in KNOWN_OPPONENT_ONLY_SPREAD:
                     return True
@@ -1540,22 +2797,36 @@ def is_ally_hitting_spread_move(move, order=None) -> bool:
             # Check target string directly
             target_str = getattr(move, "target", "")
             if isinstance(target_str, str):
-                target_str_clean = target_str.lower().replace(" ", "").replace("_", "").replace("-", "")
+                target_str_clean = (
+                    target_str.lower()
+                    .replace(" ", "")
+                    .replace("_", "")
+                    .replace("-", "")
+                )
                 if target_str_clean in ("alladjacent", "all"):
                     return True
             # Check deduced target
             target_type = getattr(move, "deduced_target", None)
             if target_type is not None:
                 target_str = str(target_type).upper()
-                if any(x in target_str for x in ("ALLADJACENT", "ALL_ADJACENT", "ALL")) and "FOES" not in target_str:
+                if (
+                    any(x in target_str for x in ("ALLADJACENT", "ALL_ADJACENT", "ALL"))
+                    and "FOES" not in target_str
+                ):
                     return True
-                    
+
             # Known ally-hitting spread move list fallback
             move_id = getattr(move, "id", "")
             if isinstance(move_id, str):
-                move_id_clean = move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                move_id_clean = (
+                    move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                )
                 KNOWN_ALLY_HITTING_SPREAD = {
-                    "earthquake", "surf", "discharge", "mindblown", "teeterdance"
+                    "earthquake",
+                    "surf",
+                    "discharge",
+                    "mindblown",
+                    "teeterdance",
                 }
                 if move_id_clean in KNOWN_ALLY_HITTING_SPREAD:
                     return True
@@ -1566,7 +2837,9 @@ def is_ally_hitting_spread_move(move, order=None) -> bool:
 
 def is_opponent_spread_move(move, order=None) -> bool:
     try:
-        if is_opponent_only_spread_move(move, order) or is_ally_hitting_spread_move(move, order):
+        if is_opponent_only_spread_move(move, order) or is_ally_hitting_spread_move(
+            move, order
+        ):
             return True
 
         # Check order target position fallback
@@ -1584,22 +2857,29 @@ def is_opponent_spread_move(move, order=None) -> bool:
                     return True
             target_str = getattr(move, "target", "")
             if isinstance(target_str, str):
-                target_str_clean = target_str.lower().replace(" ", "").replace("_", "").replace("-", "")
+                target_str_clean = (
+                    target_str.lower()
+                    .replace(" ", "")
+                    .replace("_", "")
+                    .replace("-", "")
+                )
                 if target_str_clean in ("alladjacent", "alladjacentfoes", "all"):
                     return True
-                    
+
         return False
     except Exception:
         return False
 
 
-def get_spread_target_effectiveness(move, attacker, opponent_targets, battle=None) -> dict:
+def get_spread_target_effectiveness(
+    move, attacker, opponent_targets, battle=None
+) -> dict:
     total_targets = 0
     immune_targets = 0
     damaged_targets = 0
     immune_target_names = []
     damaged_target_names = []
-    
+
     # We only evaluate active opponent targets
     for opp in opponent_targets:
         if opp:
@@ -1616,17 +2896,17 @@ def get_spread_target_effectiveness(move, attacker, opponent_targets, battle=Non
                             is_immune = True
                     except Exception:
                         pass
-            
+
             if is_immune:
                 immune_targets += 1
                 immune_target_names.append(opp.species)
             else:
                 damaged_targets += 1
                 damaged_target_names.append(opp.species)
-                
-    all_targets_immune = (total_targets > 0 and immune_targets == total_targets)
-    partial_immunity = (total_targets > 1 and immune_targets > 0 and damaged_targets > 0)
-    
+
+    all_targets_immune = total_targets > 0 and immune_targets == total_targets
+    partial_immunity = total_targets > 1 and immune_targets > 0 and damaged_targets > 0
+
     return {
         "total_targets": total_targets,
         "immune_targets": immune_targets,
@@ -1634,11 +2914,13 @@ def get_spread_target_effectiveness(move, attacker, opponent_targets, battle=Non
         "immune_target_names": immune_target_names,
         "damaged_target_names": damaged_target_names,
         "all_targets_immune": all_targets_immune,
-        "partial_immunity": partial_immunity
+        "partial_immunity": partial_immunity,
     }
 
 
-def evaluate_switch_candidate_type_safety(candidate, opponent_actives, config=None) -> dict:
+def evaluate_switch_candidate_type_safety(
+    candidate, opponent_actives, config=None
+) -> dict:
     """Evaluate type safety of a switch candidate against visible opponents.
 
     Uses only currently visible Pokemon types and HP. No species-based move
@@ -1679,12 +2961,30 @@ def evaluate_switch_candidate_type_safety(candidate, opponent_actives, config=No
     result["candidate_hp_fraction"] = hp_frac
 
     # Get config penalties/bonuses
-    se_penalty = getattr(config, "switch_candidate_super_effective_penalty", 80.0) if config else 80.0
-    quad_penalty = getattr(config, "switch_candidate_quad_weak_penalty", 160.0) if config else 160.0
-    double_penalty = getattr(config, "switch_candidate_double_threat_penalty", 100.0) if config else 100.0
-    res_bonus = getattr(config, "switch_candidate_resistance_bonus", 20.0) if config else 20.0
-    imm_bonus = getattr(config, "switch_candidate_immunity_bonus", 30.0) if config else 30.0
-    low_hp_penalty = getattr(config, "switch_candidate_low_hp_penalty", 30.0) if config else 30.0
+    se_penalty = (
+        getattr(config, "switch_candidate_super_effective_penalty", 80.0)
+        if config
+        else 80.0
+    )
+    quad_penalty = (
+        getattr(config, "switch_candidate_quad_weak_penalty", 160.0)
+        if config
+        else 160.0
+    )
+    double_penalty = (
+        getattr(config, "switch_candidate_double_threat_penalty", 100.0)
+        if config
+        else 100.0
+    )
+    res_bonus = (
+        getattr(config, "switch_candidate_resistance_bonus", 20.0) if config else 20.0
+    )
+    imm_bonus = (
+        getattr(config, "switch_candidate_immunity_bonus", 30.0) if config else 30.0
+    )
+    low_hp_penalty = (
+        getattr(config, "switch_candidate_low_hp_penalty", 30.0) if config else 30.0
+    )
 
     raw_score = 0.0
     worst_mult = 1.0
@@ -1778,7 +3078,9 @@ def evaluate_switch_candidate_type_safety(candidate, opponent_actives, config=No
     return result
 
 
-def evaluate_forced_switch_replacement_safety(candidate, opponent_actives, battle=None, config=None) -> dict:
+def evaluate_forced_switch_replacement_safety(
+    candidate, opponent_actives, battle=None, config=None
+) -> dict:
     """Evaluate forced switch replacement safety for a single candidate.
 
     Used ONLY for required replacement switches (after faint), NOT voluntary pivots.
@@ -1810,13 +3112,33 @@ def evaluate_forced_switch_replacement_safety(candidate, opponent_actives, battl
         return result
 
     # Config penalties/bonuses
-    se_penalty = getattr(config, "forced_switch_super_effective_penalty", 90.0) if config else 90.0
-    quad_penalty = getattr(config, "forced_switch_quad_weak_penalty", 180.0) if config else 180.0
-    double_penalty = getattr(config, "forced_switch_double_threat_penalty", 120.0) if config else 120.0
-    res_bonus = getattr(config, "forced_switch_resistance_bonus", 25.0) if config else 25.0
-    imm_bonus = getattr(config, "forced_switch_immunity_bonus", 35.0) if config else 35.0
-    low_hp_penalty = getattr(config, "forced_switch_low_hp_penalty", 30.0) if config else 30.0
-    fainted_penalty = getattr(config, "forced_switch_fainted_or_unavailable_penalty", 9999.0) if config else 9999.0
+    se_penalty = (
+        getattr(config, "forced_switch_super_effective_penalty", 90.0)
+        if config
+        else 90.0
+    )
+    quad_penalty = (
+        getattr(config, "forced_switch_quad_weak_penalty", 180.0) if config else 180.0
+    )
+    double_penalty = (
+        getattr(config, "forced_switch_double_threat_penalty", 120.0)
+        if config
+        else 120.0
+    )
+    res_bonus = (
+        getattr(config, "forced_switch_resistance_bonus", 25.0) if config else 25.0
+    )
+    imm_bonus = (
+        getattr(config, "forced_switch_immunity_bonus", 35.0) if config else 35.0
+    )
+    low_hp_penalty = (
+        getattr(config, "forced_switch_low_hp_penalty", 30.0) if config else 30.0
+    )
+    fainted_penalty = (
+        getattr(config, "forced_switch_fainted_or_unavailable_penalty", 9999.0)
+        if config
+        else 9999.0
+    )
 
     # Check fainted/unavailable
     if getattr(candidate, "fainted", False):
@@ -1926,6 +3248,255 @@ def evaluate_forced_switch_replacement_safety(candidate, opponent_actives, battl
     return result
 
 
+def evaluate_voluntary_switch_quality(
+    active,
+    candidate,
+    slot_idx,
+    battle,
+    best_stay_score,
+    config,
+    player=None,
+) -> dict:
+    """Evaluate voluntary (non-forced) switch quality for a candidate.
+
+    Computes risk metrics for the active mon vs the candidate against
+    visible opponent types.  Returns a dict that the caller can use to
+    adjust switch scores.
+
+    Uses only visible information (type_1, type_2, current_hp_fraction).
+    Does NOT modify any state -- the caller is responsible for applying
+    score_adjustment.
+    """
+    result = {
+        "eligible": True,
+        "active_risk": 0.0,
+        "candidate_risk": 0.0,
+        "risk_reduction": 0.0,
+        "best_stay_score": best_stay_score,
+        "tempo_penalty": 0.0,
+        "candidate_penalty": 0.0,
+        "repeat_switch_penalty": 0.0,
+        "sacrifice_preserve_bench_value": 0.0,
+        "score_adjustment": 0.0,
+        "candidate_double_threat": False,
+        "candidate_quad_weak": False,
+        "candidate_low_hp": False,
+        "active_low_hp": False,
+        "active_has_useful_action": False,
+        "active_has_high_value_action": False,
+        "switch_improves_position": False,
+        "sacrifice_preferred": False,
+        "reason_codes": [],
+    }
+
+    if active is None or candidate is None:
+        result["eligible"] = False
+        result["reason_codes"].append("missing_pokemon")
+        return result
+
+    if slot_idx < len(battle.force_switch) and battle.force_switch[slot_idx]:
+        result["eligible"] = False
+        result["reason_codes"].append("forced_switch")
+        return result
+
+    tempo_penalty = (
+        getattr(config, "voluntary_switch_tempo_penalty", 35.0) if config else 35.0
+    )
+    unsafe_penalty = (
+        getattr(config, "voluntary_switch_unsafe_candidate_penalty", 120.0)
+        if config
+        else 120.0
+    )
+    quad_penalty = (
+        getattr(config, "voluntary_switch_quad_weak_penalty", 180.0)
+        if config
+        else 180.0
+    )
+    double_penalty = (
+        getattr(config, "voluntary_switch_double_threat_penalty", 160.0)
+        if config
+        else 160.0
+    )
+    low_hp_cand_penalty = (
+        getattr(config, "voluntary_switch_low_hp_candidate_penalty", 35.0)
+        if config
+        else 35.0
+    )
+    repeat_penalty = (
+        getattr(config, "voluntary_switch_repeat_penalty", 80.0) if config else 80.0
+    )
+    min_risk_reduction = (
+        getattr(config, "voluntary_switch_min_risk_reduction", 1.0) if config else 1.0
+    )
+    sacrifice_hp_threshold = (
+        getattr(config, "voluntary_switch_sacrifice_hp_threshold", 0.15)
+        if config
+        else 0.15
+    )
+    useful_action_threshold = (
+        getattr(config, "voluntary_switch_useful_action_threshold", 40.0)
+        if config
+        else 40.0
+    )
+    high_value_threshold = (
+        getattr(config, "voluntary_switch_high_value_action_threshold", 120.0)
+        if config
+        else 120.0
+    )
+    preserve_bench_bonus = (
+        getattr(config, "voluntary_switch_sacrifice_preserve_bench_bonus", 70.0)
+        if config
+        else 70.0
+    )
+
+    opponent_actives = getattr(battle, "opponent_active_pokemon", [])
+    opponent_actives = [
+        opp for opp in opponent_actives if opp and not getattr(opp, "fainted", False)
+    ]
+
+    active_type_1 = getattr(active, "type_1", None)
+    active_type_2 = getattr(active, "type_2", None)
+    cand_type_1 = getattr(candidate, "type_1", None)
+    cand_type_2 = getattr(candidate, "type_2", None)
+
+    active_hp = getattr(active, "current_hp_fraction", 1.0) or 1.0
+    candidate_hp = getattr(candidate, "current_hp_fraction", 1.0) or 1.0
+
+    # --- Active risk: worst-case max incoming multiplier ---
+    active_risk = 0.0
+    for opp in opponent_actives:
+        opp_type_1 = getattr(opp, "type_1", None)
+        opp_type_2 = getattr(opp, "type_2", None)
+        max_mult = 0.0
+        for opp_type in (opp_type_1, opp_type_2):
+            if opp_type is None:
+                continue
+            try:
+                if active_type_1 is not None:
+                    mult = active.damage_multiplier(opp_type)
+                    if mult > max_mult:
+                        max_mult = mult
+            except Exception:
+                if max_mult < 1.0:
+                    max_mult = 1.0
+        if max_mult == 0.0 and opp_type_1 is None and opp_type_2 is None:
+            max_mult = 1.0
+        elif max_mult == 0.0 and active_type_1 is None:
+            max_mult = 1.0
+        if max_mult > active_risk:
+            active_risk = max_mult
+    result["active_risk"] = active_risk
+
+    # --- Candidate risk + threat classification ---
+    candidate_risk = 0.0
+    se_count = 0
+    quad_count = 0
+    for opp in opponent_actives:
+        opp_type_1 = getattr(opp, "type_1", None)
+        opp_type_2 = getattr(opp, "type_2", None)
+        max_mult = 0.0
+        for opp_type in (opp_type_1, opp_type_2):
+            if opp_type is None:
+                continue
+            try:
+                if cand_type_1 is not None:
+                    mult = candidate.damage_multiplier(opp_type)
+                    if mult > max_mult:
+                        max_mult = mult
+            except Exception:
+                if max_mult < 1.0:
+                    max_mult = 1.0
+        if max_mult == 0.0 and opp_type_1 is None and opp_type_2 is None:
+            max_mult = 1.0
+        elif max_mult == 0.0 and cand_type_1 is None:
+            max_mult = 1.0
+        if max_mult > candidate_risk:
+            candidate_risk = max_mult
+        if max_mult >= 4.0:
+            quad_count += 1
+            se_count += 1
+        elif max_mult >= 2.0:
+            se_count += 1
+    result["candidate_risk"] = candidate_risk
+
+    is_double_threat = se_count >= 2
+    result["candidate_double_threat"] = is_double_threat
+    result["candidate_quad_weak"] = quad_count > 0
+
+    # --- Risk reduction ---
+    risk_reduction = active_risk - candidate_risk
+    result["risk_reduction"] = risk_reduction
+
+    # --- HP state ---
+    active_low_hp = active_hp <= sacrifice_hp_threshold
+    result["active_low_hp"] = active_low_hp
+    candidate_low_hp = candidate_hp <= 0.35
+    result["candidate_low_hp"] = candidate_low_hp
+
+    # --- Action availability (inferred from best_stay_score) ---
+    active_has_useful_action = best_stay_score > useful_action_threshold
+    active_has_high_value_action = best_stay_score > high_value_threshold
+    result["active_has_useful_action"] = active_has_useful_action
+    result["active_has_high_value_action"] = active_has_high_value_action
+
+    # --- Position assessment ---
+    switch_improves_position = risk_reduction > min_risk_reduction
+    result["switch_improves_position"] = switch_improves_position
+
+    # --- Tempo penalty (always applied for voluntary switches) ---
+    result["tempo_penalty"] = tempo_penalty
+
+    # --- Candidate penalty ---
+    cand_penalty = 0.0
+    cand_penalty += se_count * unsafe_penalty
+    cand_penalty += quad_count * quad_penalty
+    if is_double_threat:
+        cand_penalty += double_penalty
+    if candidate_low_hp:
+        cand_penalty += low_hp_cand_penalty * (1.0 - candidate_hp)
+        result["reason_codes"].append("candidate_low_hp")
+    if quad_count > 0:
+        result["reason_codes"].append("candidate_quad_weak")
+    if is_double_threat:
+        result["reason_codes"].append("candidate_double_threat")
+    if se_count > 0:
+        result["reason_codes"].append("candidate_unsafe")
+    result["candidate_penalty"] = cand_penalty
+
+    # --- Repeat switch penalty (computed by caller, passed via player) ---
+    repeat_switch_penalty = 0.0
+    result["repeat_switch_penalty"] = repeat_switch_penalty
+
+    # --- Sacrifice preserve bench value ---
+    sacrifice_value = 0.0
+    if active_low_hp and not candidate_low_hp:
+        sacrifice_value = preserve_bench_bonus
+        result["reason_codes"].append("sacrifice_preserve_bench")
+    result["sacrifice_preserve_bench_value"] = sacrifice_value
+
+    # --- Sacrifice preferred ---
+    sacrifice_preferred = (
+        active_low_hp and not active_has_useful_action and not switch_improves_position
+    )
+    result["sacrifice_preferred"] = sacrifice_preferred
+    if sacrifice_preferred:
+        result["reason_codes"].append("sacrifice_preferred")
+
+    # --- Risk reduction bonus ---
+    risk_reduction_bonus = 0.0
+    if risk_reduction > 0:
+        risk_reduction_bonus = risk_reduction * 30.0
+        result["reason_codes"].append("risk_reduction_bonus")
+
+    # --- Score adjustment (positive = penalty against the switch) ---
+    score_adjustment = (
+        tempo_penalty - risk_reduction_bonus + cand_penalty + repeat_switch_penalty
+    )
+    result["score_adjustment"] = score_adjustment
+
+    return result
+
+
 def summarize_negative_boosts(pokemon) -> dict:
     """Summarize current revealed boost stages for diagnostic purposes.
 
@@ -1980,7 +3551,7 @@ def summarize_negative_boosts(pokemon) -> dict:
     result["offensive_negative_stages"] = offensive_neg
     result["defensive_negative_stages"] = defensive_neg
     result["speed_negative_stage"] = speed_neg
-    result["severe_negative_boost"] = (lowest <= -3)
+    result["severe_negative_boost"] = lowest <= -3
 
     return result
 
@@ -2017,8 +3588,12 @@ def classify_stat_drop_severity(boosts: dict, config, orders_slot: list) -> dict
     # Offensive: check if any available damaging move uses the dropped stat
     has_physical = False
     has_special = False
-    for o in (orders_slot or []):
-        if o and getattr(o, "order", None) is not None and getattr(getattr(o, "order", None), "base_power", 0) > 0:
+    for o in orders_slot or []:
+        if (
+            o
+            and getattr(o, "order", None) is not None
+            and getattr(getattr(o, "order", None), "base_power", 0) > 0
+        ):
             cat = getattr(o.order, "category", None)
             cat_name = getattr(cat, "name", "STATUS")
             if cat_name == "PHYSICAL" and getattr(o.order, "base_power", 0) > 0:
@@ -2028,7 +3603,9 @@ def classify_stat_drop_severity(boosts: dict, config, orders_slot: list) -> dict
 
     atk_val = boosts.get("atk", 0)
     spa_val = boosts.get("spa", 0)
-    if (has_physical and atk_val <= off_thresh) or (has_special and spa_val <= off_thresh):
+    if (has_physical and atk_val <= off_thresh) or (
+        has_special and spa_val <= off_thresh
+    ):
         result["offensive"] = True
         result["categories"].append("offensive")
 
@@ -2049,7 +3626,9 @@ def classify_stat_drop_severity(boosts: dict, config, orders_slot: list) -> dict
     return result
 
 
-def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, player=None) -> dict:
+def evaluate_stat_drop_switch_pressure(
+    active_mon, orders_slot, battle, config, player=None
+) -> dict:
     result = {
         "should_consider_switch": False,
         "categories": [],
@@ -2082,7 +3661,7 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
 
     has_physical = False
     has_special = False
-    for o in (orders_slot or []):
+    for o in orders_slot or []:
         order_obj = getattr(o, "order", None)
         if order_obj is None:
             continue
@@ -2101,7 +3680,9 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
     spe_val = boosts.get("spe", 0)
 
     threshold_sources = []
-    if (has_physical and atk_val <= off_thresh) or (has_special and spa_val <= off_thresh):
+    if (has_physical and atk_val <= off_thresh) or (
+        has_special and spa_val <= off_thresh
+    ):
         result["offensive_drop"] = True
         result["categories"].append("offensive")
         threshold_sources.append(f"offensive_{off_thresh}")
@@ -2132,7 +3713,7 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
     switch_count = 0
     has_protect = False
     has_damaging = False
-    for o in (orders_slot or []):
+    for o in orders_slot or []:
         if not o:
             continue
         order_obj = getattr(o, "order", None)
@@ -2145,7 +3726,14 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
         if base_pw > 0:
             has_damaging = True
         move_id = getattr(order_obj, "id", "").lower()
-        if move_id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker", "silktrap"):
+        if move_id in (
+            "protect",
+            "detect",
+            "spikyshield",
+            "kingsshield",
+            "banefulbunker",
+            "silktrap",
+        ):
             has_protect = True
 
     result["switch_available"] = switch_count > 0
@@ -2155,7 +3743,7 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
 
     productive = False
     if player and battle and has_damaging:
-        for o in (orders_slot or []):
+        for o in orders_slot or []:
             if not o:
                 continue
             order_obj = getattr(o, "order", None)
@@ -2170,13 +3758,19 @@ def evaluate_stat_drop_switch_pressure(active_mon, orders_slot, battle, config, 
                     target_opp = opps[target_pos - 1]
                     if target_opp and not getattr(target_opp, "fainted", False):
                         try:
-                            if player.check_move_will_ko(o.order, active_mon, target_opp, battle, config=config):
+                            if player.check_move_will_ko(
+                                o.order, active_mon, target_opp, battle, config=config
+                            ):
                                 productive = True
                                 result["reasons"].append("ko_action_available")
                                 break
-                            dmg = player.get_expected_damage(o.order, active_mon, target_opp, battle, config=config)
+                            dmg = player.get_expected_damage(
+                                o.order, active_mon, target_opp, battle, config=config
+                            )
                             opp_max = player.estimate_opponent_max_hp(target_opp)
-                            frac = getattr(config, "stat_drop_meaningful_damage_fraction", 0.25)
+                            frac = getattr(
+                                config, "stat_drop_meaningful_damage_fraction", 0.25
+                            )
                             if opp_max > 0 and dmg / max(1.0, opp_max) >= frac:
                                 productive = True
                                 result["reasons"].append("meaningful_damage_available")
@@ -2243,9 +3837,7 @@ def get_revealed_damaging_moves(opponent) -> list:
     return result
 
 
-def evaluate_revealed_move_incoming_risk(
-    move, opponent, defender, battle=None
-) -> dict:
+def evaluate_revealed_move_incoming_risk(move, opponent, defender, battle=None) -> dict:
     """Evaluate incoming risk of a revealed move against a defender.
 
     Uses defender.damage_multiplier(move) for combined dual-type calculation.
@@ -2328,7 +3920,7 @@ def evaluate_revealed_move_incoming_risk(
         stab_mult = 1.5 if result["stab"] else 1.0
         incoming_pressure = base_power * mult * stab_mult * result["accuracy"]
         if priority > 0:
-            incoming_pressure *= (1.0 + priority * 0.3)
+            incoming_pressure *= 1.0 + priority * 0.3
         result["incoming_pressure"] = incoming_pressure
 
         # Likely KO pressure: quad-effective or super-effective with high power
@@ -2437,7 +4029,11 @@ def summarize_revealed_move_threats(
 
             move_id = getattr(move, "id", "unknown")
             move_type_obj = getattr(move, "type", None)
-            move_type = getattr(move_type_obj, "name", str(move_type_obj)) if move_type_obj else "unknown"
+            move_type = (
+                getattr(move_type_obj, "name", str(move_type_obj))
+                if move_type_obj
+                else "unknown"
+            )
 
             target_likelihood = estimate_revealed_move_target_likelihood(
                 move, opp, our_actives, battle
@@ -2511,8 +4107,12 @@ def evaluate_revealed_move_switch_interception(
     for opp in opp_actives:
         revealed = get_revealed_damaging_moves(opp)
         for move in revealed:
-            active_risk_info = evaluate_revealed_move_incoming_risk(move, opp, active, battle)
-            candidate_risk_info = evaluate_revealed_move_incoming_risk(move, opp, candidate, battle)
+            active_risk_info = evaluate_revealed_move_incoming_risk(
+                move, opp, active, battle
+            )
+            candidate_risk_info = evaluate_revealed_move_incoming_risk(
+                move, opp, candidate, battle
+            )
 
             active_mult = active_risk_info["type_multiplier"]
             candidate_mult = candidate_risk_info["type_multiplier"]
@@ -2537,7 +4137,10 @@ def evaluate_revealed_move_switch_interception(
             # Track lethal and super-effective threats
             if active_risk_info.get("likely_ko_pressure"):
                 result["likely_lethal"] = True
-            if active_risk_info.get("classification") in ("super-effective", "quad-effective"):
+            if active_risk_info.get("classification") in (
+                "super-effective",
+                "quad-effective",
+            ):
                 result["super_effective_threat"] = True
 
     result["active_risk"] = total_active_risk
@@ -2545,7 +4148,9 @@ def evaluate_revealed_move_switch_interception(
 
     if total_active_risk > 0:
         result["risk_reduction"] = total_active_risk - total_candidate_risk
-        result["fractional_risk_reduction"] = (total_active_risk - total_candidate_risk) / total_active_risk
+        result["fractional_risk_reduction"] = (
+            total_active_risk - total_candidate_risk
+        ) / total_active_risk
 
     if not any_threat:
         result["rejection_reason"] = "no_revealed_threats"
@@ -2567,11 +4172,227 @@ def evaluate_revealed_move_switch_interception(
     for opp in other_opps:
         revealed = get_revealed_damaging_moves(opp)
         for move in revealed:
-            cand_risk = evaluate_revealed_move_incoming_risk(move, opp, candidate, battle)
-            if cand_risk["type_multiplier"] >= 2.0 and cand_risk["incoming_pressure"] > 0:
+            cand_risk = evaluate_revealed_move_incoming_risk(
+                move, opp, candidate, battle
+            )
+            if (
+                cand_risk["type_multiplier"] >= 2.0
+                and cand_risk["incoming_pressure"] > 0
+            ):
                 if cand_risk["incoming_pressure"] >= total_active_risk * 0.8:
                     result["rejection_reason"] = "worse_other_threat"
                     return result
+
+    # Interception is valid
+    result["interception_valid"] = True
+    bonus = result["risk_reduction"] * 30.0
+    if result["moves_made_immune"]:
+        bonus += 40.0
+    if result["likely_lethal"]:
+        bonus += 60.0
+    result["proposed_score_bonus"] = min(bonus, 200.0)
+    return result
+
+
+def select_best_joint_from_score_maps(
+    battle,
+    config,
+    joint_orders,
+    slot_0_scores,
+    slot_1_scores,
+    direct_absorb_blocked=None,
+    safety_blocked=None,
+    ally_redirect_blocked=None,
+    support_target_blocked=None,
+) -> tuple:
+    """Pure selection from explicit score maps without recomputing action scores.
+
+    Returns (best_joint_order, best_score, score_1, score_2) or
+    (None, 0, 0, 0) if no joint orders.
+
+    Applies only safety-block penalties. Synergy rules (KO, focus fire,
+    overkill) are intentionally excluded because both ON and OFF paths
+    share the same synergy behavior when comparing counterfactual selections.
+    """
+    if not joint_orders:
+        return (None, 0.0, 0.0, 0.0)
+
+    da = direct_absorb_blocked or {}
+    sb = safety_blocked or {}
+    ar = ally_redirect_blocked or {}
+    st = support_target_blocked or {}
+
+    scored = []
+    for joint_order in joint_orders:
+        first = joint_order.first_order
+        second = joint_order.second_order
+
+        s1 = slot_0_scores.get(id(first), 0.0) if first else 0.0
+        s2 = slot_1_scores.get(id(second), 0.0) if second else 0.0
+        js = s1 + s2
+
+        blocked = any(
+            [
+                da.get(id(first), False) if first else False,
+                da.get(id(second), False) if second else False,
+                sb.get(id(first), False) if first else False,
+                sb.get(id(second), False) if second else False,
+                ar.get(id(first), False) if first else False,
+                ar.get(id(second), False) if second else False,
+                st.get(id(first), False) if first else False,
+                st.get(id(second), False) if second else False,
+            ]
+        )
+
+        if blocked:
+            from dataclasses import dataclass
+
+            pen = getattr(config, "safety_block_joint_penalty", 1000.0)
+            js -= pen
+
+        scored.append((joint_order, js, s1, s2))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored[0] if scored else (None, 0.0, 0.0, 0.0)
+
+
+def build_voluntary_switch_candidate_table(
+    active_mon,
+    switch_orders,
+    slot_idx,
+    battle,
+    best_stay_score,
+    config,
+    player=None,
+    voluntary_switch_history=None,
+) -> list:
+    """Build a complete candidate table of all voluntary switch candidates.
+
+    Each candidate is evaluated exactly once.  Returns a list of dict rows
+    with all quality metrics plus adjusted_switch_score.
+
+    Score convention:
+      raw_switch_score = switch_baseline (config)
+      score_adjustment = tempo_penalty - risk_reduction_bonus + candidate_penalty
+                         + repeat_penalty + sacrifice_penalty + stay_value_penalty
+      adjusted_switch_score = raw_switch_score - score_adjustment
+
+      score_adjustment > 0 means the switch is penalised.
+    """
+    rows = []
+    if not active_mon or not switch_orders:
+        return rows
+    if slot_idx < len(battle.force_switch) and battle.force_switch[slot_idx]:
+        return rows  # voluntary only
+
+    cfg = config or DoublesDamageAwareConfig()
+    switch_baseline = getattr(cfg, "switch_baseline", 8.0)
+
+    # Track consecutive switch
+    key = (getattr(battle, "battle_tag", ""), slot_idx)
+    # Build full history from the switch_history dict if available
+    history = {}
+    if voluntary_switch_history is not None:
+        history = voluntary_switch_history.get(key, {})
+
+    # Determine if this is a repeat
+    is_repeat = False
+    if history.get("last_switch_turn") is not None:
+        current_turn = getattr(battle, "turn", 0)
+        if current_turn - history.get("last_switch_turn") == 1:
+            is_repeat = True
+
+    for idx, order in enumerate(switch_orders):
+        if not order or not isinstance(order.order, Pokemon):
+            continue
+        candidate = order.order
+        candidate_action_key = _order_action_key(order)
+        eval_result = evaluate_voluntary_switch_quality(
+            active_mon,
+            candidate,
+            slot_idx,
+            battle,
+            best_stay_score,
+            cfg,
+            player=player,
+        )
+
+        raw_score = switch_baseline
+        adj = eval_result["score_adjustment"]
+        tempo = eval_result["tempo_penalty"]
+        cand_penalty = eval_result["candidate_penalty"]
+        repeat = 0.0
+        if is_repeat:
+            repeat = getattr(cfg, "voluntary_switch_repeat_penalty", 80.0)
+
+        # Rebuild adjustment including sacrifice, stay value, and repeat
+        risk_reduction = eval_result["risk_reduction"]
+        # Phase 6.4.9k: Redesigned additive formula
+        # Switch score = switch_baseline + risk_reduction_bonus - penalties
+        # where risk_reduction_bonus = risk_reduction * best_stay_score * multiplier
+        risk_reduction_multiplier = getattr(
+            cfg, "voluntary_switch_risk_reduction_multiplier", 0.5
+        )
+        risk_reduction_bonus = (
+            risk_reduction * best_stay_score * risk_reduction_multiplier
+            if risk_reduction > 0
+            else 0.0
+        )
+
+        stay_value_penalty = 0.0
+        if eval_result["active_has_high_value_action"]:
+            stay_value_penalty = 50.0  # Fixed penalty - active has great moves
+        elif eval_result["active_has_useful_action"]:
+            stay_value_penalty = 25.0  # Fixed penalty - active has decent moves
+
+        sacrifice_penalty = 0.0
+        if eval_result["active_low_hp"] and eval_result["active_has_useful_action"]:
+            sacrifice_penalty = 30.0  # Fixed penalty to preserve bench
+
+        # Additive formula: baseline + bonus - penalties
+        total_penalties = (
+            tempo + cand_penalty + repeat + stay_value_penalty + sacrifice_penalty
+        )
+        adjusted = switch_baseline + risk_reduction_bonus - total_penalties
+
+        # Store full_adj for diagnostic compatibility
+        full_adj = total_penalties - risk_reduction_bonus
+
+        is_safer = eval_result["switch_improves_position"]
+
+        row = {
+            "candidate_index": idx,
+            "candidate_action_key": candidate_action_key,
+            "species": getattr(candidate, "species", ""),
+            "hp": getattr(candidate, "current_hp_fraction", 1.0),
+            "raw_switch_score": raw_score,
+            "adjusted_switch_score": max(
+                adjusted, -200.0
+            ),  # allow negative for differentiation
+            "active_risk": eval_result["active_risk"],
+            "candidate_risk": eval_result["candidate_risk"],
+            "risk_reduction": risk_reduction,
+            "tempo_penalty": tempo,
+            "candidate_penalty": cand_penalty,
+            "repeat_penalty": repeat,
+            "sacrifice_penalty": sacrifice_penalty,
+            "stay_value_penalty": stay_value_penalty,
+            "score_adjustment": full_adj,
+            "double_threat": eval_result["candidate_double_threat"],
+            "quad_weak": eval_result["candidate_quad_weak"],
+            "low_hp": eval_result["candidate_low_hp"],
+            "switch_improves_position": is_safer,
+            "safer_than_active": is_safer,
+            "best_stay_score": best_stay_score,
+            "active_has_useful_action": eval_result["active_has_useful_action"],
+            "active_has_high_value_action": eval_result["active_has_high_value_action"],
+            "sacrifice_preferred": eval_result["sacrifice_preferred"],
+            "reason_codes": list(eval_result["reason_codes"]),
+            "selected": False,
+        }
+        rows.append(row)
+
+    return rows
 
     # Calculate bonus
     bonus = 0.0
@@ -2622,7 +4443,10 @@ def detect_stale_target_after_ally_ko_risk(
     second_move = getattr(second_order, "order", None)
     if not first_move or not second_move:
         return result
-    if getattr(first_move, "base_power", 0) <= 0 or getattr(second_move, "base_power", 0) <= 0:
+    if (
+        getattr(first_move, "base_power", 0) <= 0
+        or getattr(second_move, "base_power", 0) <= 0
+    ):
         return result
 
     first_target_pos = getattr(first_order, "move_target", None)
@@ -2677,7 +4501,9 @@ def detect_stale_target_after_ally_ko_risk(
 
 
 class DoublesDamageAwarePlayer(Player):
-    def __init__(self, *args, verbose=True, logger=None, audit_logger=None, config=None, **kwargs):
+    def __init__(
+        self, *args, verbose=True, logger=None, audit_logger=None, config=None, **kwargs
+    ):
         if "battle_format" not in kwargs:
             kwargs["battle_format"] = "gen9randomdoublesbattle"
         super().__init__(*args, **kwargs)
@@ -2689,7 +4515,10 @@ class DoublesDamageAwarePlayer(Player):
 
     @property
     def config(self):
-        if hasattr(self, "_active_config_override") and self._active_config_override is not None:
+        if (
+            hasattr(self, "_active_config_override")
+            and self._active_config_override is not None
+        ):
             return self._active_config_override
         return self._real_config
 
@@ -2701,7 +4530,7 @@ class DoublesDamageAwarePlayer(Player):
         self.last_protect_turn = {}
         self.active_turns = {}
         self.battle_metrics = {}
-        
+
         # Phase 3 tracking state
         self.tiebreaker_activations_by_battle = {}
         self.boosted_override_activations_by_battle = {}
@@ -2747,10 +4576,14 @@ class DoublesDamageAwarePlayer(Player):
                     self.config.random_set_data_path
                 )
                 if self.random_set_engine.species_count() == 0:
-                    print("[RandomSet] WARNING: Database loaded but is empty. Disabling random-set modeling.")
+                    print(
+                        "[RandomSet] WARNING: Database loaded but is empty. Disabling random-set modeling."
+                    )
                     self.random_set_engine = None
             except Exception as e:
-                print(f"[RandomSet] WARNING: Failed to load database ({e}). Disabling random-set modeling.")
+                print(
+                    f"[RandomSet] WARNING: Failed to load database ({e}). Disabling random-set modeling."
+                )
                 self.random_set_engine = None
 
         self.rs_predictions_used_by_battle = {}
@@ -2795,7 +4628,7 @@ class DoublesDamageAwarePlayer(Player):
         self._ability_blocked_target_ability = {}
         self._ally_ability_safe_spread = {}
         self._ability_redirection_avoided = {}
-        
+
         # Phase 6.3.3 tracking state (per battle tag)
         self._direct_absorb_hard_block_avoided = {}
         self._direct_absorb_immune_move_selected = {}
@@ -2803,7 +4636,7 @@ class DoublesDamageAwarePlayer(Player):
         self._direct_absorb_target_species = {}
         self._direct_absorb_target_ability = {}
         self._direct_absorb_only_legal_action = {}
-        
+
         # Phase 6.3.6b: Known Ally Redirection tracking state (per battle tag)
         self._known_ally_redirect_selected = {}
         self._known_ally_redirect_reason = {}
@@ -2811,7 +4644,26 @@ class DoublesDamageAwarePlayer(Player):
         self._known_ally_redirect_ally_ability = {}
         self._known_ally_redirect_move_id = {}
         self._known_ally_redirect_known_before = {}
-        
+
+        # Phase 6.3.8: Support Move Target Hard Safety tracking state (per battle tag)
+        self._support_target_wrong_side_blocked = {}
+        self._support_target_block_reason = {}
+
+        # Phase 6.4.9: Voluntary switch history (per battle tag, per slot)
+        # Stores dicts with keys: last_switch_turn, last_switch_out_identity, last_switch_in_identity
+        self._voluntary_switch_history = {}
+        # Phase 6.4.9: Voluntary switch quality per turn (slot -> latest evaluated)
+        self._voluntary_switch_quality_data = {}
+        self._voluntary_switch_adjustment_applied = {}
+        self._voluntary_switch_penalized = {}
+        self._voluntary_switch_selection_changed = {}
+        self._voluntary_switch_joint_selection_changed = {}
+        self._voluntary_switch_counterfactual_actions = {}
+
+        # Phase 6.5: Type consumption tracking (Double Shock, Burn Up)
+        # Key: battle_tag -> dict of pokemon_identity -> set of consumed type names
+        self._consumed_types = {}
+
         # Phase 6.3.2 streak tracking state (per battle tag)
         # Key: battle_tag -> dict of attacker_ident -> {"move": ..., "effective_target": ..., "reason": ..., "turn": ..., "streak": int}
         # Using attacker identity (not slot index) so slot switches don't break streaks.
@@ -2844,7 +4696,10 @@ class DoublesDamageAwarePlayer(Player):
         except Exception:
             pass
         parts = []
-        for order in [getattr(joint_order, "first_order", None), getattr(joint_order, "second_order", None)]:
+        for order in [
+            getattr(joint_order, "first_order", None),
+            getattr(joint_order, "second_order", None),
+        ]:
             if order is not None:
                 try:
                     msg = order.message
@@ -2882,6 +4737,7 @@ class DoublesDamageAwarePlayer(Player):
         _direct_absorb_blocked: dict,
         _safety_blocked: dict,
         _ally_redirect_blocked: dict = None,
+        _support_target_blocked: dict = None,
     ) -> list:
         """Canonical pure-capable joint scoring and ranking.
 
@@ -2898,85 +4754,189 @@ class DoublesDamageAwarePlayer(Player):
             score_2 = slot_1_scores.get(id(second), 0.0) if second else 0.0
             joint_score = score_1 + score_2
 
-            first_blocked = _direct_absorb_blocked.get(id(first), False) if first else False
-            second_blocked = _direct_absorb_blocked.get(id(second), False) if second else False
-            first_safety_blocked = _safety_blocked.get(id(first), False) if first else False
-            second_safety_blocked = _safety_blocked.get(id(second), False) if second else False
+            first_blocked = (
+                _direct_absorb_blocked.get(id(first), False) if first else False
+            )
+            second_blocked = (
+                _direct_absorb_blocked.get(id(second), False) if second else False
+            )
+            first_safety_blocked = (
+                _safety_blocked.get(id(first), False) if first else False
+            )
+            second_safety_blocked = (
+                _safety_blocked.get(id(second), False) if second else False
+            )
             ar_map = _ally_redirect_blocked or {}
             first_ar_blocked = ar_map.get(id(first), False) if first else False
             second_ar_blocked = ar_map.get(id(second), False) if second else False
-            either_blocked = (first_blocked or second_blocked or first_safety_blocked
-                              or second_safety_blocked or first_ar_blocked or second_ar_blocked)
+            st_map = _support_target_blocked or {}
+            first_st_blocked = st_map.get(id(first), False) if first else False
+            second_st_blocked = st_map.get(id(second), False) if second else False
+            either_blocked = (
+                first_blocked
+                or second_blocked
+                or first_safety_blocked
+                or second_safety_blocked
+                or first_ar_blocked
+                or second_ar_blocked
+                or first_st_blocked
+                or second_st_blocked
+            )
 
             if not either_blocked:
                 if isinstance(first.order, Move) and isinstance(second.order, Move):
-                    if first.move_target == second.move_target and first.move_target in (1, 2):
-                        target_opp = battle.opponent_active_pokemon[first.move_target - 1]
+                    if (
+                        first.move_target == second.move_target
+                        and first.move_target in (1, 2)
+                    ):
+                        target_opp = battle.opponent_active_pokemon[
+                            first.move_target - 1
+                        ]
                         if target_opp:
-                            ko_1 = self.check_move_will_ko(first.order, battle.active_pokemon[0], target_opp, battle, config=config)
-                            ko_2 = self.check_move_will_ko(second.order, battle.active_pokemon[1], target_opp, battle, config=config)
-                            opp_hp_fraction = getattr(target_opp, "current_hp_fraction", 1.0)
+                            ko_1 = self.check_move_will_ko(
+                                first.order,
+                                battle.active_pokemon[0],
+                                target_opp,
+                                battle,
+                                config=config,
+                            )
+                            ko_2 = self.check_move_will_ko(
+                                second.order,
+                                battle.active_pokemon[1],
+                                target_opp,
+                                battle,
+                                config=config,
+                            )
+                            opp_hp_fraction = getattr(
+                                target_opp, "current_hp_fraction", 1.0
+                            )
 
-                            if (ko_1 and ko_2) or (ko_1 or ko_2) and opp_hp_fraction < 0.15 or opp_hp_fraction < 0.08:
+                            if (
+                                (ko_1 and ko_2)
+                                or (ko_1 or ko_2)
+                                and opp_hp_fraction < 0.15
+                                or opp_hp_fraction < 0.08
+                            ):
                                 allow_double = False
                                 if config.enable_threat_scoring:
-                                    threat_score = self.score_opponent_threat(target_opp, battle)
+                                    threat_score = self.score_opponent_threat(
+                                        target_opp, battle
+                                    )
                                     if threat_score >= 0.50:
                                         allow_double = True
                                 if not allow_double:
                                     joint_score -= 250.0
 
-                            if config.enable_meta_opponent_modeling and self.meta_engine:
+                            if (
+                                config.enable_meta_opponent_modeling
+                                and self.meta_engine
+                            ):
                                 t_species = target_opp.species
                                 t_revealed = list(target_opp.moves.keys())
-                                likely_protect, prob, reason = self.meta_engine.likely_has_protect(
-                                    t_species, t_revealed, threshold=config.meta_move_probability_threshold
+                                likely_protect, prob, reason = (
+                                    self.meta_engine.likely_has_protect(
+                                        t_species,
+                                        t_revealed,
+                                        threshold=config.meta_move_probability_threshold,
+                                    )
                                 )
                                 if likely_protect:
                                     joint_score -= 15.0
 
-                            if (config.enable_random_set_opponent_modeling
-                                    and self.random_set_engine
-                                    and config.rs_enable_protect_overcommit_penalty):
+                            if (
+                                config.enable_random_set_opponent_modeling
+                                and self.random_set_engine
+                                and config.rs_enable_protect_overcommit_penalty
+                            ):
                                 t_species = target_opp.species
                                 t_revealed = list(target_opp.moves.keys())
-                                prot_thr = config.rs_protect_threshold if config.rs_protect_threshold > 0.0 else config.random_set_probability_threshold
-                                likely_protect, prob, _ = self.random_set_engine.likely_has_protect(
-                                    t_species, t_revealed, threshold=prot_thr
+                                prot_thr = (
+                                    config.rs_protect_threshold
+                                    if config.rs_protect_threshold > 0.0
+                                    else config.random_set_probability_threshold
+                                )
+                                likely_protect, prob, _ = (
+                                    self.random_set_engine.likely_has_protect(
+                                        t_species, t_revealed, threshold=prot_thr
+                                    )
                                 )
                                 if likely_protect:
-                                    overcommit_delta = config.rs_protect_overcommit_delta if config.rs_protect_overcommit_delta > 0.0 else 12.0
+                                    overcommit_delta = (
+                                        config.rs_protect_overcommit_delta
+                                        if config.rs_protect_overcommit_delta > 0.0
+                                        else 12.0
+                                    )
                                     joint_score -= overcommit_delta
 
                 if config.enable_order_aware_overkill:
-                    if self.selected_target_will_be_koed_before_second_action(first, second, battle, config=config):
+                    if self.selected_target_will_be_koed_before_second_action(
+                        first, second, battle, config=config
+                    ):
                         joint_score -= config.order_aware_overkill_penalty
 
                 if isinstance(first.order, Move) and isinstance(second.order, Move):
-                    if first.move_target == second.move_target and first.move_target in (1, 2):
-                        target_opp = battle.opponent_active_pokemon[first.move_target - 1]
+                    if (
+                        first.move_target == second.move_target
+                        and first.move_target in (1, 2)
+                    ):
+                        target_opp = battle.opponent_active_pokemon[
+                            first.move_target - 1
+                        ]
                         if target_opp:
                             # Stale target after ally KO safety (Phase 6.4.5)
                             if config.enable_stale_target_after_ally_ko_safety:
-                                if not self.is_spread_move(first.order) and not self.is_spread_move(second.order):
-                                    if getattr(first.order, "base_power", 0) > 0 and getattr(second.order, "base_power", 0) > 0:
-                                        ko_1 = self.check_move_will_ko(first.order, battle.active_pokemon[0], target_opp, battle, config=config)
+                                if not self.is_spread_move(
+                                    first.order
+                                ) and not self.is_spread_move(second.order):
+                                    if (
+                                        getattr(first.order, "base_power", 0) > 0
+                                        and getattr(second.order, "base_power", 0) > 0
+                                    ):
+                                        ko_1 = self.check_move_will_ko(
+                                            first.order,
+                                            battle.active_pokemon[0],
+                                            target_opp,
+                                            battle,
+                                            config=config,
+                                        )
                                         if ko_1:
-                                            visible_opps = [o for o in battle.opponent_active_pokemon if o and not getattr(o, "fainted", False)]
-                                            stale = detect_stale_target_after_ally_ko_risk(
-                                                first, second, ko_1, target_opp, target_opp,
-                                                visible_opps, battle=battle, config=config,
+                                            visible_opps = [
+                                                o
+                                                for o in battle.opponent_active_pokemon
+                                                if o
+                                                and not getattr(o, "fainted", False)
+                                            ]
+                                            stale = (
+                                                detect_stale_target_after_ally_ko_risk(
+                                                    first,
+                                                    second,
+                                                    ko_1,
+                                                    target_opp,
+                                                    target_opp,
+                                                    visible_opps,
+                                                    battle=battle,
+                                                    config=config,
+                                                )
                                             )
                                             if stale["risk"]:
                                                 joint_score -= config.stale_target_after_ally_ko_penalty
                                                 if stale["fallback_target_type_immune"]:
                                                     joint_score -= config.stale_target_type_immune_penalty
 
-                            opp_hp_fraction = getattr(target_opp, "current_hp_fraction", 1.0)
+                            opp_hp_fraction = getattr(
+                                target_opp, "current_hp_fraction", 1.0
+                            )
                             other_idx = 1 if first.move_target == 1 else 0
                             other_opp = battle.opponent_active_pokemon[other_idx]
-                            other_hp_fraction = getattr(other_opp, "current_hp_fraction", 1.0) if other_opp else 1.0
-                            if opp_hp_fraction <= other_hp_fraction and opp_hp_fraction < 0.75:
+                            other_hp_fraction = (
+                                getattr(other_opp, "current_hp_fraction", 1.0)
+                                if other_opp
+                                else 1.0
+                            )
+                            if (
+                                opp_hp_fraction <= other_hp_fraction
+                                and opp_hp_fraction < 0.75
+                            ):
                                 if config.enable_focus_fire_synergy:
                                     joint_score += config.focus_fire_synergy_bonus
                             elif opp_hp_fraction >= 0.50:
@@ -2992,14 +4952,28 @@ class DoublesDamageAwarePlayer(Player):
                             target_mon = battle.opponent_active_pokemon[target_pos - 1]
                             if target_mon:
                                 try:
-                                    immune, _ = is_type_immune(move_obj, battle.active_pokemon[slot_idx], target_mon, battle)
+                                    immune, _ = is_type_immune(
+                                        move_obj,
+                                        battle.active_pokemon[slot_idx],
+                                        target_mon,
+                                        battle,
+                                    )
                                     if immune:
                                         if self.is_spread_move(move_obj):
-                                            other_opps = [o for o in battle.opponent_active_pokemon if o and o != target_mon]
+                                            other_opps = [
+                                                o
+                                                for o in battle.opponent_active_pokemon
+                                                if o and o != target_mon
+                                            ]
                                             any_not_immune = False
                                             for other_opp in other_opps:
                                                 try:
-                                                    other_immune, _ = is_type_immune(move_obj, battle.active_pokemon[slot_idx], other_opp, battle)
+                                                    other_immune, _ = is_type_immune(
+                                                        move_obj,
+                                                        battle.active_pokemon[slot_idx],
+                                                        other_opp,
+                                                        battle,
+                                                    )
                                                     if not other_immune:
                                                         any_not_immune = True
                                                         break
@@ -3012,7 +4986,31 @@ class DoublesDamageAwarePlayer(Player):
                                     pass
                 joint_score -= waste_penalty
 
-            if either_blocked and (first_safety_blocked or second_safety_blocked or first_ar_blocked or second_ar_blocked):
+            # Phase 6.4.10b: All-target immune spread joint penalty
+            # Penalize joint orders where a slot uses a damaging spread move
+            # with all opponent targets immune, unless it's the only legal action.
+            for slot_idx, order in enumerate([first, second]):
+                if order and self._is_all_target_immune_damaging_spread(
+                    order, slot_idx, battle, config
+                ):
+                    # Check if this slot has any non-wasted alternative
+                    slot_scores = slot_0_scores if slot_idx == 0 else slot_1_scores
+                    has_alternative = False
+                    for other_order, other_score in slot_scores.items():
+                        if other_order is not order and other_score > 0:
+                            has_alternative = True
+                            break
+                    if has_alternative:
+                        joint_score -= config.all_target_immune_spread_joint_penalty
+
+            if either_blocked and (
+                first_safety_blocked
+                or second_safety_blocked
+                or first_ar_blocked
+                or second_ar_blocked
+                or first_st_blocked
+                or second_st_blocked
+            ):
                 joint_score -= config.safety_block_joint_penalty
 
             scored_joint_orders.append((joint_order, joint_score, score_1, score_2))
@@ -3150,16 +5148,14 @@ class DoublesDamageAwarePlayer(Player):
             dict_metric[battle_tag] = 0
         dict_metric[battle_tag] += amount
 
-
-
     @property
     def total_protect_count(self) -> int:
         return sum(m.get("protect", 0) for m in self.battle_metrics.values())
-        
+
     @property
     def total_fake_out_count(self) -> int:
         return sum(m.get("fake_out", 0) for m in self.battle_metrics.values())
-        
+
     @property
     def total_spread_count(self) -> int:
         return sum(m.get("spread", 0) for m in self.battle_metrics.values())
@@ -3174,15 +5170,22 @@ class DoublesDamageAwarePlayer(Player):
 
     @property
     def total_threat_contribution(self) -> float:
-        return sum(m.get("threat_contribution", 0.0) for m in self.battle_metrics.values())
+        return sum(
+            m.get("threat_contribution", 0.0) for m in self.battle_metrics.values()
+        )
 
     @property
     def total_tiebreaker_activations(self) -> int:
-        return sum(m.get("tiebreaker_activations", 0) for m in self.battle_metrics.values())
+        return sum(
+            m.get("tiebreaker_activations", 0) for m in self.battle_metrics.values()
+        )
 
     @property
     def total_boosted_override_activations(self) -> int:
-        return sum(m.get("boosted_override_activations", 0) for m in self.battle_metrics.values())
+        return sum(
+            m.get("boosted_override_activations", 0)
+            for m in self.battle_metrics.values()
+        )
 
     @property
     def total_draco_penalties_applied(self) -> int:
@@ -3262,10 +5265,10 @@ class DoublesDamageAwarePlayer(Player):
     def get_boosted_stat(self, pokemon: Optional[Pokemon], stat_name: str) -> float:
         if not pokemon:
             return 100.0
-        
+
         stats = self.get_stats(pokemon) or {}
         base_stats = self.get_base_stats(pokemon) or {}
-        
+
         if stats.get(stat_name):
             base_val = float(stats[stat_name])
         else:
@@ -3273,10 +5276,10 @@ class DoublesDamageAwarePlayer(Player):
             level = getattr(pokemon, "level", 80) or 80
             # Standard Random Battles stat formula (31 IVs, 85 EVs)
             base_val = (2.0 * base_val + 52.0) * level / 100.0 + 5.0
-        
+
         boosts = self.get_boosts(pokemon) or {}
         stage = boosts.get(stat_name, 0)
-        
+
         if stage > 0:
             multiplier = (2.0 + stage) / 2.0
         elif stage < 0:
@@ -3290,6 +5293,7 @@ class DoublesDamageAwarePlayer(Player):
             return False
         try:
             from poke_env.battle.side_condition import SideCondition
+
             if SideCondition.TAILWIND in side_conditions:
                 return True
         except Exception:
@@ -3310,27 +5314,35 @@ class DoublesDamageAwarePlayer(Player):
                 status_str = status.name if hasattr(status, "name") else str(status)
                 if status_str.upper() == "PAR":
                     speed *= 0.5
-            
+
             if battle:
                 is_our_side = False
                 for p in battle.active_pokemon.values():
-                    if p and p.species == pokemon.species and getattr(p, "active", False):
+                    if (
+                        p
+                        and p.species == pokemon.species
+                        and getattr(p, "active", False)
+                    ):
                         is_our_side = True
                         break
                 if is_our_side:
                     if self.has_tailwind(getattr(battle, "side_conditions", {})):
                         speed *= 2.0
                 else:
-                    if self.has_tailwind(getattr(battle, "opponent_side_conditions", {})):
+                    if self.has_tailwind(
+                        getattr(battle, "opponent_side_conditions", {})
+                    ):
                         speed *= 2.0
-            
+
             item = getattr(pokemon, "item", None)
             if item:
                 item_str = item.name if hasattr(item, "name") else str(item)
-                item_str_clean = item_str.lower().replace(" ", "").replace("-", "").replace("_", "")
+                item_str_clean = (
+                    item_str.lower().replace(" ", "").replace("-", "").replace("_", "")
+                )
                 if "choicescarf" in item_str_clean:
                     speed *= 1.5
-            
+
             return speed
         except Exception:
             return 0.0
@@ -3342,6 +5354,7 @@ class DoublesDamageAwarePlayer(Player):
         if fields:
             try:
                 from poke_env.battle.field import Field
+
                 if Field.TRICK_ROOM in fields:
                     return True
             except Exception:
@@ -3362,7 +5375,7 @@ class DoublesDamageAwarePlayer(Player):
             pass
         if isinstance(prio, int):
             return prio
-        
+
         move_id = ""
         try:
             move_id = getattr(move, "id", "")
@@ -3370,24 +5383,52 @@ class DoublesDamageAwarePlayer(Player):
             pass
         if not move_id and isinstance(move, str):
             move_id = move
-        move_id_clean = str(move_id).lower().replace(" ", "").replace("-", "").replace("_", "")
-        
-        if move_id_clean in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+        move_id_clean = (
+            str(move_id).lower().replace(" ", "").replace("-", "").replace("_", "")
+        )
+
+        if move_id_clean in (
+            "protect",
+            "detect",
+            "spikyshield",
+            "banefulbunker",
+            "kingsshield",
+            "obstruct",
+            "silktrap",
+            "burningbulwark",
+        ):
             return 4
         if move_id_clean in ("fakeout", "quickguard", "wideguard", "craftyshield"):
             return 3
         if move_id_clean in ("extremespeed", "feint", "allyswitch"):
             return 2
-        if move_id_clean in ("aquajet", "bulletpunch", "iceshard", "machpunch", "shadowsneak", "suckerpunch", "vacuumwave", "watershuriken", "bastonpass", "babyeyedomination", "firstimpression", "grassyglide", "accelgor"):
+        if move_id_clean in (
+            "aquajet",
+            "bulletpunch",
+            "iceshard",
+            "machpunch",
+            "shadowsneak",
+            "suckerpunch",
+            "vacuumwave",
+            "watershuriken",
+            "bastonpass",
+            "babyeyedomination",
+            "firstimpression",
+            "grassyglide",
+            "accelgor",
+        ):
             return 1
-            
+
         return 0
 
     def get_opponent_active_turns(self, opponent, battle) -> int:
         if not battle or not opponent:
             return 1
         battle_tag = battle.battle_tag
-        if not hasattr(self, "opponent_active_turns") or battle_tag not in self.opponent_active_turns:
+        if (
+            not hasattr(self, "opponent_active_turns")
+            or battle_tag not in self.opponent_active_turns
+        ):
             return 1
         mon_id = self.get_pokemon_identifier(opponent)
         for i, mon in enumerate(battle.opponent_active_pokemon):
@@ -3403,7 +5444,7 @@ class DoublesDamageAwarePlayer(Player):
             "has_priority": False,
             "has_guaranteed_priority": False,
             "has_conditional_priority": False,
-            "conditional_priority_moves": []
+            "conditional_priority_moves": [],
         }
         if not opponent:
             return result
@@ -3411,22 +5452,26 @@ class DoublesDamageAwarePlayer(Player):
         for move_id, move in moves.items():
             priority = self.get_move_priority(move)
             if priority > 0:
-                move_id_clean = move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                move_id_clean = (
+                    move_id.lower().replace(" ", "").replace("-", "").replace("_", "")
+                )
                 if move_id_clean == "firstimpression":
                     turns = self.get_opponent_active_turns(opponent, battle)
                     if turns > 1:
                         continue
-                
+
                 result["has_priority"] = True
                 if move_id_clean in ("suckerpunch", "firstimpression"):
                     result["has_conditional_priority"] = True
                     result["conditional_priority_moves"].append(move_id_clean)
                 else:
                     result["has_guaranteed_priority"] = True
-                    
+
         return result
 
-    def estimate_speed_priority_threat(self, our_active, opponent_actives, battle=None, candidate_action=None) -> dict:
+    def estimate_speed_priority_threat(
+        self, our_active, opponent_actives, battle=None, candidate_action=None
+    ) -> dict:
         result = {
             "is_threatened": False,
             "speed_threatened": False,
@@ -3435,36 +5480,45 @@ class DoublesDamageAwarePlayer(Player):
             "faster_opponents": [],
             "priority_opponents": [],
             "threat_confidence": 0.0,
-            "only_conditional_priority": False
+            "only_conditional_priority": False,
         }
         if not our_active or not opponent_actives:
             return result
-            
+
         our_hp = getattr(our_active, "current_hp_fraction", 1.0)
-        
+
         is_protect = False
         is_switch = False
         candidate_priority = 0
         is_attacking = False
-        
+
         if candidate_action:
             if isinstance(candidate_action.order, Pokemon):
                 is_switch = True
                 candidate_priority = 6
             elif isinstance(candidate_action.order, Move):
                 move_id = getattr(candidate_action.order, "id", "").lower()
-                if move_id in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+                if move_id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "banefulbunker",
+                    "kingsshield",
+                    "obstruct",
+                    "silktrap",
+                    "burningbulwark",
+                ):
                     is_protect = True
                     candidate_priority = 4
                 else:
                     candidate_priority = self.get_move_priority(candidate_action.order)
                 category = getattr(candidate_action.order, "category", None)
                 category_name = getattr(category, "name", "STATUS")
-                is_attacking = (category_name != "STATUS")
+                is_attacking = category_name != "STATUS"
 
         tr = self.is_trick_room_active(battle)
         our_speed = self.get_effective_speed(our_active, battle)
-        
+
         max_opp_conf = 0.0
         has_any_prio_threat = False
         only_cond = True
@@ -3474,36 +5528,54 @@ class DoublesDamageAwarePlayer(Player):
                 return mon.damage_multiplier(typ)
             except Exception:
                 return 1.0
-        
+
         for opp in opponent_actives:
             if not opp or getattr(opp, "fainted", False):
                 continue
-            
+
             opp_speed = self.get_effective_speed(opp, battle)
-            
+
             if tr:
-                is_opp_faster = (our_speed >= opp_speed * self.config.speed_margin_required)
+                is_opp_faster = (
+                    our_speed >= opp_speed * self.config.speed_margin_required
+                )
             else:
-                is_opp_faster = (opp_speed >= our_speed * self.config.speed_margin_required)
-                
+                is_opp_faster = (
+                    opp_speed >= our_speed * self.config.speed_margin_required
+                )
+
             prio_info = self.opponent_has_revealed_priority_move(opp, battle)
-            
+
             priority_threat_active = False
-            
+
             if prio_info["has_priority"]:
-                if prio_info["has_conditional_priority"] and not prio_info["has_guaranteed_priority"]:
-                    has_sucker = any(m == "suckerpunch" for m in prio_info["conditional_priority_moves"])
+                if (
+                    prio_info["has_conditional_priority"]
+                    and not prio_info["has_guaranteed_priority"]
+                ):
+                    has_sucker = any(
+                        m == "suckerpunch"
+                        for m in prio_info["conditional_priority_moves"]
+                    )
                     if has_sucker:
                         if candidate_action is None:
-                            priority_threat_active = (our_hp <= self.config.speed_threat_hp_threshold)
+                            priority_threat_active = (
+                                our_hp <= self.config.speed_threat_hp_threshold
+                            )
                         elif is_attacking:
-                            priority_threat_active = (our_hp <= self.config.priority_threat_hp_threshold)
+                            priority_threat_active = (
+                                our_hp <= self.config.priority_threat_hp_threshold
+                            )
                         else:
                             priority_threat_active = False
                     else:
-                        priority_threat_active = (our_hp <= self.config.priority_threat_hp_threshold)
+                        priority_threat_active = (
+                            our_hp <= self.config.priority_threat_hp_threshold
+                        )
                 else:
-                    priority_threat_active = (our_hp <= self.config.priority_threat_hp_threshold)
+                    priority_threat_active = (
+                        our_hp <= self.config.priority_threat_hp_threshold
+                    )
 
             opp_conf = 0.0
             opp_is_threat = False
@@ -3514,10 +5586,10 @@ class DoublesDamageAwarePlayer(Player):
                 result["is_threatened"] = True
                 if opp.species not in result["faster_opponents"]:
                     result["faster_opponents"].append(opp.species)
-                
+
                 if not (is_protect or is_switch) and candidate_priority == 0:
                     result["faint_before_moving"] = True
-                
+
                 # Compute confidence for speed threat -- use max multiplier across both opponent types
                 max_threat = get_max_type_threat(our_active, opp, battle)
                 if our_hp <= 0.15:
@@ -3541,47 +5613,68 @@ class DoublesDamageAwarePlayer(Player):
                 result["is_threatened"] = True
                 if opp.species not in result["priority_opponents"]:
                     result["priority_opponents"].append(opp.species)
-                
+
                 opp_max_prio = 1
                 for m_id, m in getattr(opp, "moves", {}).items():
                     opp_max_prio = max(opp_max_prio, self.get_move_priority(m))
-                
+
                 if not (is_protect or is_switch) and candidate_priority <= opp_max_prio:
                     result["faint_before_moving"] = True
 
                 # Compute confidence for priority threat -- use max multiplier
                 max_prio_threat = get_max_type_threat(our_active, opp, battle)
-                if prio_info.get("has_conditional_priority") and not prio_info.get("has_guaranteed_priority"):
-                    opp_conf = max(opp_conf, self.config.speed_priority_conditional_priority_weight)
+                if prio_info.get("has_conditional_priority") and not prio_info.get(
+                    "has_guaranteed_priority"
+                ):
+                    opp_conf = max(
+                        opp_conf, self.config.speed_priority_conditional_priority_weight
+                    )
                 else:
                     only_cond = False
                     if our_hp <= 0.20 or max_prio_threat >= 1.5:
                         opp_conf = max(opp_conf, 1.0)
                     else:
                         opp_conf = max(opp_conf, 0.75)
-            
+
             if opp_is_threat:
                 max_opp_conf = max(max_opp_conf, opp_conf)
 
         result["threat_confidence"] = max_opp_conf
-        result["only_conditional_priority"] = only_cond if has_any_prio_threat else False
+        result["only_conditional_priority"] = (
+            only_cond if has_any_prio_threat else False
+        )
         return result
 
     def is_protect_available_for_slot(self, slot_idx: int, battle) -> bool:
         valid_orders = getattr(self, "_current_valid_orders", None)
-        if not valid_orders or len(valid_orders) <= slot_idx or not valid_orders[slot_idx]:
+        if (
+            not valid_orders
+            or len(valid_orders) <= slot_idx
+            or not valid_orders[slot_idx]
+        ):
             return False
         for order in valid_orders[slot_idx]:
             if order and isinstance(order.order, Move):
                 move_id = getattr(order.order, "id", "").lower()
-                if move_id in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+                if move_id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "banefulbunker",
+                    "kingsshield",
+                    "obstruct",
+                    "silktrap",
+                    "burningbulwark",
+                ):
                     return True
         return False
 
-    def has_legal_protect_like_action(self, active, battle, slot_index=None, valid_orders=None) -> bool:
+    def has_legal_protect_like_action(
+        self, active, battle, slot_index=None, valid_orders=None
+    ) -> bool:
         if valid_orders is None:
             valid_orders = getattr(self, "_current_valid_orders", None)
-            
+
         if slot_index is None:
             if battle and active:
                 for idx, p in enumerate(battle.active_pokemon):
@@ -3589,74 +5682,125 @@ class DoublesDamageAwarePlayer(Player):
                         slot_index = idx
                         break
 
-        if valid_orders and slot_index is not None and len(valid_orders) > slot_index and valid_orders[slot_index]:
+        if (
+            valid_orders
+            and slot_index is not None
+            and len(valid_orders) > slot_index
+            and valid_orders[slot_index]
+        ):
             for order in valid_orders[slot_index]:
                 if order and isinstance(order.order, Move):
                     move_id = getattr(order.order, "id", "").lower()
-                    if move_id in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+                    if move_id in (
+                        "protect",
+                        "detect",
+                        "spikyshield",
+                        "banefulbunker",
+                        "kingsshield",
+                        "obstruct",
+                        "silktrap",
+                        "burningbulwark",
+                    ):
                         return True
             return False
 
         if active and hasattr(active, "moves") and active.moves:
             for move in active.moves.values():
                 move_id = getattr(move, "id", "").lower()
-                if move_id in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+                if move_id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "banefulbunker",
+                    "kingsshield",
+                    "obstruct",
+                    "silktrap",
+                    "burningbulwark",
+                ):
                     return True
         return False
 
-    def is_high_value_action_under_threat(self, action, actor, battle, opponent_actives, config=None) -> bool:
+    def is_high_value_action_under_threat(
+        self, action, actor, battle, opponent_actives, config=None
+    ) -> bool:
         resolved_config = config if config is not None else self.config
         if not action or not isinstance(action.order, Move):
             return False
-            
+
         move = action.order
-        
+
         if self.get_move_priority(move) > 0:
             return True
-            
+
         for opp in opponent_actives:
-            if opp and self.check_move_will_ko(move, actor, opp, battle, config=resolved_config):
+            if opp and self.check_move_will_ko(
+                move, actor, opp, battle, config=resolved_config
+            ):
                 return True
-                
+
         if is_opponent_spread_move(move, action):
-            opps_count = sum(1 for opp in opponent_actives if opp and not getattr(opp, "fainted", False))
+            opps_count = sum(
+                1
+                for opp in opponent_actives
+                if opp and not getattr(opp, "fainted", False)
+            )
             if opps_count >= 2:
                 base_pow = getattr(move, "base_power", 0)
                 if base_pow >= 75:
                     return True
-                    
+
         target_pos = action.move_target
         if target_pos in (1, 2) and opponent_actives:
-            opp = opponent_actives[target_pos - 1] if len(opponent_actives) > (target_pos - 1) else None
+            opp = (
+                opponent_actives[target_pos - 1]
+                if len(opponent_actives) > (target_pos - 1)
+                else None
+            )
             if opp:
-                expected_dmg_frac = self.get_expected_damage(move, actor, opp, battle, config=resolved_config)
-                if expected_dmg_frac >= resolved_config.speed_priority_min_expected_damage_fraction:
+                expected_dmg_frac = self.get_expected_damage(
+                    move, actor, opp, battle, config=resolved_config
+                )
+                if (
+                    expected_dmg_frac
+                    >= resolved_config.speed_priority_min_expected_damage_fraction
+                ):
                     return True
-                    
+
         if target_pos in (1, 2) and opponent_actives:
-            opp = opponent_actives[target_pos - 1] if len(opponent_actives) > (target_pos - 1) else None
+            opp = (
+                opponent_actives[target_pos - 1]
+                if len(opponent_actives) > (target_pos - 1)
+                else None
+            )
             if opp and getattr(opp, "current_hp_fraction", 1.0) <= 0.20:
-                expected_dmg_frac = self.get_expected_damage(move, actor, opp, battle, config=resolved_config)
+                expected_dmg_frac = self.get_expected_damage(
+                    move, actor, opp, battle, config=resolved_config
+                )
                 if expected_dmg_frac > 0.05:
                     return True
 
         return False
 
-    def selected_target_will_be_koed_before_second_action(self, order_0, order_1, battle, config=None) -> bool:
+    def selected_target_will_be_koed_before_second_action(
+        self, order_0, order_1, battle, config=None
+    ) -> bool:
         if not order_0 or not order_1 or not battle:
             return False
         if not isinstance(order_0.order, Move) or not isinstance(order_1.order, Move):
             return False
-        if order_0.move_target != order_1.move_target or order_0.move_target not in (1, 2):
+        if order_0.move_target != order_1.move_target or order_0.move_target not in (
+            1,
+            2,
+        ):
             return False
-            
+
         target_opp = battle.opponent_active_pokemon[order_0.move_target - 1]
         if not target_opp or getattr(target_opp, "fainted", False):
             return False
-            
+
         prio_0 = self.get_move_priority(order_0.order)
         prio_1 = self.get_move_priority(order_1.order)
-        
+
         if prio_0 > prio_1:
             slot_0_is_faster = True
         elif prio_1 > prio_0:
@@ -3666,18 +5810,22 @@ class DoublesDamageAwarePlayer(Player):
             speed_1 = self.get_effective_speed(battle.active_pokemon[1], battle)
             tr = self.is_trick_room_active(battle)
             if tr:
-                slot_0_is_faster = (speed_0 < speed_1)
+                slot_0_is_faster = speed_0 < speed_1
             else:
-                slot_0_is_faster = (speed_0 > speed_1)
-                
+                slot_0_is_faster = speed_0 > speed_1
+
         faster_order = order_0 if slot_0_is_faster else order_1
         slower_order = order_1 if slot_0_is_faster else order_0
-        faster_active = battle.active_pokemon[0] if slot_0_is_faster else battle.active_pokemon[1]
-        
-        faster_ko = self.check_move_will_ko(faster_order.order, faster_active, target_opp, battle, config=config)
+        faster_active = (
+            battle.active_pokemon[0] if slot_0_is_faster else battle.active_pokemon[1]
+        )
+
+        faster_ko = self.check_move_will_ko(
+            faster_order.order, faster_active, target_opp, battle, config=config
+        )
         if not faster_ko:
             return False
-            
+
         acc = getattr(faster_order.order, "accuracy", 1.0)
         acc_mult = 1.0
         if acc is True or acc is None:
@@ -3686,30 +5834,49 @@ class DoublesDamageAwarePlayer(Player):
             acc_mult = acc if acc <= 1.0 else acc / 100.0
         if acc_mult < 0.85:
             return False
-            
+
         threat_score = self.score_opponent_threat(target_opp, battle)
         if threat_score >= 0.50:
             return False
-            
+
         if is_opponent_spread_move(slower_order.order):
             return False
-            
+
         has_protect = False
         for m_id in getattr(target_opp, "moves", {}).items():
-            m_id_clean = m_id[0].lower().replace(" ", "").replace("-", "").replace("_", "")
-            if m_id_clean in ("protect", "detect", "spikyshield", "banefulbunker", "kingsshield", "obstruct", "silktrap", "burningbulwark"):
+            m_id_clean = (
+                m_id[0].lower().replace(" ", "").replace("-", "").replace("_", "")
+            )
+            if m_id_clean in (
+                "protect",
+                "detect",
+                "spikyshield",
+                "banefulbunker",
+                "kingsshield",
+                "obstruct",
+                "silktrap",
+                "burningbulwark",
+            ):
                 has_protect = True
                 break
-        if not has_protect and self.config.enable_random_set_opponent_modeling and self.random_set_engine:
-            likely_p, _, _ = self.random_set_engine.likely_has_protect(target_opp.species, list(target_opp.moves.keys()))
+        if (
+            not has_protect
+            and self.config.enable_random_set_opponent_modeling
+            and self.random_set_engine
+        ):
+            likely_p, _, _ = self.random_set_engine.likely_has_protect(
+                target_opp.species, list(target_opp.moves.keys())
+            )
             if likely_p:
                 has_protect = True
         if has_protect:
             return False
-            
+
         return True
 
-    def get_type_effectiveness(self, move: Move, opponent: Optional[Pokemon], attacker=None) -> float:
+    def get_type_effectiveness(
+        self, move: Move, opponent: Optional[Pokemon], attacker=None
+    ) -> float:
 
         if not opponent:
             return 1.0
@@ -3718,6 +5885,7 @@ class DoublesDamageAwarePlayer(Player):
             declared = _get_declared_move_type(move)
             if etype != declared and etype:
                 from poke_env.battle.pokemon_type import PokemonType
+
                 try:
                     return opponent.damage_multiplier(PokemonType[etype])
                 except Exception:
@@ -3745,52 +5913,83 @@ class DoublesDamageAwarePlayer(Player):
             level = getattr(opponent, "level", 80) or 80
             return float(level) * 3.5
 
-    def score_opponent_threat(self, opponent: Optional[Pokemon], battle: DoubleBattle, our_pokemon: Optional[Pokemon] = None) -> float:
+    def score_opponent_threat(
+        self,
+        opponent: Optional[Pokemon],
+        battle: DoubleBattle,
+        our_pokemon: Optional[Pokemon] = None,
+    ) -> float:
         if not opponent:
             return 0.0
-            
+
         try:
             hp_factor = getattr(opponent, "current_hp_fraction", 1.0)
             if hp_factor is None or hp_factor == 0.0:
                 return 0.0
-                
+
             opp_atk = self.get_boosted_stat(opponent, "atk")
             opp_spa = self.get_boosted_stat(opponent, "spa")
             stat_factor = max(opp_atk, opp_spa) / 150.0
             stat_factor = min(2.0, max(0.0, stat_factor))
-            
+
             spe_factor = 0.0
             faster_bonus = 0.0
             if self.config.enable_speed_threat:
                 opp_spe = self.get_boosted_stat(opponent, "spe")
                 spe_factor = opp_spe / 150.0
                 spe_factor = min(2.0, max(0.0, spe_factor))
-                
-                target_ours = [our_pokemon] if our_pokemon else [active for active in battle.active_pokemon if active]
+
+                target_ours = (
+                    [our_pokemon]
+                    if our_pokemon
+                    else [active for active in battle.active_pokemon if active]
+                )
                 for active in target_ours:
                     if active:
                         our_spe = self.get_boosted_stat(active, "spe")
                         if opp_spe > our_spe:
                             faster_bonus = 0.2
                             break
-                            
+
             has_spread = 0.0
             if self.config.enable_spread_threat:
                 for move in opponent.moves.values():
                     if self.is_spread_move(move):
                         has_spread = 0.15
                         break
-                        
+
             has_priority = 0.0
             # Always check priority moves
             for move in opponent.moves.values():
                 if self.get_priority(move) > 0:
                     has_priority = 0.15
                     break
-                    
+
             has_setup = 0.0
             if self.config.enable_setup_threat:
-                setup_move_ids = {"swordsdance", "dragondance", "calmmind", "nastyplot", "agility", "quiverdance", "shellsmash", "bulkup", "cosmicpower", "doubleteam", "acidarmor", "irondefense", "honeclaws", "workup", "growth", "howl", "charge", "minimize", "autotomize", "rockpolish", "geomancy"}
+                setup_move_ids = {
+                    "swordsdance",
+                    "dragondance",
+                    "calmmind",
+                    "nastyplot",
+                    "agility",
+                    "quiverdance",
+                    "shellsmash",
+                    "bulkup",
+                    "cosmicpower",
+                    "doubleteam",
+                    "acidarmor",
+                    "irondefense",
+                    "honeclaws",
+                    "workup",
+                    "growth",
+                    "howl",
+                    "charge",
+                    "minimize",
+                    "autotomize",
+                    "rockpolish",
+                    "geomancy",
+                }
                 for move in opponent.moves.values():
                     is_setup_id = move.id in setup_move_ids
                     is_setup_boost = False
@@ -3802,9 +6001,20 @@ class DoublesDamageAwarePlayer(Player):
                     if is_setup_id or is_setup_boost:
                         has_setup = 0.15
                         break
-                        
+
             has_speed_control = 0.0
-            spe_control_move_ids = {"tailwind", "trickroom", "icywind", "electroweb", "bulldoze", "nuzzle", "glare", "thunderwave", "stringshot", "scaryface"}
+            spe_control_move_ids = {
+                "tailwind",
+                "trickroom",
+                "icywind",
+                "electroweb",
+                "bulldoze",
+                "nuzzle",
+                "glare",
+                "thunderwave",
+                "stringshot",
+                "scaryface",
+            }
             for move in opponent.moves.values():
                 is_spe_id = move.id in spe_control_move_ids
                 is_spe_boost = False
@@ -3814,9 +6024,13 @@ class DoublesDamageAwarePlayer(Player):
                 if is_spe_id or is_spe_boost:
                     has_speed_control = 0.15
                     break
-                    
+
             super_effective = 0.0
-            target_ours = [our_pokemon] if our_pokemon else [active for active in battle.active_pokemon if active]
+            target_ours = (
+                [our_pokemon]
+                if our_pokemon
+                else [active for active in battle.active_pokemon if active]
+            )
             for active in target_ours:
                 if active:
                     for move in opponent.moves.values():
@@ -3831,12 +6045,19 @@ class DoublesDamageAwarePlayer(Player):
                             break
                     if super_effective > 0.0:
                         break
-                        
-            threat_score = (stat_factor + spe_factor) * hp_factor + faster_bonus + has_spread + has_priority + has_setup + has_speed_control + super_effective
+
+            threat_score = (
+                (stat_factor + spe_factor) * hp_factor
+                + faster_bonus
+                + has_spread
+                + has_priority
+                + has_setup
+                + has_speed_control
+                + super_effective
+            )
             return min(1.0, max(0.0, threat_score / 5.0))
         except Exception:
             return 0.0
-
 
     def get_expected_damage(
         self,
@@ -3847,7 +6068,9 @@ class DoublesDamageAwarePlayer(Player):
         config=None,
         is_single_target_direct: bool = False,
     ) -> float:
-        resolved_config = config if config is not None else getattr(self, "config", None)
+        resolved_config = (
+            config if config is not None else getattr(self, "config", None)
+        )
         base_power = getattr(move, "base_power", 0)
         if base_power == 0 or not opponent or not active:
             return 0.0
@@ -3855,20 +6078,33 @@ class DoublesDamageAwarePlayer(Player):
             immune, reason = is_type_immune(move, active, opponent, battle)
             if immune:
                 return 0.0
-        if resolved_config and getattr(resolved_config, "enable_ability_hard_safety_only", False):
-            blocks, reason = ability_hard_blocks_move(move, active, opponent, battle, resolved_config)
+        if resolved_config and getattr(
+            resolved_config, "enable_ability_hard_safety_only", False
+        ):
+            blocks, reason = ability_hard_blocks_move(
+                move, active, opponent, battle, resolved_config
+            )
             if blocks and _ability_block_enabled(resolved_config, reason):
                 return 0.0
-            
+
             # Phase 6.3.3 direct safety
-            if getattr(resolved_config, "ability_hard_safety_direct_absorb_only", False) and is_single_target_direct:
+            if (
+                getattr(
+                    resolved_config, "ability_hard_safety_direct_absorb_only", False
+                )
+                and is_single_target_direct
+            ):
                 if not self.is_spread_move(move):
-                    blocks_direct, reason_direct = direct_known_absorb_blocks_move(move, active, opponent, battle)
+                    blocks_direct, reason_direct = direct_known_absorb_blocks_move(
+                        move, active, opponent, battle
+                    )
                     if blocks_direct:
                         return 0.0
 
         # Phase 6.3.6b: Known Ally Redirection Hard Safety
-        if resolved_config and getattr(resolved_config, "enable_known_ally_redirection_hard_safety", False):
+        if resolved_config and getattr(
+            resolved_config, "enable_known_ally_redirection_hard_safety", False
+        ):
             if battle and is_single_target_direct:
                 active_pokemon = getattr(battle, "active_pokemon", [])
                 if len(active_pokemon) >= 2:
@@ -3878,13 +6114,19 @@ class DoublesDamageAwarePlayer(Player):
                     elif active is active_pokemon[1]:
                         ally = active_pokemon[0]
                     if ally and not getattr(ally, "fainted", False):
-                        redirects, _ = ally_redirects_our_single_target_move(move, active, ally, battle)
+                        redirects, _ = ally_redirects_our_single_target_move(
+                            move, active, ally, battle
+                        )
                         if redirects:
                             return 0.0
 
         # Phase 6.3.5a: Priority Terrain / Ability Safety
-        if resolved_config and getattr(resolved_config, "enable_priority_field_hard_safety", False):
-            priority_blocked, _ = priority_move_is_field_blocked(move, active, opponent, battle, resolved_config)
+        if resolved_config and getattr(
+            resolved_config, "enable_priority_field_hard_safety", False
+        ):
+            priority_blocked, _ = priority_move_is_field_blocked(
+                move, active, opponent, battle, resolved_config
+            )
             if priority_blocked:
                 return 0.0
         try:
@@ -3897,7 +6139,15 @@ class DoublesDamageAwarePlayer(Player):
                 attacking_stat = self.get_boosted_stat(active, "atk")
                 defending_stat = self.get_boosted_stat(opponent, "def")
             level = getattr(active, "level", 100)
-            base_damage = (((2.0 * level / 5.0 + 2.0) * base_power * attacking_stat / max(defending_stat, 1.0)) / 50.0) + 2.0
+            base_damage = (
+                (
+                    (2.0 * level / 5.0 + 2.0)
+                    * base_power
+                    * attacking_stat
+                    / max(defending_stat, 1.0)
+                )
+                / 50.0
+            ) + 2.0
             active_types = getattr(active, "types", [])
             etype = get_effective_move_type(move, active)
             stab = 1.0
@@ -3912,7 +6162,12 @@ class DoublesDamageAwarePlayer(Player):
             accuracy = self.get_accuracy(move)
             expected_damage = estimated_damage * accuracy
             # Apply 0.75 spread reduction if there are 2 active opponents
-            if self.is_spread_move(move) and battle and resolved_config and resolved_config.enable_spread_intelligence:
+            if (
+                self.is_spread_move(move)
+                and battle
+                and resolved_config
+                and resolved_config.enable_spread_intelligence
+            ):
                 opps = [o for o in battle.opponent_active_pokemon if o]
                 if len(opps) == 2:
                     expected_damage *= 0.75
@@ -3920,8 +6175,17 @@ class DoublesDamageAwarePlayer(Player):
         except Exception:
             return 0.0
 
-    def check_move_will_ko(self, move: Move, active: Optional[Pokemon], opponent: Optional[Pokemon], battle: Optional[DoubleBattle] = None, config=None) -> bool:
-        expected_damage = self.get_expected_damage(move, active, opponent, battle, config=config)
+    def check_move_will_ko(
+        self,
+        move: Move,
+        active: Optional[Pokemon],
+        opponent: Optional[Pokemon],
+        battle: Optional[DoubleBattle] = None,
+        config=None,
+    ) -> bool:
+        expected_damage = self.get_expected_damage(
+            move, active, opponent, battle, config=config
+        )
         if expected_damage == 0.0 or not opponent:
             return False
         try:
@@ -3933,7 +6197,6 @@ class DoublesDamageAwarePlayer(Player):
         except Exception:
             return False
 
-
     def is_spread_move(self, move: Move) -> bool:
         target_type = getattr(move, "deduced_target", None)
         if target_type in (Target.ALL, Target.ALL_ADJACENT, Target.ALL_ADJACENT_FOES):
@@ -3942,6 +6205,56 @@ class DoublesDamageAwarePlayer(Player):
         if target_str in ("allAdjacent", "allAdjacentFoes", "all"):
             return True
         return False
+
+    def _is_all_target_immune_damaging_spread(
+        self, order, slot_idx: int, battle, config
+    ) -> bool:
+        """Check if an order is a damaging spread move with all opponent targets immune.
+
+        Returns True if:
+        - Order is a damaging Move
+        - Move is a spread move targeting opponents (target == 0 or hits all adjacent foes)
+        - All visible opponent Pokémon are immune to the move's type
+        - Move has base_power > 0 (damaging)
+        """
+        if not order or not isinstance(order.order, Move):
+            return False
+
+        move = order.order
+        if getattr(move, "base_power", 0) <= 0:
+            return False  # not a damaging move
+
+        if not self.is_spread_move(move):
+            return False  # not a spread move
+
+        # Check if move targets opponents (target 0 = all adjacent foes, or explicit spread)
+        target_pos = getattr(order, "move_target", None)
+        targets_opponents = (
+            target_pos == 0  # all adjacent foes
+            or (target_pos in (1, 2) and self.is_spread_move(move))  # spread to specific target
+        )
+        if not targets_opponents:
+            return False
+
+        attacker = battle.active_pokemon[slot_idx] if slot_idx < len(battle.active_pokemon) else None
+        if not attacker:
+            return False
+
+        # Check immunity against all visible opponent Pokémon
+        opponent_actives = [opp for opp in battle.opponent_active_pokemon if opp and not getattr(opp, "fainted", False)]
+        if not opponent_actives:
+            return False
+
+        for opp in opponent_actives:
+            try:
+                immune, _ = is_type_immune(move, attacker, opp, battle)
+                if not immune:
+                    return False  # at least one target is not immune
+            except Exception:
+                # If we can't determine, assume not immune
+                return False
+
+        return True  # all targets immune
 
     def hits_ally(self, move: Move) -> bool:
         target_type = getattr(move, "deduced_target", None)
@@ -3960,15 +6273,21 @@ class DoublesDamageAwarePlayer(Player):
             pass
         return False
 
-    def score_action_raw_damage(self, order: SingleBattleOrder, active_idx: int, battle: DoubleBattle, config=None) -> float:
+    def score_action_raw_damage(
+        self,
+        order: SingleBattleOrder,
+        active_idx: int,
+        battle: DoubleBattle,
+        config=None,
+    ) -> float:
         resolved_config = config if config is not None else self.config
         active_mon = battle.active_pokemon[active_idx]
         if not active_mon or not isinstance(order.order, Move):
             return 0.0
-            
+
         move = order.order
         target_pos = order.move_target
-        
+
         target_mon = None
         if target_pos == 1:
             target_mon = battle.opponent_active_pokemon[0]
@@ -3986,6 +6305,15 @@ class DoublesDamageAwarePlayer(Player):
         if base_power == 0:
             return 0.0
 
+        # Phase 6.5: Type consumption check (Double Shock, Burn Up)
+        if resolved_config.enable_type_consumption_tracking:
+            if is_type_consumed(move, active_mon, battle, self._consumed_types):
+                if self.verbose:
+                    print(
+                        f"[Type Consumed] {move.id} blocked — {getattr(active_mon, 'species', '?')} already used its {_TYPE_CONSUMING_MOVES.get(getattr(move, 'id', ''), '?')} type"
+                    )
+                return 0.0
+
         active_types = getattr(active_mon, "types", [])
         etype = get_effective_move_type(move, active_mon)
         stab_multiplier = 1.0
@@ -3996,7 +6324,7 @@ class DoublesDamageAwarePlayer(Player):
                     stab_multiplier = 1.5
                     break
         accuracy_multiplier = self.get_accuracy(move)
-        
+
         category = getattr(move, "category", None)
         category_name = getattr(category, "name", "PHYSICAL")
         if category_name == "SPECIAL":
@@ -4010,98 +6338,171 @@ class DoublesDamageAwarePlayer(Player):
                 immune, reason = is_type_immune(move, active_mon, target_mon, battle)
                 if immune:
                     if self.verbose:
-                        print(f"[Immunity Block] {reason} | Attacker: {active_mon.species}, Target: {target_mon.species}")
+                        print(
+                            f"[Immunity Block] {reason} | Attacker: {active_mon.species}, Target: {target_mon.species}"
+                        )
                     return 0.0
 
         # Phase 6.3.3: Direct Known-Absorb Hard Safety
-        if resolved_config.enable_ability_hard_safety_only and resolved_config.ability_hard_safety_direct_absorb_only:
-            if target_pos in (1, 2) and not is_opponent_spread_move(move, order) and target_mon:
-                blocks_direct, reason_direct = direct_known_absorb_blocks_move(move, active_mon, target_mon, battle, order)
+        if (
+            resolved_config.enable_ability_hard_safety_only
+            and resolved_config.ability_hard_safety_direct_absorb_only
+        ):
+            if (
+                target_pos in (1, 2)
+                and not is_opponent_spread_move(move, order)
+                and target_mon
+            ):
+                blocks_direct, reason_direct = direct_known_absorb_blocks_move(
+                    move, active_mon, target_mon, battle, order
+                )
                 if blocks_direct:
                     if self.verbose:
-                        print(f"[Direct Absorb Hard Block] {reason_direct} | Attacker: {active_mon.species}, Target: {target_mon.species}")
+                        print(
+                            f"[Direct Absorb Hard Block] {reason_direct} | Attacker: {active_mon.species}, Target: {target_mon.species}"
+                        )
                     return 0.0
 
         # Phase 6.3.6b: Known Ally Redirection Hard Safety
         if resolved_config.enable_known_ally_redirection_hard_safety:
             if target_pos in (1, 2) and target_mon:
                 ally_idx = 1 - active_idx
-                ally = battle.active_pokemon[ally_idx] if ally_idx < len(battle.active_pokemon) else None
+                ally = (
+                    battle.active_pokemon[ally_idx]
+                    if ally_idx < len(battle.active_pokemon)
+                    else None
+                )
                 if ally and not getattr(ally, "fainted", False):
-                    redirects, red_reason = ally_redirects_our_single_target_move(move, active_mon, ally, battle)
+                    redirects, red_reason = ally_redirects_our_single_target_move(
+                        move, active_mon, ally, battle
+                    )
                     if redirects:
                         if self.verbose:
-                            print(f"[Ally Redirection Block] {red_reason} | Ally: {ally.species}")
+                            print(
+                                f"[Ally Redirection Block] {red_reason} | Ally: {ally.species}"
+                            )
                         return 0.0
 
         # Phase 6.3: Ability hard safety block check for single target
         if resolved_config.enable_ability_hard_safety_only:
             if target_pos in (1, 2) and target_mon:
-                blocks, reason = ability_hard_blocks_move(move, active_mon, target_mon, battle, config=resolved_config)
+                blocks, reason = ability_hard_blocks_move(
+                    move, active_mon, target_mon, battle, config=resolved_config
+                )
                 if blocks and _ability_block_enabled(resolved_config, reason):
                     if self.verbose:
-                        print(f"[Ability Hard Block] {reason} | Attacker: {active_mon.species}, Target: {target_mon.species}")
+                        print(
+                            f"[Ability Hard Block] {reason} | Attacker: {active_mon.species}, Target: {target_mon.species}"
+                        )
                     return 0.0
-                
+
                 # Check redirection for single-target Water/Electric moves
                 if resolved_config.ability_hard_safety_avoid_redirection:
                     redirects, red_reason = ability_redirects_single_target_move(
-                        move, target_mon, battle.opponent_active_pokemon, active_mon, battle
+                        move,
+                        target_mon,
+                        battle.opponent_active_pokemon,
+                        active_mon,
+                        battle,
                     )
                     if redirects:
                         # Find the redirection target
                         red_target = None
                         for opp in battle.opponent_active_pokemon:
-                            if opp and opp != target_mon and not getattr(opp, "fainted", False):
+                            if (
+                                opp
+                                and opp != target_mon
+                                and not getattr(opp, "fainted", False)
+                            ):
                                 opp_ability = get_known_ability(opp, battle)
                                 if opp_ability in ("stormdrain", "lightningrod"):
                                     red_target = opp
                                     break
                         # Score 0 only if the redirected target is bad/immune/benefits.
                         if red_target:
-                            blocks_red, reason_red = ability_hard_blocks_move(move, active_mon, red_target, battle, config=resolved_config)
-                            if blocks_red and _ability_block_enabled(resolved_config, reason_red):
+                            blocks_red, reason_red = ability_hard_blocks_move(
+                                move,
+                                active_mon,
+                                red_target,
+                                battle,
+                                config=resolved_config,
+                            )
+                            if blocks_red and _ability_block_enabled(
+                                resolved_config, reason_red
+                            ):
                                 if self.verbose:
-                                    print(f"[Ability Redirection Hard Safety] {red_reason} | Attacker: {active_mon.species}, Intended Target: {target_mon.species} (blocked by redirected target {red_target.species})")
+                                    print(
+                                        f"[Ability Redirection Hard Safety] {red_reason} | Attacker: {active_mon.species}, Intended Target: {target_mon.species} (blocked by redirected target {red_target.species})"
+                                    )
                                 return 0.0
                             else:
                                 # Redirection target is not immune! Calculate redirected score.
-                                red_type_multiplier = self.get_type_effectiveness(move, red_target, attacker=active_mon)
+                                red_type_multiplier = self.get_type_effectiveness(
+                                    move, red_target, attacker=active_mon
+                                )
                                 if red_type_multiplier == 0.0:
                                     return 0.0
                                 if category_name == "SPECIAL":
-                                    red_defending_stat = self.get_boosted_stat(red_target, "spd")
+                                    red_defending_stat = self.get_boosted_stat(
+                                        red_target, "spd"
+                                    )
                                 else:
-                                    red_defending_stat = self.get_boosted_stat(red_target, "def")
-                                red_score = float(base_power) * (attacking_stat / max(red_defending_stat, 1.0)) * stab_multiplier * red_type_multiplier * accuracy_multiplier
+                                    red_defending_stat = self.get_boosted_stat(
+                                        red_target, "def"
+                                    )
+                                red_score = (
+                                    float(base_power)
+                                    * (attacking_stat / max(red_defending_stat, 1.0))
+                                    * stab_multiplier
+                                    * red_type_multiplier
+                                    * accuracy_multiplier
+                                )
                                 # Return a slightly reduced score
                                 return 0.8 * red_score
 
         # Ability-Aware block checks for single target
         if resolved_config.enable_ability_awareness:
             if target_pos in (1, 2) and target_mon:
-                blocks, reason = ability_rules.ability_blocks_move(target_mon, move, attacker=active_mon)
+                blocks, reason = ability_rules.ability_blocks_move(
+                    target_mon, move, attacker=active_mon
+                )
                 if blocks:
                     if self.verbose:
-                        print(f"[Ability Block] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}")
-                    self.increment_metric(self.ability_blocks_avoided_by_battle, battle.battle_tag)
+                        print(
+                            f"[Ability Block] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}"
+                        )
+                    self.increment_metric(
+                        self.ability_blocks_avoided_by_battle, battle.battle_tag
+                    )
                     return 0.0
-                absorbs, reason = ability_rules.ability_absorbs_or_benefits(target_mon, move)
+                absorbs, reason = ability_rules.ability_absorbs_or_benefits(
+                    target_mon, move
+                )
                 if absorbs:
                     if self.verbose:
-                        print(f"[Ability Absorb] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}")
-                    self.increment_metric(self.ability_absorbs_avoided_by_battle, battle.battle_tag)
+                        print(
+                            f"[Ability Absorb] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}"
+                        )
+                    self.increment_metric(
+                        self.ability_absorbs_avoided_by_battle, battle.battle_tag
+                    )
                     return 0.0
                 # Redirection check
                 for opp in battle.opponent_active_pokemon:
                     if opp and opp != target_mon:
-                        redirects, reason = ability_rules.ability_redirects_move(opp, move)
+                        redirects, reason = ability_rules.ability_redirects_move(
+                            opp, move
+                        )
                         if redirects:
                             if self.verbose:
-                                print(f"[Ability Redirection] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}")
-                            self.increment_metric(self.ability_redirects_avoided_by_battle, battle.battle_tag)
+                                print(
+                                    f"[Ability Redirection] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}"
+                                )
+                            self.increment_metric(
+                                self.ability_redirects_avoided_by_battle,
+                                battle.battle_tag,
+                            )
                             return 0.0
-
 
         if target_pos == 0:
             opps = [opp for opp in battle.opponent_active_pokemon if opp]
@@ -4113,43 +6514,78 @@ class DoublesDamageAwarePlayer(Player):
                     immune, reason = is_type_immune(move, active_mon, opp, battle)
                     if immune:
                         if self.verbose:
-                            print(f"[Immunity Block Spread] {reason} | Attacker: {active_mon.species}, Target: {opp.species}")
+                            print(
+                                f"[Immunity Block Spread] {reason} | Attacker: {active_mon.species}, Target: {opp.species}"
+                            )
                         continue
                 if resolved_config.enable_ability_hard_safety_only:
-                    blocks, reason = ability_hard_blocks_move(move, active_mon, opp, battle, config=resolved_config)
+                    blocks, reason = ability_hard_blocks_move(
+                        move, active_mon, opp, battle, config=resolved_config
+                    )
                     if blocks and _ability_block_enabled(resolved_config, reason):
                         if self.verbose:
-                            print(f"[Ability Hard Block Spread] {reason} | Attacker: {active_mon.species}, Target: {opp.species}")
+                            print(
+                                f"[Ability Hard Block Spread] {reason} | Attacker: {active_mon.species}, Target: {opp.species}"
+                            )
                         continue
                 if resolved_config.enable_ability_awareness:
-                    blocks, reason = ability_rules.ability_blocks_move(opp, move, attacker=active_mon)
+                    blocks, reason = ability_rules.ability_blocks_move(
+                        opp, move, attacker=active_mon
+                    )
                     if blocks:
                         if self.verbose:
-                            print(f"[Ability Block Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}")
-                        self.increment_metric(self.ability_blocks_avoided_by_battle, battle.battle_tag)
+                            print(
+                                f"[Ability Block Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}"
+                            )
+                        self.increment_metric(
+                            self.ability_blocks_avoided_by_battle, battle.battle_tag
+                        )
                         continue
-                    absorbs, reason = ability_rules.ability_absorbs_or_benefits(opp, move)
+                    absorbs, reason = ability_rules.ability_absorbs_or_benefits(
+                        opp, move
+                    )
                     if absorbs:
                         if self.verbose:
-                            print(f"[Ability Absorb Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}")
-                        self.increment_metric(self.ability_absorbs_avoided_by_battle, battle.battle_tag)
+                            print(
+                                f"[Ability Absorb Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}"
+                            )
+                        self.increment_metric(
+                            self.ability_absorbs_avoided_by_battle, battle.battle_tag
+                        )
                         continue
-                type_multiplier = self.get_type_effectiveness(move, opp, attacker=active_mon)
+                type_multiplier = self.get_type_effectiveness(
+                    move, opp, attacker=active_mon
+                )
                 if type_multiplier == 0.0:
                     continue
                 if category_name == "SPECIAL":
                     defending_stat = self.get_boosted_stat(opp, "spd")
                 else:
                     defending_stat = self.get_boosted_stat(opp, "def")
-                opp_score = float(base_power) * (attacking_stat / max(defending_stat, 1.0)) * stab_multiplier * type_multiplier * accuracy_multiplier
-                
+                opp_score = (
+                    float(base_power)
+                    * (attacking_stat / max(defending_stat, 1.0))
+                    * stab_multiplier
+                    * type_multiplier
+                    * accuracy_multiplier
+                )
+
                 if resolved_config.enable_ability_awareness:
-                    t_mult, t_reason = ability_rules.ability_damage_multiplier(opp, move, attacker=active_mon)
-                    a_mult, a_reason = ability_rules.attacker_ability_damage_multiplier(active_mon, move, target=opp)
+                    t_mult, t_reason = ability_rules.ability_damage_multiplier(
+                        opp, move, attacker=active_mon
+                    )
+                    a_mult, a_reason = ability_rules.attacker_ability_damage_multiplier(
+                        active_mon, move, target=opp
+                    )
                     if t_mult != 1.0 or a_mult != 1.0:
                         if self.verbose:
-                            print(f"[Ability Multiplier Spread] target_mult={t_mult} ({t_reason or 'None'}), attacker_mult={a_mult} ({a_reason or 'None'}) vs {opp.species}")
-                        self.increment_metric(self.ability_multipliers_applied_by_battle, battle.battle_tag)
+                            print(
+                                f"[Ability Multiplier Spread] target_mult={t_mult} ({t_reason or 'None'}), attacker_mult={a_mult} ({a_reason or 'None'}) vs {opp.species}"
+                            )
+                        self.increment_metric(
+                            self.ability_multipliers_applied_by_battle,
+                            battle.battle_tag,
+                        )
                     opp_score *= t_mult * a_mult
 
                 total_damage += opp_score
@@ -4158,7 +6594,9 @@ class DoublesDamageAwarePlayer(Player):
             return total_damage
 
         if target_mon:
-            type_multiplier = self.get_type_effectiveness(move, target_mon, attacker=active_mon)
+            type_multiplier = self.get_type_effectiveness(
+                move, target_mon, attacker=active_mon
+            )
         else:
             type_multiplier = 1.0
 
@@ -4166,30 +6604,50 @@ class DoublesDamageAwarePlayer(Player):
             return 0.0
 
         if category_name == "SPECIAL":
-            defending_stat = self.get_boosted_stat(target_mon, "spd") if target_mon else 100.0
+            defending_stat = (
+                self.get_boosted_stat(target_mon, "spd") if target_mon else 100.0
+            )
         else:
-            defending_stat = self.get_boosted_stat(target_mon, "def") if target_mon else 100.0
+            defending_stat = (
+                self.get_boosted_stat(target_mon, "def") if target_mon else 100.0
+            )
 
-        score = float(base_power) * (attacking_stat / max(defending_stat, 1.0)) * stab_multiplier * type_multiplier * accuracy_multiplier
+        score = (
+            float(base_power)
+            * (attacking_stat / max(defending_stat, 1.0))
+            * stab_multiplier
+            * type_multiplier
+            * accuracy_multiplier
+        )
 
         if resolved_config.enable_ability_awareness and target_mon:
-            t_mult, t_reason = ability_rules.ability_damage_multiplier(target_mon, move, attacker=active_mon)
-            a_mult, a_reason = ability_rules.attacker_ability_damage_multiplier(active_mon, move, target=target_mon)
+            t_mult, t_reason = ability_rules.ability_damage_multiplier(
+                target_mon, move, attacker=active_mon
+            )
+            a_mult, a_reason = ability_rules.attacker_ability_damage_multiplier(
+                active_mon, move, target=target_mon
+            )
             if t_mult != 1.0 or a_mult != 1.0:
                 if self.verbose:
-                    print(f"[Ability Multiplier] target_mult={t_mult} ({t_reason or 'None'}), attacker_mult={a_mult} ({a_reason or 'None'}) vs {target_mon.species}")
-                self.increment_metric(self.ability_multipliers_applied_by_battle, battle.battle_tag)
+                    print(
+                        f"[Ability Multiplier] target_mult={t_mult} ({t_reason or 'None'}), attacker_mult={a_mult} ({a_reason or 'None'}) vs {target_mon.species}"
+                    )
+                self.increment_metric(
+                    self.ability_multipliers_applied_by_battle, battle.battle_tag
+                )
             score *= t_mult * a_mult
 
         return score
 
-
-
     def best_move_score_for_slot(self, slot_idx: int, battle: DoubleBattle) -> float:
         active_mon = battle.active_pokemon[slot_idx]
-        if not active_mon or battle.force_switch[slot_idx] or not battle.available_moves[slot_idx]:
+        if (
+            not active_mon
+            or battle.force_switch[slot_idx]
+            or not battle.available_moves[slot_idx]
+        ):
             return 0.0
-            
+
         best_score = 0.0
         for move in battle.available_moves[slot_idx]:
             targets = battle.get_possible_showdown_targets(move, active_mon)
@@ -4250,38 +6708,73 @@ class DoublesDamageAwarePlayer(Player):
         current_turn = battle.turn
 
         # Defensive mock safety initialization
-        for attr in ("_ability_hard_block_avoided", "_ability_immune_move_selected", 
-                     "_ground_into_levitate_selected", "_ability_block_reason", 
-                     "_ability_blocked_target_species", "_ability_blocked_target_ability", 
-                     "_ally_ability_safe_spread", "_ability_redirection_avoided",
-                     "_direct_absorb_hard_block_avoided", "_direct_absorb_immune_move_selected",
-                     "_direct_absorb_block_reason", "_direct_absorb_target_species",
-                     "_direct_absorb_target_ability", "_direct_absorb_only_legal_action"):
+        for attr in (
+            "_ability_hard_block_avoided",
+            "_ability_immune_move_selected",
+            "_ground_into_levitate_selected",
+            "_ability_block_reason",
+            "_ability_blocked_target_species",
+            "_ability_blocked_target_ability",
+            "_ally_ability_safe_spread",
+            "_ability_redirection_avoided",
+            "_direct_absorb_hard_block_avoided",
+            "_direct_absorb_immune_move_selected",
+            "_direct_absorb_block_reason",
+            "_direct_absorb_target_species",
+            "_direct_absorb_target_ability",
+            "_direct_absorb_only_legal_action",
+            "_support_target_wrong_side_blocked",
+            "_support_target_block_reason",
+            "_voluntary_switch_quality_data",
+            "_voluntary_switch_adjustment_applied",
+            "_voluntary_switch_penalized",
+        ):
             if not hasattr(self, attr):
                 setattr(self, attr, {})
-        
-        for attr in ("_ability_hard_block_avoided", "_ability_immune_move_selected", 
-                     "_ground_into_levitate_selected", "_ally_ability_safe_spread", 
-                     "_ability_redirection_avoided", "_direct_absorb_hard_block_avoided",
-                     "_direct_absorb_immune_move_selected", "_direct_absorb_only_legal_action"):
+
+        for attr in (
+            "_ability_hard_block_avoided",
+            "_ability_immune_move_selected",
+            "_ground_into_levitate_selected",
+            "_ally_ability_safe_spread",
+            "_ability_redirection_avoided",
+            "_direct_absorb_hard_block_avoided",
+            "_direct_absorb_immune_move_selected",
+            "_direct_absorb_only_legal_action",
+            "_support_target_wrong_side_blocked",
+            "_voluntary_switch_adjustment_applied",
+            "_voluntary_switch_penalized",
+        ):
             d = getattr(self, attr)
             if battle_tag not in d:
                 d[battle_tag] = {0: False, 1: False}
-                
-        for attr in ("_ability_block_reason", "_ability_blocked_target_species", 
-                     "_ability_blocked_target_ability", "_direct_absorb_block_reason",
-                     "_direct_absorb_target_species", "_direct_absorb_target_ability"):
+
+        for attr in (
+            "_ability_block_reason",
+            "_ability_blocked_target_species",
+            "_ability_blocked_target_ability",
+            "_direct_absorb_block_reason",
+            "_direct_absorb_target_species",
+            "_direct_absorb_target_ability",
+            "_support_target_block_reason",
+        ):
             d = getattr(self, attr)
             if battle_tag not in d:
                 d[battle_tag] = {0: "", 1: ""}
 
         # --- Pass / Default orders (processed before active_mon check) ---
-        if isinstance(order, PassBattleOrder) or getattr(order, "order", None) == "/choose pass":
+        if (
+            isinstance(order, PassBattleOrder)
+            or getattr(order, "order", None) == "/choose pass"
+        ):
             if battle.force_switch[active_idx]:
                 return 10.0
             return 0.0
-        
-        if isinstance(order, DefaultBattleOrder) or getattr(order, "order", None) == "/choose default":
+
+        if (
+            isinstance(order, DefaultBattleOrder)
+            or getattr(order, "order", None) == "/choose default"
+        ):
             return 1.0
 
         # --- Switch orders (scored even when active slot is empty) ---
@@ -4292,26 +6785,38 @@ class DoublesDamageAwarePlayer(Player):
             if self.config.enable_switch_candidate_type_safety:
                 switch_candidate = order.order
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-                safety = evaluate_switch_candidate_type_safety(switch_candidate, active_opps, self.config)
+                safety = evaluate_switch_candidate_type_safety(
+                    switch_candidate, active_opps, self.config
+                )
                 # Store safety data for audit logging if this is the selected action
                 if is_selected:
                     if not hasattr(self, "_switch_candidate_safety_data"):
                         self._switch_candidate_safety_data = {}
-                    self._switch_candidate_safety_data[battle_tag] = self._switch_candidate_safety_data.get(battle_tag, {})
+                    self._switch_candidate_safety_data[battle_tag] = (
+                        self._switch_candidate_safety_data.get(battle_tag, {})
+                    )
                     self._switch_candidate_safety_data[battle_tag][active_idx] = safety
                 # Apply relative adjustment later in the ranking phase (see choose_move)
 
             # Speed/priority switch bonus: only when a live active Pokemon exists
-            if active_mon and self.config.enable_speed_priority_awareness and not self.config.speed_priority_protect_only:
+            if (
+                active_mon
+                and self.config.enable_speed_priority_awareness
+                and not self.config.speed_priority_protect_only
+            ):
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-                threat_info = self.estimate_speed_priority_threat(active_mon, active_opps, battle)
+                threat_info = self.estimate_speed_priority_threat(
+                    active_mon, active_opps, battle
+                )
                 if threat_info["is_threatened"]:
-                    has_protect = self.has_legal_protect_like_action(active_mon, battle, slot_index=active_idx)
+                    has_protect = self.has_legal_protect_like_action(
+                        active_mon, battle, slot_index=active_idx
+                    )
                     mon_id = self.get_pokemon_identifier(active_mon)
                     key = (active_idx, mon_id)
                     last_turn = self.last_protect_turn.get(battle_tag, {}).get(key, -9)
-                    protect_consecutive = (current_turn - last_turn == 1)
-                    
+                    protect_consecutive = current_turn - last_turn == 1
+
                     if not has_protect or protect_consecutive:
                         can_ko = False
                         has_strong_spread = False
@@ -4321,22 +6826,32 @@ class DoublesDamageAwarePlayer(Player):
                                 t_pos = ord.move_target
                                 if t_pos in (1, 2):
                                     t_mon = battle.opponent_active_pokemon[t_pos - 1]
-                                    if t_mon and self.check_move_will_ko(m, active_mon, t_mon, battle, config=self.config):
+                                    if t_mon and self.check_move_will_ko(
+                                        m, active_mon, t_mon, battle, config=self.config
+                                    ):
                                         can_ko = True
                                 if is_opponent_spread_move(m, ord):
                                     base_pow = getattr(m, "base_power", 0)
                                     if base_pow >= 60:
                                         has_strong_spread = True
-                                        
+
                         if not can_ko and not has_strong_spread:
                             bonus = self.config.speed_priority_switch_bonus
-                            bonus = min(bonus, self.config.speed_priority_max_delta_per_action)
+                            bonus = min(
+                                bonus, self.config.speed_priority_max_delta_per_action
+                            )
                             switch_score += bonus
                             if is_selected:
-                                self._speed_priority_switch_bonus_applied[battle_tag][active_idx] = True
+                                self._speed_priority_switch_bonus_applied[battle_tag][
+                                    active_idx
+                                ] = True
 
             # Phase 6.4.4: Forced switch replacement safety scoring
-            is_forced_switch = battle.force_switch[active_idx] if active_idx < len(battle.force_switch) else False
+            is_forced_switch = (
+                battle.force_switch[active_idx]
+                if active_idx < len(battle.force_switch)
+                else False
+            )
             if is_forced_switch and self.config.enable_forced_switch_replacement_safety:
                 switch_candidate = order.order
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
@@ -4348,8 +6863,15 @@ class DoublesDamageAwarePlayer(Player):
                 if is_selected:
                     if not hasattr(self, "_forced_switch_safety_data"):
                         self._forced_switch_safety_data = {}
-                    self._forced_switch_safety_data[battle_tag] = self._forced_switch_safety_data.get(battle_tag, {})
+                    self._forced_switch_safety_data[battle_tag] = (
+                        self._forced_switch_safety_data.get(battle_tag, {})
+                    )
                     self._forced_switch_safety_data[battle_tag][active_idx] = safety
+
+            # Phase 6.4.9: Voluntary switch quality scoring is applied later in
+            # choose_move() after all raw slot scores are computed (see the
+            # slot score re-ranking section).  Diagnostics and scoring both
+            # run there, not inside per-order score_action().
 
             # Bug fix: max(0) clamp wipes out safety differentiation when
             # safety penalties are below -8 (baseline).  For forced switches
@@ -4365,18 +6887,28 @@ class DoublesDamageAwarePlayer(Player):
 
         if is_selected:
             active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-            threat_info = self.estimate_speed_priority_threat(active_mon, active_opps, battle, order)
-            
-            self._speed_priority_threatened[battle_tag][active_idx] = threat_info["is_threatened"]
-            self._faster_opponents[battle_tag][active_idx] = threat_info["faster_opponents"]
-            self._priority_opponents[battle_tag][active_idx] = threat_info["priority_opponents"]
-            self._expected_to_faint_before_moving[battle_tag][active_idx] = threat_info["faint_before_moving"]
+            threat_info = self.estimate_speed_priority_threat(
+                active_mon, active_opps, battle, order
+            )
+
+            self._speed_priority_threatened[battle_tag][active_idx] = threat_info[
+                "is_threatened"
+            ]
+            self._faster_opponents[battle_tag][active_idx] = threat_info[
+                "faster_opponents"
+            ]
+            self._priority_opponents[battle_tag][active_idx] = threat_info[
+                "priority_opponents"
+            ]
+            self._expected_to_faint_before_moving[battle_tag][active_idx] = threat_info[
+                "faint_before_moving"
+            ]
 
         # Move orders
         if isinstance(order.order, Move):
             move = order.order
             target_pos = order.move_target
-            
+
             target_mon = None
             if target_pos == 1:
                 target_mon = battle.opponent_active_pokemon[0]
@@ -4395,36 +6927,46 @@ class DoublesDamageAwarePlayer(Player):
             category_name = getattr(category, "name", "STATUS")
 
             # 1. Protect Heuristic
-            if move.id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker"):
+            if move.id in (
+                "protect",
+                "detect",
+                "spikyshield",
+                "kingsshield",
+                "banefulbunker",
+            ):
                 if not self.config.enable_protect:
                     return 0.0
                 mon_id = self.get_pokemon_identifier(active_mon)
                 key = (active_idx, mon_id)
                 last_turn = self.last_protect_turn.get(battle_tag, {}).get(key, -9)
-                
+
                 if current_turn - last_turn == 1:
                     return 0.0
 
                 hp_fraction = getattr(active_mon, "current_hp_fraction", 1.0)
                 hp_thresh = 0.35
-                
+
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-                
+
                 threat_info = None
                 if self.config.enable_speed_priority_awareness:
-                    threat_info = self.estimate_speed_priority_threat(active_mon, active_opps, battle)
+                    threat_info = self.estimate_speed_priority_threat(
+                        active_mon, active_opps, battle
+                    )
                     if threat_info["priority_threatened"]:
                         hp_thresh = self.config.priority_threat_hp_threshold
-                        
+
                 if hp_fraction >= hp_thresh:
                     return 0.0
 
-                ally_can_attack = self.best_move_score_for_slot(1 - active_idx, battle) > 30.0
+                ally_can_attack = (
+                    self.best_move_score_for_slot(1 - active_idx, battle) > 30.0
+                )
                 if not ally_can_attack:
                     return 0.0
 
                 is_threatened = False
-                
+
                 # Type matchup threat: opponent type hits us super-effectively
                 for opp in active_opps:
                     for t in getattr(opp, "types", []):
@@ -4436,59 +6978,95 @@ class DoublesDamageAwarePlayer(Player):
                 our_spe = self.get_boosted_stat(active_mon, "spe")
                 for opp in active_opps:
                     opp_spe = self.get_boosted_stat(opp, "spe")
-                    if opp_spe > our_spe and get_max_type_threat(active_mon, opp, battle) >= 1.5:
+                    if (
+                        opp_spe > our_spe
+                        and get_max_type_threat(active_mon, opp, battle) >= 1.5
+                    ):
                         is_threatened = True
                         break
-                        
+
                 # Critical HP: very low HP and any opponent exists
                 if hp_fraction < 0.15 and len(active_opps) > 0:
                     is_threatened = True
 
                 # Phase 6.2 Speed/Priority Threat
-                if self.config.enable_speed_priority_awareness and threat_info and threat_info["is_threatened"]:
-                    if self.has_legal_protect_like_action(active_mon, battle, slot_index=active_idx):
+                if (
+                    self.config.enable_speed_priority_awareness
+                    and threat_info
+                    and threat_info["is_threatened"]
+                ):
+                    if self.has_legal_protect_like_action(
+                        active_mon, battle, slot_index=active_idx
+                    ):
                         is_threatened = True
 
                 if is_threatened:
                     base_protect = self.config.protect_score
-                    if self.config.enable_speed_priority_awareness and threat_info and threat_info["is_threatened"]:
-                        if self.has_legal_protect_like_action(active_mon, battle, slot_index=active_idx):
+                    if (
+                        self.config.enable_speed_priority_awareness
+                        and threat_info
+                        and threat_info["is_threatened"]
+                    ):
+                        if self.has_legal_protect_like_action(
+                            active_mon, battle, slot_index=active_idx
+                        ):
                             confidence = threat_info.get("threat_confidence", 1.0)
                             if self.config.speed_priority_use_scaled_penalty:
-                                bonus = self.config.speed_priority_protect_bonus_low + confidence * (self.config.speed_priority_protect_bonus_high - self.config.speed_priority_protect_bonus_low)
+                                bonus = (
+                                    self.config.speed_priority_protect_bonus_low
+                                    + confidence
+                                    * (
+                                        self.config.speed_priority_protect_bonus_high
+                                        - self.config.speed_priority_protect_bonus_low
+                                    )
+                                )
                             else:
                                 bonus = self.config.speed_priority_protect_bonus
-                            bonus = min(bonus, self.config.speed_priority_max_delta_per_action)
+                            bonus = min(
+                                bonus, self.config.speed_priority_max_delta_per_action
+                            )
                             base_protect += bonus
                             if is_selected:
-                                self._speed_priority_protect_bonus_applied[battle_tag][active_idx] = True
-                                self._protected_due_to_speed_priority[battle_tag][active_idx] = True
-                                
+                                self._speed_priority_protect_bonus_applied[battle_tag][
+                                    active_idx
+                                ] = True
+                                self._protected_due_to_speed_priority[battle_tag][
+                                    active_idx
+                                ] = True
+
                     if self.config.enable_protect_threat_refinement:
                         max_threat = 0.0
                         for opp in active_opps:
-                            t_score = self.score_opponent_threat(opp, battle, our_pokemon=active_mon)
+                            t_score = self.score_opponent_threat(
+                                opp, battle, our_pokemon=active_mon
+                            )
                             if t_score > max_threat:
                                 max_threat = t_score
                         return base_protect + max_threat * 30.0
                     return base_protect
                 return 0.0
 
-
             # 2. Fake Out Heuristic
             if move.id == "fakeout" and self.config.enable_fake_out:
                 mon_id = self.get_pokemon_identifier(active_mon)
                 key = (active_idx, mon_id)
                 active_turn_count = 1
-                if battle_tag in self.active_turns and key in self.active_turns[battle_tag]:
+                if (
+                    battle_tag in self.active_turns
+                    and key in self.active_turns[battle_tag]
+                ):
                     active_turn_count, last_turn = self.active_turns[battle_tag][key]
-                
+
                 if active_turn_count != 1:
                     return 0.0
 
                 if target_mon:
-                    type_multiplier = self.get_type_effectiveness(move, target_mon, attacker=active_mon)
-                    is_ghost = "GHOST" in [t.name for t in getattr(target_mon, "types", []) if t]
+                    type_multiplier = self.get_type_effectiveness(
+                        move, target_mon, attacker=active_mon
+                    )
+                    is_ghost = "GHOST" in [
+                        t.name for t in getattr(target_mon, "types", []) if t
+                    ]
                     if type_multiplier == 0.0 or is_ghost:
                         return 0.0
                 else:
@@ -4497,7 +7075,9 @@ class DoublesDamageAwarePlayer(Player):
                 score = self.score_action_raw_damage(order, active_idx, battle)
                 score += 250.0
 
-                if self.check_move_will_ko(move, active_mon, target_mon, battle, config=self.config):
+                if self.check_move_will_ko(
+                    move, active_mon, target_mon, battle, config=self.config
+                ):
                     score += 200.0
                 else:
                     opps = [opp for opp in battle.opponent_active_pokemon if opp]
@@ -4507,9 +7087,17 @@ class DoublesDamageAwarePlayer(Player):
                             threat_1 = self.score_opponent_threat(opps[1], battle)
                             dangerous_opp = opps[0] if threat_0 >= threat_1 else opps[1]
                         else:
-                            opp1_power = max(self.get_boosted_stat(opps[0], "atk"), self.get_boosted_stat(opps[0], "spa"))
-                            opp2_power = max(self.get_boosted_stat(opps[1], "atk"), self.get_boosted_stat(opps[1], "spa"))
-                            dangerous_opp = opps[0] if opp1_power >= opp2_power else opps[1]
+                            opp1_power = max(
+                                self.get_boosted_stat(opps[0], "atk"),
+                                self.get_boosted_stat(opps[0], "spa"),
+                            )
+                            opp2_power = max(
+                                self.get_boosted_stat(opps[1], "atk"),
+                                self.get_boosted_stat(opps[1], "spa"),
+                            )
+                            dangerous_opp = (
+                                opps[0] if opp1_power >= opp2_power else opps[1]
+                            )
                         if target_mon == dangerous_opp:
                             score += 50.0
 
@@ -4517,36 +7105,82 @@ class DoublesDamageAwarePlayer(Player):
 
             # 3. Generic Status Moves
             if category_name == "STATUS" or base_power == 0:
-                if self.config.enable_priority_field_hard_safety and target_pos in (1, 2) and target_mon:
-                    priority_res = evaluate_priority_move_legality(move, active_mon, target_mon, battle, self.config)
+                if (
+                    self.config.enable_priority_field_hard_safety
+                    and target_pos in (1, 2)
+                    and target_mon
+                ):
+                    priority_res = evaluate_priority_move_legality(
+                        move, active_mon, target_mon, battle, self.config
+                    )
                     if priority_res["blocked"]:
                         return float(self.config.ability_hard_safety_block_score)
 
                 if self.config.enable_ability_awareness:
                     if target_mon and target_pos in (1, 2):
-                        avoid, reason = ability_rules.should_avoid_status_into_ability(target_mon, move)
+                        avoid, reason = ability_rules.should_avoid_status_into_ability(
+                            target_mon, move
+                        )
                         if avoid:
                             if self.verbose:
-                                print(f"[Status Blocked] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}")
-                            self.increment_metric(self.ability_blocks_avoided_by_battle, battle.battle_tag)
-                            has_damaging_move = any(getattr(m, "base_power", 0) > 0 for m in battle.available_moves[active_idx])
+                                print(
+                                    f"[Status Blocked] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}"
+                                )
+                            self.increment_metric(
+                                self.ability_blocks_avoided_by_battle, battle.battle_tag
+                            )
+                            has_damaging_move = any(
+                                getattr(m, "base_power", 0) > 0
+                                for m in battle.available_moves[active_idx]
+                            )
                             if has_damaging_move:
                                 return 0.0
                             return -100.0
                     elif target_pos == 0:
                         for opp in battle.opponent_active_pokemon:
                             if opp:
-                                avoid, reason = ability_rules.should_avoid_status_into_ability(opp, move)
+                                avoid, reason = (
+                                    ability_rules.should_avoid_status_into_ability(
+                                        opp, move
+                                    )
+                                )
                                 if avoid:
                                     if self.verbose:
-                                        print(f"[Status Blocked Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}")
-                                    self.increment_metric(self.ability_blocks_avoided_by_battle, battle.battle_tag)
-                                    has_damaging_move = any(getattr(m, "base_power", 0) > 0 for m in battle.available_moves[active_idx])
+                                        print(
+                                            f"[Status Blocked Spread] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(opp)}"
+                                        )
+                                    self.increment_metric(
+                                        self.ability_blocks_avoided_by_battle,
+                                        battle.battle_tag,
+                                    )
+                                    has_damaging_move = any(
+                                        getattr(m, "base_power", 0) > 0
+                                        for m in battle.available_moves[active_idx]
+                                    )
                                     if has_damaging_move:
                                         return 0.0
                                     return -100.0
 
-                has_damaging_move = any(getattr(m, "base_power", 0) > 0 for m in battle.available_moves[active_idx])
+                # Phase 6.3.8: Support Move Target Hard Safety
+                if self.config.enable_support_move_target_hard_safety:
+                    blocked_st, reason_st = support_move_wrong_side_block(
+                        order, active_idx, battle, config=self.config
+                    )
+                    if blocked_st:
+                        if self.verbose:
+                            print(f"[Support Target Block] {reason_st}")
+                        self._support_target_wrong_side_blocked[battle_tag][
+                            active_idx
+                        ] = True
+                        self._support_target_block_reason[battle_tag][active_idx] = (
+                            reason_st
+                        )
+                        return float(self.config.support_move_wrong_side_block_score)
+
+                has_damaging_move = any(
+                    getattr(m, "base_power", 0) > 0
+                    for m in battle.available_moves[active_idx]
+                )
                 if has_damaging_move:
                     return 0.0
                 return 10.0
@@ -4557,105 +7191,195 @@ class DoublesDamageAwarePlayer(Player):
             # ability awareness. Selected-action error flags are recorded even in
             # the benchmark's safety-off arm.
             if target_pos in (1, 2) and target_mon:
-                blocks, reason = ability_hard_blocks_move(move, active_mon, target_mon, battle, config=self.config)
+                blocks, reason = ability_hard_blocks_move(
+                    move, active_mon, target_mon, battle, config=self.config
+                )
                 applies = blocks and _ability_block_enabled(self.config, reason)
-                
+
                 # Phase 6.3.3: Direct Known-Absorb Hard Safety
                 applies_direct = False
-                if self.config.enable_ability_hard_safety_only and self.config.ability_hard_safety_direct_absorb_only:
+                if (
+                    self.config.enable_ability_hard_safety_only
+                    and self.config.ability_hard_safety_direct_absorb_only
+                ):
                     if not is_opponent_spread_move(move, order):
-                        blocks_direct, reason_direct = direct_known_absorb_blocks_move(move, active_mon, target_mon, battle, order)
+                        blocks_direct, reason_direct = direct_known_absorb_blocks_move(
+                            move, active_mon, target_mon, battle, order
+                        )
                         if blocks_direct:
                             applies_direct = True
                             reason = reason_direct
-                
+
                 if (blocks or applies_direct) and is_selected:
                     self._ability_immune_move_selected[battle_tag][active_idx] = True
                     if reason == "ground_into_levitate":
-                        self._ground_into_levitate_selected[battle_tag][active_idx] = True
+                        self._ground_into_levitate_selected[battle_tag][active_idx] = (
+                            True
+                        )
                     self._ability_block_reason[battle_tag][active_idx] = reason
-                    self._ability_blocked_target_species[battle_tag][active_idx] = target_mon.species
-                    self._ability_blocked_target_ability[battle_tag][active_idx] = get_known_ability(target_mon, battle) or ""
-                    
+                    self._ability_blocked_target_species[battle_tag][active_idx] = (
+                        target_mon.species
+                    )
+                    self._ability_blocked_target_ability[battle_tag][active_idx] = (
+                        get_known_ability(target_mon, battle) or ""
+                    )
+
                     if applies_direct:
-                        self._direct_absorb_immune_move_selected[battle_tag][active_idx] = True
-                        self._direct_absorb_block_reason[battle_tag][active_idx] = reason
-                        self._direct_absorb_target_species[battle_tag][active_idx] = target_mon.species
-                        self._direct_absorb_target_ability[battle_tag][active_idx] = get_known_ability(target_mon, battle) or ""
-                        
+                        self._direct_absorb_immune_move_selected[battle_tag][
+                            active_idx
+                        ] = True
+                        self._direct_absorb_block_reason[battle_tag][active_idx] = (
+                            reason
+                        )
+                        self._direct_absorb_target_species[battle_tag][active_idx] = (
+                            target_mon.species
+                        )
+                        self._direct_absorb_target_ability[battle_tag][active_idx] = (
+                            get_known_ability(target_mon, battle) or ""
+                        )
+
                 # Phase 6.3.5a: Priority Terrain / Ability Safety
                 applies_priority = False
                 if self.config.enable_priority_field_hard_safety:
-                    priority_res = evaluate_priority_move_legality(move, active_mon, target_mon, battle, self.config)
+                    priority_res = evaluate_priority_move_legality(
+                        move, active_mon, target_mon, battle, self.config
+                    )
                     if priority_res["blocked"]:
                         applies_priority = True
                         reason = priority_res["reason"]
- 
+
                 # Phase 6.3.6b: Known Ally Redirection Hard Safety
                 applies_ally_redirect = False
                 ally_redirect_reason = ""
                 if self.config.enable_known_ally_redirection_hard_safety:
                     ally_idx = 1 - active_idx
-                    ally = battle.active_pokemon[ally_idx] if ally_idx < len(battle.active_pokemon) else None
+                    ally = (
+                        battle.active_pokemon[ally_idx]
+                        if ally_idx < len(battle.active_pokemon)
+                        else None
+                    )
                     if ally and not getattr(ally, "fainted", False):
-                        redirects, red_reason = ally_redirects_our_single_target_move(move, active_mon, ally, battle)
+                        redirects, red_reason = ally_redirects_our_single_target_move(
+                            move, active_mon, ally, battle
+                        )
                         if redirects:
                             applies_ally_redirect = True
                             ally_redirect_reason = red_reason
                             if is_selected:
-                                self._known_ally_redirect_selected[battle_tag][active_idx] = True
-                                self._known_ally_redirect_reason[battle_tag][active_idx] = red_reason
-                                self._known_ally_redirect_ally_species[battle_tag][active_idx] = ally.species
-                                self._known_ally_redirect_ally_ability[battle_tag][active_idx] = get_known_ability(ally, battle) or ""
-                                self._known_ally_redirect_move_id[battle_tag][active_idx] = getattr(move, "id", "")
+                                self._known_ally_redirect_selected[battle_tag][
+                                    active_idx
+                                ] = True
+                                self._known_ally_redirect_reason[battle_tag][
+                                    active_idx
+                                ] = red_reason
+                                self._known_ally_redirect_ally_species[battle_tag][
+                                    active_idx
+                                ] = ally.species
+                                self._known_ally_redirect_ally_ability[battle_tag][
+                                    active_idx
+                                ] = get_known_ability(ally, battle) or ""
+                                self._known_ally_redirect_move_id[battle_tag][
+                                    active_idx
+                                ] = getattr(move, "id", "")
 
-                if applies or applies_direct or applies_priority or applies_ally_redirect:
+                if (
+                    applies
+                    or applies_direct
+                    or applies_priority
+                    or applies_ally_redirect
+                ):
                     return float(self.config.ability_hard_safety_block_score)
- 
-                if self.config.enable_ability_hard_safety_only and self.config.ability_hard_safety_avoid_redirection:
+
+                if (
+                    self.config.enable_ability_hard_safety_only
+                    and self.config.ability_hard_safety_avoid_redirection
+                ):
                     redirects, red_reason = ability_redirects_single_target_move(
-                        move, target_mon, battle.opponent_active_pokemon, active_mon, battle
+                        move,
+                        target_mon,
+                        battle.opponent_active_pokemon,
+                        active_mon,
+                        battle,
                     )
                     if redirects:
                         red_target = None
                         for opp in battle.opponent_active_pokemon:
-                            if opp and opp != target_mon and not getattr(opp, "fainted", False):
+                            if (
+                                opp
+                                and opp != target_mon
+                                and not getattr(opp, "fainted", False)
+                            ):
                                 opp_ability = get_known_ability(opp, battle)
                                 if opp_ability in ("stormdrain", "lightningrod"):
                                     red_target = opp
                                     break
                         if red_target:
-                            blocks_red, reason_red = ability_hard_blocks_move(move, active_mon, red_target, battle, config=self.config)
-                            if blocks_red and _ability_block_enabled(self.config, reason_red):
+                            blocks_red, reason_red = ability_hard_blocks_move(
+                                move, active_mon, red_target, battle, config=self.config
+                            )
+                            if blocks_red and _ability_block_enabled(
+                                self.config, reason_red
+                            ):
                                 if is_selected:
-                                    self._ability_immune_move_selected[battle_tag][active_idx] = True
-                                    self._ability_block_reason[battle_tag][active_idx] = red_reason
-                                    self._ability_blocked_target_species[battle_tag][active_idx] = red_target.species
-                                    self._ability_blocked_target_ability[battle_tag][active_idx] = get_known_ability(red_target, battle) or ""
-                                return float(self.config.ability_hard_safety_block_score)
- 
+                                    self._ability_immune_move_selected[battle_tag][
+                                        active_idx
+                                    ] = True
+                                    self._ability_block_reason[battle_tag][
+                                        active_idx
+                                    ] = red_reason
+                                    self._ability_blocked_target_species[battle_tag][
+                                        active_idx
+                                    ] = red_target.species
+                                    self._ability_blocked_target_ability[battle_tag][
+                                        active_idx
+                                    ] = get_known_ability(red_target, battle) or ""
+                                return float(
+                                    self.config.ability_hard_safety_block_score
+                                )
+
             elif is_opponent_spread_move(move, order):
                 ability_blocked = []
                 for opp in battle.opponent_active_pokemon:
                     if not opp:
                         continue
-                    blocked, reason = ability_hard_blocks_move(move, active_mon, opp, battle, config=self.config)
+                    blocked, reason = ability_hard_blocks_move(
+                        move, active_mon, opp, battle, config=self.config
+                    )
                     if blocked:
                         ability_blocked.append((opp, reason))
                 if ability_blocked:
                     if is_selected:
                         blocked_target, blocked_reason = ability_blocked[0]
-                        self._ability_immune_move_selected[battle_tag][active_idx] = True
-                        self._ability_block_reason[battle_tag][active_idx] = blocked_reason
-                        self._ability_blocked_target_species[battle_tag][active_idx] = blocked_target.species
-                        self._ability_blocked_target_ability[battle_tag][active_idx] = get_known_ability(blocked_target, battle) or ""
-                        if any(reason == "ground_into_levitate" for _, reason in ability_blocked):
-                            self._ground_into_levitate_selected[battle_tag][active_idx] = True
+                        self._ability_immune_move_selected[battle_tag][active_idx] = (
+                            True
+                        )
+                        self._ability_block_reason[battle_tag][active_idx] = (
+                            blocked_reason
+                        )
+                        self._ability_blocked_target_species[battle_tag][active_idx] = (
+                            blocked_target.species
+                        )
+                        self._ability_blocked_target_ability[battle_tag][active_idx] = (
+                            get_known_ability(blocked_target, battle) or ""
+                        )
+                        if any(
+                            reason == "ground_into_levitate"
+                            for _, reason in ability_blocked
+                        ):
+                            self._ground_into_levitate_selected[battle_tag][
+                                active_idx
+                            ] = True
 
             # Phase 6.1.2: Partial Spread Immunity Penalty and Alternative Gate
             if is_opponent_spread_move(move, order):
-                eff = get_spread_target_effectiveness_with_ability(move, active_mon, battle.opponent_active_pokemon, self.config, battle)
-                
+                eff = get_spread_target_effectiveness_with_ability(
+                    move,
+                    active_mon,
+                    battle.opponent_active_pokemon,
+                    self.config,
+                    battle,
+                )
+
                 # Apply penalty and cap score if enabled
                 if self.config.enable_partial_spread_immunity_penalty:
                     if eff["all_targets_immune"]:
@@ -4669,10 +7393,12 @@ class DoublesDamageAwarePlayer(Player):
                                 if opp and opp.species == opp_name:
                                     opp_mon = opp
                                     break
-                            if opp_mon and self.check_move_will_ko(move, active_mon, opp_mon, battle, config=self.config):
+                            if opp_mon and self.check_move_will_ko(
+                                move, active_mon, opp_mon, battle, config=self.config
+                            ):
                                 expected_ko_on_non_immune_target = True
                                 break
-                                
+
                         # Apply penalty
                         if expected_ko_on_non_immune_target:
                             score *= 0.90
@@ -4686,18 +7412,30 @@ class DoublesDamageAwarePlayer(Player):
                             best_single_score = 0.0
                             best_single_can_ko = False
                             best_single_order = None
-                            
+
                             # Loop through available actions for the same active slot only
-                            for ord in self.get_valid_orders_for_slot(active_idx, battle):
+                            for ord in self.get_valid_orders_for_slot(
+                                active_idx, battle
+                            ):
                                 if ord and isinstance(ord.order, Move):
                                     m = ord.order
                                     # Filter only for single-target damaging moves
-                                    if not is_opponent_spread_move(m, ord) and getattr(m, "base_power", 0) > 0:
-                                        alt_score = self.score_action(ord, active_idx, battle, with_tiebreaker=False, is_selected=False, in_spread_check=True)
+                                    if (
+                                        not is_opponent_spread_move(m, ord)
+                                        and getattr(m, "base_power", 0) > 0
+                                    ):
+                                        alt_score = self.score_action(
+                                            ord,
+                                            active_idx,
+                                            battle,
+                                            with_tiebreaker=False,
+                                            is_selected=False,
+                                            in_spread_check=True,
+                                        )
                                         if alt_score > best_single_score:
                                             best_single_score = alt_score
                                             best_single_order = ord
-                                            
+
                                         # Check KO
                                         t_pos = ord.move_target
                                         t_mon = None
@@ -4705,26 +7443,53 @@ class DoublesDamageAwarePlayer(Player):
                                             t_mon = battle.opponent_active_pokemon[0]
                                         elif t_pos == 2:
                                             t_mon = battle.opponent_active_pokemon[1]
-                                        if t_mon and self.check_move_will_ko(m, active_mon, t_mon, battle, config=self.config):
+                                        if t_mon and self.check_move_will_ko(
+                                            m,
+                                            active_mon,
+                                            t_mon,
+                                            battle,
+                                            config=self.config,
+                                        ):
                                             best_single_can_ko = True
-                            
+
                             if is_selected and best_single_order:
-                                self.best_single_alternative_by_battle[battle_tag][active_idx] = best_single_order.order.id
-                                
+                                self.best_single_alternative_by_battle[battle_tag][
+                                    active_idx
+                                ] = best_single_order.order.id
+
                             # If single-target can KO while spread cannot, heavily penalize spread
                             spread_can_ko = expected_ko_on_non_immune_target
                             if best_single_can_ko and not spread_can_ko:
                                 score = max(0.0, score - 200.0)
                             # If single-target score is close (within 30 gap), prefer single target
-                            elif best_single_score > 0.0 and best_single_score >= score - self.config.partial_spread_prefer_single_target_gap:
+                            elif (
+                                best_single_score > 0.0
+                                and best_single_score
+                                >= score
+                                - self.config.partial_spread_prefer_single_target_gap
+                            ):
                                 score = min(score, best_single_score - 1.0)
-                            
+
                 # Populate audit flags if this is the final selected action rerun
                 if is_selected:
-                    self.partial_immune_spread_by_battle[battle_tag][active_idx] = eff["partial_immunity"]
-                    self.partial_ability_immune_spread_by_battle[battle_tag][active_idx] = get_spread_ability_partial_immunity(move, active_mon, battle.opponent_active_pokemon, self.config, battle)
-                    self.immune_target_species_by_battle[battle_tag][active_idx] = eff["immune_target_names"]
-                    self.damaged_target_species_by_battle[battle_tag][active_idx] = eff["damaged_target_names"]
+                    self.partial_immune_spread_by_battle[battle_tag][active_idx] = eff[
+                        "partial_immunity"
+                    ]
+                    self.partial_ability_immune_spread_by_battle[battle_tag][
+                        active_idx
+                    ] = get_spread_ability_partial_immunity(
+                        move,
+                        active_mon,
+                        battle.opponent_active_pokemon,
+                        self.config,
+                        battle,
+                    )
+                    self.immune_target_species_by_battle[battle_tag][active_idx] = eff[
+                        "immune_target_names"
+                    ]
+                    self.damaged_target_species_by_battle[battle_tag][active_idx] = eff[
+                        "damaged_target_names"
+                    ]
                     if eff["partial_immunity"]:
                         spread_can_ko = False
                         for opp_name in eff["damaged_target_names"]:
@@ -4733,18 +7498,30 @@ class DoublesDamageAwarePlayer(Player):
                                 if opp and opp.species == opp_name:
                                     opp_mon = opp
                                     break
-                            if opp_mon and self.check_move_will_ko(move, active_mon, opp_mon, battle, config=self.config):
+                            if opp_mon and self.check_move_will_ko(
+                                move, active_mon, opp_mon, battle, config=self.config
+                            ):
                                 spread_can_ko = True
                                 break
-                                
+
                         best_single_score = 0.0
                         best_single_can_ko = False
                         best_single_order = None
                         for ord in self.get_valid_orders_for_slot(active_idx, battle):
                             if ord and isinstance(ord.order, Move):
                                 m = ord.order
-                                if not is_opponent_spread_move(m, ord) and getattr(m, "base_power", 0) > 0:
-                                    alt_score = self.score_action(ord, active_idx, battle, with_tiebreaker=False, is_selected=False, in_spread_check=True)
+                                if (
+                                    not is_opponent_spread_move(m, ord)
+                                    and getattr(m, "base_power", 0) > 0
+                                ):
+                                    alt_score = self.score_action(
+                                        ord,
+                                        active_idx,
+                                        battle,
+                                        with_tiebreaker=False,
+                                        is_selected=False,
+                                        in_spread_check=True,
+                                    )
                                     if alt_score > best_single_score:
                                         best_single_score = alt_score
                                         best_single_order = ord
@@ -4754,22 +7531,35 @@ class DoublesDamageAwarePlayer(Player):
                                         t_mon = battle.opponent_active_pokemon[0]
                                     elif t_pos == 2:
                                         t_mon = battle.opponent_active_pokemon[1]
-                                    if t_mon and self.check_move_will_ko(m, active_mon, t_mon, battle, config=self.config):
+                                    if t_mon and self.check_move_will_ko(
+                                        m, active_mon, t_mon, battle, config=self.config
+                                    ):
                                         best_single_can_ko = True
-                                        
+
                         if best_single_order:
-                            self.best_single_alternative_by_battle[battle_tag][active_idx] = best_single_order.order.id
-                            
+                            self.best_single_alternative_by_battle[battle_tag][
+                                active_idx
+                            ] = best_single_order.order.id
+
                         is_inefficient = False
                         if not spread_can_ko:
                             # Use current score for comparison (might or might not be penalized/capped depending on config)
-                            if best_single_score > 0.0 and best_single_score >= score - self.config.partial_spread_prefer_single_target_gap:
+                            if (
+                                best_single_score > 0.0
+                                and best_single_score
+                                >= score
+                                - self.config.partial_spread_prefer_single_target_gap
+                            ):
                                 is_inefficient = True
                             if best_single_can_ko:
                                 is_inefficient = True
-                                
-                        self.inefficient_partial_spread_by_battle[battle_tag][active_idx] = is_inefficient
-                        self.efficient_partial_spread_by_battle[battle_tag][active_idx] = not is_inefficient
+
+                        self.inefficient_partial_spread_by_battle[battle_tag][
+                            active_idx
+                        ] = is_inefficient
+                        self.efficient_partial_spread_by_battle[battle_tag][
+                            active_idx
+                        ] = not is_inefficient
 
             if score <= 0.0:
                 return 0.0
@@ -4789,36 +7579,52 @@ class DoublesDamageAwarePlayer(Player):
                         is_safe = False
                         benefits = False
                         if self.config.enable_ability_awareness:
-                            safe, reason = ability_rules.ally_is_safe_from_move(ally, move)
+                            safe, reason = ability_rules.ally_is_safe_from_move(
+                                ally, move
+                            )
                             if safe:
                                 is_safe = True
                                 if self.verbose:
-                                    print(f"[Ally Safe Spread] {reason} | Ally Ability: {ability_rules.get_known_ability(ally)}")
-                                self.increment_metric(self.ally_safe_spreads_by_battle, battle.battle_tag)
-                            absorbs, reason = ability_rules.ability_absorbs_or_benefits(ally, move)
+                                    print(
+                                        f"[Ally Safe Spread] {reason} | Ally Ability: {ability_rules.get_known_ability(ally)}"
+                                    )
+                                self.increment_metric(
+                                    self.ally_safe_spreads_by_battle, battle.battle_tag
+                                )
+                            absorbs, reason = ability_rules.ability_absorbs_or_benefits(
+                                ally, move
+                            )
                             if absorbs:
                                 benefits = True
                         else:
                             is_safe = self.ally_safe_against_move(ally, move)
-                            if not is_safe and self.config.enable_ability_hard_safety_only and self.config.ability_hard_safety_ally_spread_safety:
-                                ability_safe, reason = ally_ability_makes_safe(ally, move, battle)
+                            if (
+                                not is_safe
+                                and self.config.enable_ability_hard_safety_only
+                                and self.config.ability_hard_safety_ally_spread_safety
+                            ):
+                                ability_safe, reason = ally_ability_makes_safe(
+                                    ally, move, battle
+                                )
                                 if ability_safe:
                                     is_safe = True
                                     if is_selected:
-                                        self._ally_ability_safe_spread[battle_tag][active_idx] = True
-                            
+                                        self._ally_ability_safe_spread[battle_tag][
+                                            active_idx
+                                        ] = True
+
                         if not is_safe:
                             score = max(0.0, score * 0.2 - self.config.ally_hit_penalty)
                         elif benefits:
                             if self.verbose:
-                                print(f"[Ally Benefits Spread] {reason} | Ally Ability: {ability_rules.get_known_ability(ally)} (+30 bonus)")
+                                print(
+                                    f"[Ally Benefits Spread] {reason} | Ally Ability: {ability_rules.get_known_ability(ally)} (+30 bonus)"
+                                )
                             score += 30.0
                 else:
                     active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
                     if len(active_opps) == 2:
                         score += self.config.spread_bonus
-
-
 
             # Target preferences (only if targeting an opponent)
             if target_mon and target_pos in (1, 2):
@@ -4831,7 +7637,9 @@ class DoublesDamageAwarePlayer(Player):
                     threat_score = self.score_opponent_threat(target_mon, battle)
                     score += threat_score * self.config.threat_targeting_weight
 
-                if self.check_move_will_ko(move, active_mon, target_mon, battle, config=self.config):
+                if self.check_move_will_ko(
+                    move, active_mon, target_mon, battle, config=self.config
+                ):
                     score += self.config.ko_bonus
                     if priority > 0:
                         score += 100.0
@@ -4843,56 +7651,93 @@ class DoublesDamageAwarePlayer(Player):
                     spa_boost = boosts.get("spa", 0)
                     spe_boost = boosts.get("spe", 0)
                     max_boost = max(atk_boost, spa_boost, spe_boost)
-                    
+
                     if max_boost >= self.config.boosted_override_min_stage:
                         # Check normal conditions
                         any_ko_exists = False
-                        for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                            if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                t_mon = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                if t_mon and self.check_move_will_ko(cand_order.order, active_mon, t_mon, battle, config=self.config):
+                        for cand_order in self.get_valid_orders_for_slot(
+                            active_idx, battle
+                        ):
+                            if isinstance(
+                                cand_order.order, Move
+                            ) and cand_order.move_target in (1, 2):
+                                t_mon = battle.opponent_active_pokemon[
+                                    cand_order.move_target - 1
+                                ]
+                                if t_mon and self.check_move_will_ko(
+                                    cand_order.order,
+                                    active_mon,
+                                    t_mon,
+                                    battle,
+                                    config=self.config,
+                                ):
                                     any_ko_exists = True
                                     break
-                                    
+
                         any_opp_low_hp = False
                         for opp in battle.opponent_active_pokemon:
-                            if opp and getattr(opp, "current_hp_fraction", 1.0) < self.config.low_hp_target_threshold:
+                            if (
+                                opp
+                                and getattr(opp, "current_hp_fraction", 1.0)
+                                < self.config.low_hp_target_threshold
+                            ):
                                 any_opp_low_hp = True
                                 break
-                                
-                        is_emergency = max_boost >= self.config.boosted_override_emergency_stage
-                        
+
+                        is_emergency = (
+                            max_boost >= self.config.boosted_override_emergency_stage
+                        )
+
                         if is_emergency or (not any_ko_exists and not any_opp_low_hp):
                             score += self.config.boosted_threat_bonus
- 
+
                 # Gated threat tiebreaker
                 if with_tiebreaker and self.config.enable_threat_tiebreaker:
                     # Retrieve/populate cache for active_idx if not already populated
                     if not self._base_scores_cache[active_idx]:
-                        for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                            self._base_scores_cache[active_idx][id(cand_order)] = self.score_action(
-                                cand_order, active_idx, battle, with_tiebreaker=False
+                        for cand_order in self.get_valid_orders_for_slot(
+                            active_idx, battle
+                        ):
+                            self._base_scores_cache[active_idx][id(cand_order)] = (
+                                self.score_action(
+                                    cand_order,
+                                    active_idx,
+                                    battle,
+                                    with_tiebreaker=False,
+                                )
                             )
-                            
+
                     # Conditions:
                     # 1. Action is a damaging move (BP > 0)
                     # 2. Target is an opponent (checked by outer block)
                     # 3. No candidate move can KO an opponent
                     any_ko_exists = False
-                    for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                        if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                            t_mon = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                            if t_mon and self.check_move_will_ko(cand_order.order, active_mon, t_mon, battle, config=self.config):
+                    for cand_order in self.get_valid_orders_for_slot(
+                        active_idx, battle
+                    ):
+                        if isinstance(
+                            cand_order.order, Move
+                        ) and cand_order.move_target in (1, 2):
+                            t_mon = battle.opponent_active_pokemon[
+                                cand_order.move_target - 1
+                            ]
+                            if t_mon and self.check_move_will_ko(
+                                cand_order.order,
+                                active_mon,
+                                t_mon,
+                                battle,
+                                config=self.config,
+                            ):
                                 any_ko_exists = True
                                 break
-                                
+
                     # 4. No opponent has HP below 35%
                     any_opp_low_hp = False
                     for opp in battle.opponent_active_pokemon:
                         if opp and getattr(opp, "current_hp_fraction", 1.0) < 0.35:
                             any_opp_low_hp = True
                             break
-                            
+
                     if not any_ko_exists and not any_opp_low_hp:
                         # 5. Top candidate scores are close (gap <= threat_tiebreaker_score_gap)
                         cands = list(self._base_scores_cache[active_idx].values())
@@ -4900,12 +7745,18 @@ class DoublesDamageAwarePlayer(Player):
                             cands.sort(reverse=True)
                             gap = cands[0] - cands[1]
                             if gap <= self.config.threat_tiebreaker_score_gap:
-                                threat_score = self.score_opponent_threat(target_mon, battle)
-                                score += threat_score * self.config.threat_tiebreaker_weight
+                                threat_score = self.score_opponent_threat(
+                                    target_mon, battle
+                                )
+                                score += (
+                                    threat_score * self.config.threat_tiebreaker_weight
+                                )
 
             elif target_pos == 0:
                 for opp in battle.opponent_active_pokemon:
-                    if opp and self.check_move_will_ko(move, active_mon, opp, battle, config=self.config):
+                    if opp and self.check_move_will_ko(
+                        move, active_mon, opp, battle, config=self.config
+                    ):
                         score += 150.0
 
             # Recoil/Self-destruct
@@ -4917,7 +7768,10 @@ class DoublesDamageAwarePlayer(Player):
                 score -= 50.0
 
             # Phase 5.2 / 5.3: Random-Set-Aware Opponent Modeling Adjustments
-            if self.config.enable_random_set_opponent_modeling and self.random_set_engine:
+            if (
+                self.config.enable_random_set_opponent_modeling
+                and self.random_set_engine
+            ):
                 rs_base_score = score
                 rs_protect_bonus = 0.0
                 rs_targeting_bonus = 0.0
@@ -4925,6 +7779,7 @@ class DoublesDamageAwarePlayer(Player):
 
                 # Resolve thresholds: per-rule override (if > 0) else global
                 global_thr = cfg.random_set_probability_threshold
+
                 def _thr(per_rule: float) -> float:
                     return per_rule if per_rule > 0.0 else global_thr
 
@@ -4932,96 +7787,190 @@ class DoublesDamageAwarePlayer(Player):
                 our_hp_fraction = getattr(active_mon, "current_hp_fraction", 1.0)
 
                 # -- Protect-level adjustments --
-                if move.id in ("protect", "detect", "spikyshield", "kingsshield",
-                               "banefulbunker", "silktrap", "burningbulwark"):
-
+                if move.id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "kingsshield",
+                    "banefulbunker",
+                    "silktrap",
+                    "burningbulwark",
+                ):
                     # Rule 2: Fake Out danger -- first-turn opponent
                     if cfg.rs_enable_fakeout_bonus:
                         fo_thr = _thr(cfg.rs_fakeout_threshold)
-                        fo_delta = cfg.rs_fakeout_protect_delta if cfg.rs_fakeout_protect_delta > 0.0 else 18.0
+                        fo_delta = (
+                            cfg.rs_fakeout_protect_delta
+                            if cfg.rs_fakeout_protect_delta > 0.0
+                            else 18.0
+                        )
                         for opp_idx, opp in enumerate(active_opps):
                             opp_id = self.get_pokemon_identifier(opp)
                             key = (opp_idx, opp_id)
                             opp_active_turns_count = 1
-                            if hasattr(self, "opponent_active_turns") and battle_tag in self.opponent_active_turns:
+                            if (
+                                hasattr(self, "opponent_active_turns")
+                                and battle_tag in self.opponent_active_turns
+                            ):
                                 if key in self.opponent_active_turns[battle_tag]:
-                                    opp_active_turns_count, _ = self.opponent_active_turns[battle_tag][key]
+                                    opp_active_turns_count, _ = (
+                                        self.opponent_active_turns[battle_tag][key]
+                                    )
                             if opp_active_turns_count == 1:
                                 opp_revealed = list(opp.moves.keys())
-                                likely_fo, prob, _ = self.random_set_engine.likely_has_fake_out(
-                                    opp.species, opp_revealed, threshold=fo_thr
+                                likely_fo, prob, _ = (
+                                    self.random_set_engine.likely_has_fake_out(
+                                        opp.species, opp_revealed, threshold=fo_thr
+                                    )
                                 )
                                 if likely_fo:
-                                    our_ability = ability_rules.get_known_ability(active_mon)
-                                    vulnerable = our_ability not in ("innerfocus", "shielddust")
+                                    our_ability = ability_rules.get_known_ability(
+                                        active_mon
+                                    )
+                                    vulnerable = our_ability not in (
+                                        "innerfocus",
+                                        "shielddust",
+                                    )
                                     if vulnerable:
                                         rs_protect_bonus += fo_delta
-                                        self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                        self.increment_metric(
+                                            self.rs_candidate_predictions_by_battle,
+                                            battle_tag,
+                                        )
                                         if is_selected:
-                                            self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                            self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                            self.increment_metric(self.rs_fakeout_predictions_by_battle, battle_tag)
+                                            self.increment_metric(
+                                                self.rs_selected_predictions_by_battle,
+                                                battle_tag,
+                                            )
+                                            self.increment_metric(
+                                                self.rs_predictions_used_by_battle,
+                                                battle_tag,
+                                            )
+                                            self.increment_metric(
+                                                self.rs_fakeout_predictions_by_battle,
+                                                battle_tag,
+                                            )
                                             if self.verbose:
-                                                print(f"[RS Prediction] fakeout: {opp.species} p={prob:.2f} +{fo_delta}")
+                                                print(
+                                                    f"[RS Prediction] fakeout: {opp.species} p={prob:.2f} +{fo_delta}"
+                                                )
 
                     # Rule 3: Priority danger -- our HP < 20%
                     if cfg.rs_enable_priority_bonus and our_hp_fraction < 0.20:
                         prio_thr = _thr(cfg.rs_priority_threshold)
-                        prio_delta = cfg.rs_priority_protect_delta if cfg.rs_priority_protect_delta > 0.0 else 20.0
+                        prio_delta = (
+                            cfg.rs_priority_protect_delta
+                            if cfg.rs_priority_protect_delta > 0.0
+                            else 20.0
+                        )
                         for opp in active_opps:
                             opp_revealed = list(opp.moves.keys())
-                            likely_prio, prob, _ = self.random_set_engine.likely_has_priority(
-                                opp.species, opp_revealed, threshold=prio_thr
+                            likely_prio, prob, _ = (
+                                self.random_set_engine.likely_has_priority(
+                                    opp.species, opp_revealed, threshold=prio_thr
+                                )
                             )
                             if likely_prio:
                                 rs_protect_bonus += prio_delta
-                                self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.rs_candidate_predictions_by_battle, battle_tag
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_priority_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.rs_selected_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.rs_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.rs_priority_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if self.verbose:
-                                        print(f"[RS Prediction] priority: {opp.species} p={prob:.2f} +{prio_delta}")
+                                        print(
+                                            f"[RS Prediction] priority: {opp.species} p={prob:.2f} +{prio_delta}"
+                                        )
 
                     # Rule 4: Spread move danger -- our HP < rs_spread_hp_threshold (default 0.30)
-                    if cfg.rs_enable_spread_bonus and our_hp_fraction < cfg.rs_spread_hp_threshold:
+                    if (
+                        cfg.rs_enable_spread_bonus
+                        and our_hp_fraction < cfg.rs_spread_hp_threshold
+                    ):
                         spread_thr = _thr(cfg.rs_spread_threshold)
-                        spread_delta = cfg.rs_spread_protect_delta if cfg.rs_spread_protect_delta > 0.0 else 12.0
+                        spread_delta = (
+                            cfg.rs_spread_protect_delta
+                            if cfg.rs_spread_protect_delta > 0.0
+                            else 12.0
+                        )
                         for opp in active_opps:
                             opp_revealed = list(opp.moves.keys())
-                            likely_spread, prob, _ = self.random_set_engine.likely_has_spread_move(
-                                opp.species, opp_revealed, threshold=spread_thr
+                            likely_spread, prob, _ = (
+                                self.random_set_engine.likely_has_spread_move(
+                                    opp.species, opp_revealed, threshold=spread_thr
+                                )
                             )
                             if likely_spread:
                                 rs_protect_bonus += spread_delta
-                                self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.rs_candidate_predictions_by_battle, battle_tag
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_spread_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.rs_selected_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.rs_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.rs_spread_predictions_by_battle, battle_tag
+                                    )
                                     if self.verbose:
-                                        print(f"[RS Prediction] spread: {opp.species} p={prob:.2f} +{spread_delta}")
+                                        print(
+                                            f"[RS Prediction] spread: {opp.species} p={prob:.2f} +{spread_delta}"
+                                        )
 
                     # Rule 6: Speed control danger -- our HP < 40%
                     if cfg.rs_enable_speed_control_bonus and our_hp_fraction < 0.40:
                         sc_thr = _thr(cfg.rs_speed_control_threshold)
-                        sc_delta = cfg.rs_speed_control_protect_delta if cfg.rs_speed_control_protect_delta > 0.0 else 8.0
+                        sc_delta = (
+                            cfg.rs_speed_control_protect_delta
+                            if cfg.rs_speed_control_protect_delta > 0.0
+                            else 8.0
+                        )
                         for opp in active_opps:
                             opp_revealed = list(opp.moves.keys())
-                            likely_sc, prob, _ = self.random_set_engine.likely_has_speed_control(
-                                opp.species, opp_revealed, threshold=sc_thr
+                            likely_sc, prob, _ = (
+                                self.random_set_engine.likely_has_speed_control(
+                                    opp.species, opp_revealed, threshold=sc_thr
+                                )
                             )
                             if likely_sc:
                                 rs_protect_bonus += sc_delta
-                                self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.rs_candidate_predictions_by_battle, battle_tag
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_speed_control_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.rs_selected_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.rs_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.rs_speed_control_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if self.verbose:
-                                        print(f"[RS Prediction] speed_control: {opp.species} p={prob:.2f} +{sc_delta}")
+                                        print(
+                                            f"[RS Prediction] speed_control: {opp.species} p={prob:.2f} +{sc_delta}"
+                                        )
 
-                    rs_protect_bonus = min(rs_protect_bonus, cfg.random_set_max_protect_bonus_per_active)
+                    rs_protect_bonus = min(
+                        rs_protect_bonus, cfg.random_set_max_protect_bonus_per_active
+                    )
                     score += rs_protect_bonus
 
                 # -- Targeting-level adjustments (damaging moves vs opponent) --
@@ -5033,9 +7982,16 @@ class DoublesDamageAwarePlayer(Player):
                     if cfg.rs_close_score_gate_enabled:
                         # Populate cache if needed
                         if not self._base_scores_cache[active_idx]:
-                            for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                                self._base_scores_cache[active_idx][id(cand_order)] = self.score_action(
-                                    cand_order, active_idx, battle, with_tiebreaker=False
+                            for cand_order in self.get_valid_orders_for_slot(
+                                active_idx, battle
+                            ):
+                                self._base_scores_cache[active_idx][id(cand_order)] = (
+                                    self.score_action(
+                                        cand_order,
+                                        active_idx,
+                                        battle,
+                                        with_tiebreaker=False,
+                                    )
                                 )
                         cands = list(self._base_scores_cache[active_idx].values())
                         if len(cands) >= 2:
@@ -5047,12 +8003,27 @@ class DoublesDamageAwarePlayer(Player):
                         any_low_hp_cl = False
                         for t_opp in active_opps:
                             if t_opp:
-                                if getattr(t_opp, "current_hp_fraction", 1.0) < cfg.low_hp_target_threshold:
+                                if (
+                                    getattr(t_opp, "current_hp_fraction", 1.0)
+                                    < cfg.low_hp_target_threshold
+                                ):
                                     any_low_hp_cl = True
-                                for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                                    if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                        cand_t = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                        if cand_t and self.check_move_will_ko(cand_order.order, active_mon, cand_t, battle, config=self.config):
+                                for cand_order in self.get_valid_orders_for_slot(
+                                    active_idx, battle
+                                ):
+                                    if isinstance(
+                                        cand_order.order, Move
+                                    ) and cand_order.move_target in (1, 2):
+                                        cand_t = battle.opponent_active_pokemon[
+                                            cand_order.move_target - 1
+                                        ]
+                                        if cand_t and self.check_move_will_ko(
+                                            cand_order.order,
+                                            active_mon,
+                                            cand_t,
+                                            battle,
+                                            config=self.config,
+                                        ):
                                             any_ko_cl = True
                                             break
                         if any_ko_cl or any_low_hp_cl:
@@ -5062,49 +8033,106 @@ class DoublesDamageAwarePlayer(Player):
                         # Rule 5: Setup move danger -- only if no KO and no low-HP target
                         if cfg.rs_enable_setup_targeting:
                             setup_thr = _thr(cfg.rs_setup_threshold)
-                            setup_delta = cfg.rs_setup_targeting_delta if cfg.rs_setup_targeting_delta > 0.0 else 8.0
+                            setup_delta = (
+                                cfg.rs_setup_targeting_delta
+                                if cfg.rs_setup_targeting_delta > 0.0
+                                else 8.0
+                            )
                             any_ko_exists = False
                             any_low_hp = False
                             for t_opp in active_opps:
                                 if t_opp:
-                                    if getattr(t_opp, "current_hp_fraction", 1.0) < cfg.low_hp_target_threshold:
+                                    if (
+                                        getattr(t_opp, "current_hp_fraction", 1.0)
+                                        < cfg.low_hp_target_threshold
+                                    ):
                                         any_low_hp = True
-                                    for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                                        if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                            cand_t = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                            if cand_t and self.check_move_will_ko(cand_order.order, active_mon, cand_t, battle, config=self.config):
+                                    for cand_order in self.get_valid_orders_for_slot(
+                                        active_idx, battle
+                                    ):
+                                        if isinstance(
+                                            cand_order.order, Move
+                                        ) and cand_order.move_target in (1, 2):
+                                            cand_t = battle.opponent_active_pokemon[
+                                                cand_order.move_target - 1
+                                            ]
+                                            if cand_t and self.check_move_will_ko(
+                                                cand_order.order,
+                                                active_mon,
+                                                cand_t,
+                                                battle,
+                                                config=self.config,
+                                            ):
                                                 any_ko_exists = True
                                                 break
                             if not any_ko_exists and not any_low_hp:
-                                likely_setup, prob, _ = self.random_set_engine.likely_has_setup_move(
-                                    target_mon.species, opp_revealed, threshold=setup_thr
+                                likely_setup, prob, _ = (
+                                    self.random_set_engine.likely_has_setup_move(
+                                        target_mon.species,
+                                        opp_revealed,
+                                        threshold=setup_thr,
+                                    )
                                 )
                                 if likely_setup:
                                     rs_targeting_bonus += setup_delta
-                                    self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.rs_candidate_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if is_selected:
-                                        self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                        self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                        self.increment_metric(self.rs_setup_predictions_by_battle, battle_tag)
+                                        self.increment_metric(
+                                            self.rs_selected_predictions_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.rs_predictions_used_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.rs_setup_predictions_by_battle,
+                                            battle_tag,
+                                        )
                                         if self.verbose:
-                                            print(f"[RS Prediction] setup: {target_mon.species} p={prob:.2f} +{setup_delta}")
+                                            print(
+                                                f"[RS Prediction] setup: {target_mon.species} p={prob:.2f} +{setup_delta}"
+                                            )
 
                         # Rule 3 (KO targeting): priority user KO bonus
-                        if cfg.rs_enable_priority_bonus and self.check_move_will_ko(move, active_mon, target_mon, battle, config=self.config):
+                        if cfg.rs_enable_priority_bonus and self.check_move_will_ko(
+                            move, active_mon, target_mon, battle, config=self.config
+                        ):
                             prio_thr = _thr(cfg.rs_priority_threshold)
-                            likely_prio, prob, _ = self.random_set_engine.likely_has_priority(
-                                target_mon.species, opp_revealed, threshold=prio_thr
+                            likely_prio, prob, _ = (
+                                self.random_set_engine.likely_has_priority(
+                                    target_mon.species, opp_revealed, threshold=prio_thr
+                                )
                             )
                             if likely_prio:
-                                prio_ko_delta = cfg.rs_priority_protect_delta if cfg.rs_priority_protect_delta > 0.0 else 12.0
+                                prio_ko_delta = (
+                                    cfg.rs_priority_protect_delta
+                                    if cfg.rs_priority_protect_delta > 0.0
+                                    else 12.0
+                                )
                                 rs_targeting_bonus += prio_ko_delta
-                                self.increment_metric(self.rs_candidate_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.rs_candidate_predictions_by_battle, battle_tag
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.rs_priority_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.rs_selected_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.rs_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.rs_priority_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if self.verbose:
-                                        print(f"[RS Prediction] priority_ko: {target_mon.species} p={prob:.2f} +{prio_ko_delta}")
+                                        print(
+                                            f"[RS Prediction] priority_ko: {target_mon.species} p={prob:.2f} +{prio_ko_delta}"
+                                        )
 
                 score += rs_targeting_bonus
 
@@ -5112,12 +8140,15 @@ class DoublesDamageAwarePlayer(Player):
                 rs_diff = score - rs_base_score
                 if abs(rs_diff) > cfg.random_set_max_score_delta_per_turn:
                     sign = 1.0 if rs_diff > 0 else -1.0
-                    score = rs_base_score + sign * cfg.random_set_max_score_delta_per_turn
+                    score = (
+                        rs_base_score + sign * cfg.random_set_max_score_delta_per_turn
+                    )
                     rs_diff = sign * cfg.random_set_max_score_delta_per_turn
 
                 if is_selected and abs(rs_diff) > 0.0:
                     self.rs_score_delta_by_battle[battle_tag] = (
-                        self.rs_score_delta_by_battle.get(battle_tag, 0.0) + abs(rs_diff)
+                        self.rs_score_delta_by_battle.get(battle_tag, 0.0)
+                        + abs(rs_diff)
                     )
 
             # Phase 5: Meta-Aware Opponent Modeling Adjustments (old)
@@ -5129,143 +8160,278 @@ class DoublesDamageAwarePlayer(Player):
 
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
                 our_hp_fraction = getattr(active_mon, "current_hp_fraction", 1.0)
-                
+
                 # Check target predictions if it's a move targeting an opponent
                 if target_mon and target_pos in (1, 2):
                     opp_revealed = list(target_mon.moves.keys())
-                    
+
                     # Setup move prediction (Rule 5)
                     # "do not directly target them if a KO or low-HP target exists"
                     any_ko_exists = False
                     any_low_hp = False
                     for t_opp in active_opps:
                         if t_opp:
-                            if getattr(t_opp, "current_hp_fraction", 1.0) < self.config.low_hp_target_threshold:
+                            if (
+                                getattr(t_opp, "current_hp_fraction", 1.0)
+                                < self.config.low_hp_target_threshold
+                            ):
                                 any_low_hp = True
-                            for cand_order in self.get_valid_orders_for_slot(active_idx, battle):
-                                if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                    cand_t_mon = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                    if cand_t_mon and self.check_move_will_ko(cand_order.order, active_mon, cand_t_mon, battle, config=self.config):
+                            for cand_order in self.get_valid_orders_for_slot(
+                                active_idx, battle
+                            ):
+                                if isinstance(
+                                    cand_order.order, Move
+                                ) and cand_order.move_target in (1, 2):
+                                    cand_t_mon = battle.opponent_active_pokemon[
+                                        cand_order.move_target - 1
+                                    ]
+                                    if cand_t_mon and self.check_move_will_ko(
+                                        cand_order.order,
+                                        active_mon,
+                                        cand_t_mon,
+                                        battle,
+                                        config=self.config,
+                                    ):
                                         any_ko_exists = True
                                         break
-                    
+
                     if not any_ko_exists and not any_low_hp:
-                        likely_setup, prob, reason = self.meta_engine.likely_has_setup_move(
-                            target_mon.species, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                        likely_setup, prob, reason = (
+                            self.meta_engine.likely_has_setup_move(
+                                target_mon.species,
+                                opp_revealed,
+                                threshold=self.config.meta_move_probability_threshold,
+                            )
                         )
                         if likely_setup:
                             meta_targeting_bonus += 10.0
-                            self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                            self.increment_metric(
+                                self.candidate_meta_predictions_by_battle, battle_tag
+                            )
                             if is_selected:
-                                self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                self.increment_metric(self.meta_setup_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.selected_meta_predictions_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_predictions_used_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_setup_predictions_by_battle, battle_tag
+                                )
                                 if self.verbose:
-                                    print(f"[Meta Prediction] species={target_mon.species} type=setup prob={prob:.2f} action=target_setup delta=+10.0")
+                                    print(
+                                        f"[Meta Prediction] species={target_mon.species} type=setup prob={prob:.2f} action=target_setup delta=+10.0"
+                                    )
 
                     # Priority KO check (Rule 3)
                     # "only add a small target preference bonus if our move can KO the priority user and scores are already close"
-                    if self.check_move_will_ko(move, active_mon, target_mon, battle, config=self.config):
-                        likely_prio, prob, reason = self.meta_engine.likely_has_priority(
-                            target_mon.species, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                    if self.check_move_will_ko(
+                        move, active_mon, target_mon, battle, config=self.config
+                    ):
+                        likely_prio, prob, reason = (
+                            self.meta_engine.likely_has_priority(
+                                target_mon.species,
+                                opp_revealed,
+                                threshold=self.config.meta_move_probability_threshold,
+                            )
                         )
                         if likely_prio:
                             meta_targeting_bonus += 15.0
-                            self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                            self.increment_metric(
+                                self.candidate_meta_predictions_by_battle, battle_tag
+                            )
                             if is_selected:
-                                self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                self.increment_metric(self.meta_priority_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.selected_meta_predictions_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_predictions_used_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_priority_predictions_by_battle, battle_tag
+                                )
                                 if self.verbose:
-                                    print(f"[Meta Prediction] species={target_mon.species} type=priority_ko prob={prob:.2f} action=target_ko_priority delta=+15.0")
+                                    print(
+                                        f"[Meta Prediction] species={target_mon.species} type=priority_ko prob={prob:.2f} action=target_ko_priority delta=+15.0"
+                                    )
 
                 # Check general threat predictions for Protect modifications (Rules 2, 3, 4, 6)
-                if move.id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker"):
+                if move.id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "kingsshield",
+                    "banefulbunker",
+                ):
                     # Rule 2: Fake Out Danger
                     for opp_idx, opp in enumerate(active_opps):
                         opp_id = self.get_pokemon_identifier(opp)
                         key = (opp_idx, opp_id)
                         opp_active_turns_count = 1
-                        if battle_tag in self.opponent_active_turns and key in self.opponent_active_turns[battle_tag]:
-                            opp_active_turns_count, last_turn = self.opponent_active_turns[battle_tag][key]
-                        
+                        if (
+                            battle_tag in self.opponent_active_turns
+                            and key in self.opponent_active_turns[battle_tag]
+                        ):
+                            opp_active_turns_count, last_turn = (
+                                self.opponent_active_turns[battle_tag][key]
+                            )
+
                         if opp_active_turns_count == 1:
                             opp_revealed = list(opp.moves.keys())
-                            likely_fo, prob, reason = self.meta_engine.likely_has_fake_out(
-                                opp.species, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                            likely_fo, prob, reason = (
+                                self.meta_engine.likely_has_fake_out(
+                                    opp.species,
+                                    opp_revealed,
+                                    threshold=self.config.meta_move_probability_threshold,
+                                )
                             )
                             if likely_fo:
-                                our_ability = ability_rules.get_known_ability(active_mon)
-                                vulnerable = our_ability not in ("innerfocus", "shielddust")
+                                our_ability = ability_rules.get_known_ability(
+                                    active_mon
+                                )
+                                vulnerable = our_ability not in (
+                                    "innerfocus",
+                                    "shielddust",
+                                )
                                 if vulnerable:
                                     meta_protect_bonus += 20.0
-                                    self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.candidate_meta_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if is_selected:
-                                        self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                        self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                        self.increment_metric(self.meta_fakeout_predictions_by_battle, battle_tag)
+                                        self.increment_metric(
+                                            self.selected_meta_predictions_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.meta_predictions_used_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.meta_fakeout_predictions_by_battle,
+                                            battle_tag,
+                                        )
                                         if self.verbose:
-                                            print(f"[Meta Prediction] species={opp.species} type=fakeout prob={prob:.2f} action=protect_bonus_fakeout delta=+20.0")
+                                            print(
+                                                f"[Meta Prediction] species={opp.species} type=fakeout prob={prob:.2f} action=protect_bonus_fakeout delta=+20.0"
+                                            )
 
                     # Rule 3: Priority Danger
                     if our_hp_fraction < 0.20:
                         for opp in active_opps:
                             opp_revealed = list(opp.moves.keys())
-                            likely_prio, prob, reason = self.meta_engine.likely_has_priority(
-                                opp.species, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                            likely_prio, prob, reason = (
+                                self.meta_engine.likely_has_priority(
+                                    opp.species,
+                                    opp_revealed,
+                                    threshold=self.config.meta_move_probability_threshold,
+                                )
                             )
                             if likely_prio:
                                 meta_protect_bonus += 25.0
-                                self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.candidate_meta_predictions_by_battle,
+                                    battle_tag,
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.meta_priority_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.selected_meta_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.meta_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.meta_priority_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if self.verbose:
-                                        print(f"[Meta Prediction] species={opp.species} type=priority prob={prob:.2f} action=protect_bonus_priority delta=+25.0")
+                                        print(
+                                            f"[Meta Prediction] species={opp.species} type=priority prob={prob:.2f} action=protect_bonus_priority delta=+25.0"
+                                        )
 
                     # Rule 4: Spread Move Danger
                     if our_hp_fraction < 0.30:
                         for opp in active_opps:
                             opp_revealed = list(opp.moves.keys())
-                            likely_spread, prob, reason = self.meta_engine.likely_has_spread_move(
-                                opp.species, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                            likely_spread, prob, reason = (
+                                self.meta_engine.likely_has_spread_move(
+                                    opp.species,
+                                    opp_revealed,
+                                    threshold=self.config.meta_move_probability_threshold,
+                                )
                             )
                             if likely_spread:
                                 meta_protect_bonus += 15.0
-                                self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.candidate_meta_predictions_by_battle,
+                                    battle_tag,
+                                )
                                 if is_selected:
-                                    self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                    self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                    self.increment_metric(self.meta_spread_predictions_by_battle, battle_tag)
+                                    self.increment_metric(
+                                        self.selected_meta_predictions_by_battle,
+                                        battle_tag,
+                                    )
+                                    self.increment_metric(
+                                        self.meta_predictions_used_by_battle, battle_tag
+                                    )
+                                    self.increment_metric(
+                                        self.meta_spread_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if self.verbose:
-                                        print(f"[Meta Prediction] species={opp.species} type=spread prob={prob:.2f} action=protect_bonus_spread delta=+15.0")
+                                        print(
+                                            f"[Meta Prediction] species={opp.species} type=spread prob={prob:.2f} action=protect_bonus_spread delta=+15.0"
+                                        )
 
                     # Rule 6: Super-effective Coverage
                     for opp in active_opps:
                         opp_revealed = list(opp.moves.keys())
-                        likely_se, prob, reason = self.meta_engine.likely_has_super_effective_coverage(
-                            opp.species, active_mon, opp_revealed, threshold=self.config.meta_move_probability_threshold
+                        likely_se, prob, reason = (
+                            self.meta_engine.likely_has_super_effective_coverage(
+                                opp.species,
+                                active_mon,
+                                opp_revealed,
+                                threshold=self.config.meta_move_probability_threshold,
+                            )
                         )
                         if likely_se:
                             meta_protect_bonus += 15.0
-                            self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                            self.increment_metric(
+                                self.candidate_meta_predictions_by_battle, battle_tag
+                            )
                             if is_selected:
-                                self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                self.increment_metric(self.meta_coverage_predictions_by_battle, battle_tag)
+                                self.increment_metric(
+                                    self.selected_meta_predictions_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_predictions_used_by_battle, battle_tag
+                                )
+                                self.increment_metric(
+                                    self.meta_coverage_predictions_by_battle, battle_tag
+                                )
                                 if self.verbose:
-                                    print(f"[Meta Prediction] species={opp.species} type=coverage prob={prob:.2f} action=protect_bonus_coverage delta=+15.0")
+                                    print(
+                                        f"[Meta Prediction] species={opp.species} type=coverage prob={prob:.2f} action=protect_bonus_coverage delta=+15.0"
+                                    )
 
                     # Cap total Protect bonus per active slot
-                    meta_protect_bonus = min(meta_protect_bonus, self.config.meta_max_protect_bonus_per_active)
+                    meta_protect_bonus = min(
+                        meta_protect_bonus,
+                        self.config.meta_max_protect_bonus_per_active,
+                    )
                     score += meta_protect_bonus
 
                 # Apply meta targeting bonuses
                 score += meta_targeting_bonus
 
                 # Part 4: Predicted Ability Soft Rules (disabled by default)
-                if self.config.enable_meta_predicted_ability_soft_rules and target_mon and target_pos in (1, 2):
+                if (
+                    self.config.enable_meta_predicted_ability_soft_rules
+                    and target_mon
+                    and target_pos in (1, 2)
+                ):
                     known_ab = ability_rules.get_known_ability(target_mon)
                     if not known_ab:
                         preds = self.meta_engine.predict_abilities(target_mon.species)
@@ -5274,109 +8440,208 @@ class DoublesDamageAwarePlayer(Player):
                             if prob >= self.config.meta_predicted_ability_threshold:
                                 mtype = ability_rules.get_move_type(move)
                                 is_immune = False
-                                if top_ab == "levitate" and mtype == "ground" and getattr(move, "id", "") != "thousandarrows":
+                                if (
+                                    top_ab == "levitate"
+                                    and mtype == "ground"
+                                    and getattr(move, "id", "") != "thousandarrows"
+                                ):
                                     is_immune = True
                                 elif top_ab == "flashfire" and mtype == "fire":
                                     is_immune = True
-                                elif top_ab in ("waterabsorb", "stormdrain", "dryskin") and mtype == "water":
+                                elif (
+                                    top_ab in ("waterabsorb", "stormdrain", "dryskin")
+                                    and mtype == "water"
+                                ):
                                     is_immune = True
-                                elif top_ab in ("voltabsorb", "lightningrod", "motordrive") and mtype == "electric":
+                                elif (
+                                    top_ab
+                                    in ("voltabsorb", "lightningrod", "motordrive")
+                                    and mtype == "electric"
+                                ):
                                     is_immune = True
                                 elif top_ab == "sapsipper" and mtype == "grass":
                                     is_immune = True
 
                                 if is_immune:
-                                    score *= self.config.meta_predicted_ability_soft_penalty
-                                    self.increment_metric(self.candidate_meta_predictions_by_battle, battle_tag)
+                                    score *= (
+                                        self.config.meta_predicted_ability_soft_penalty
+                                    )
+                                    self.increment_metric(
+                                        self.candidate_meta_predictions_by_battle,
+                                        battle_tag,
+                                    )
                                     if is_selected:
-                                        self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                                        self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                                        self.increment_metric(self.meta_ability_soft_penalties_by_battle, battle_tag)
+                                        self.increment_metric(
+                                            self.selected_meta_predictions_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.meta_predictions_used_by_battle,
+                                            battle_tag,
+                                        )
+                                        self.increment_metric(
+                                            self.meta_ability_soft_penalties_by_battle,
+                                            battle_tag,
+                                        )
                                         if self.verbose:
-                                            print(f"[Meta Prediction] species={target_mon.species} type=predicted_ability_{top_ab} prob={prob:.2f} action=soft_penalty delta=-{abs(score - base_score_before_meta):.1f}")
+                                            print(
+                                                f"[Meta Prediction] species={target_mon.species} type=predicted_ability_{top_ab} prob={prob:.2f} action=soft_penalty delta=-{abs(score - base_score_before_meta):.1f}"
+                                            )
 
                 # Cap total absolute score delta per turn
                 diff = score - base_score_before_meta
                 if abs(diff) > self.config.meta_max_score_delta_per_turn:
                     sign = 1.0 if diff > 0 else -1.0
-                    score = base_score_before_meta + sign * self.config.meta_max_score_delta_per_turn
+                    score = (
+                        base_score_before_meta
+                        + sign * self.config.meta_max_score_delta_per_turn
+                    )
                     diff = sign * self.config.meta_max_score_delta_per_turn
 
                 if is_selected and abs(diff) > 0.0:
-                    self.total_meta_score_delta_by_battle[battle_tag] = self.total_meta_score_delta_by_battle.get(battle_tag, 0.0) + abs(diff)
+                    self.total_meta_score_delta_by_battle[battle_tag] = (
+                        self.total_meta_score_delta_by_battle.get(battle_tag, 0.0)
+                        + abs(diff)
+                    )
 
             if self.config.enable_self_drop_move_penalty:
                 expected_ko = False
                 if target_mon:
-                    expected_ko = self.check_move_will_ko(move, active_mon, target_mon, battle, config=self.config)
+                    expected_ko = self.check_move_will_ko(
+                        move, active_mon, target_mon, battle, config=self.config
+                    )
                 has_alt = False
-                if active_idx is not None and battle.available_moves and len(battle.available_moves) > active_idx:
+                if (
+                    active_idx is not None
+                    and battle.available_moves
+                    and len(battle.available_moves) > active_idx
+                ):
                     avail = battle.available_moves[active_idx]
                     if avail:
                         for m in avail:
-                            if m and getattr(m, "id", "") != move.id and getattr(m, "base_power", 0) > 0:
+                            if (
+                                m
+                                and getattr(m, "id", "") != move.id
+                                and getattr(m, "base_power", 0) > 0
+                            ):
                                 has_alt = True
                                 break
-                multiplier, reason = get_self_stat_drop_penalty(active_mon, move, expected_ko=expected_ko, has_reasonable_alternative=has_alt)
+                multiplier, reason = get_self_stat_drop_penalty(
+                    active_mon,
+                    move,
+                    expected_ko=expected_ko,
+                    has_reasonable_alternative=has_alt,
+                )
                 if multiplier != 1.0:
                     score *= multiplier
                     if self.verbose and reason:
                         print(f"{reason} | score updated to {score:.2f}")
                     if is_selected:
-                        m_id = getattr(move, "id", "").lower().replace(" ", "").replace("-", "").replace("_", "").strip()
-                        if m_id in ("dracometeor", "overheat", "leafstorm", "fleurcannon", "psychoboost"):
-                            self.increment_metric(self.draco_penalties_applied_by_battle, battle_tag)
+                        m_id = (
+                            getattr(move, "id", "")
+                            .lower()
+                            .replace(" ", "")
+                            .replace("-", "")
+                            .replace("_", "")
+                            .strip()
+                        )
+                        if m_id in (
+                            "dracometeor",
+                            "overheat",
+                            "leafstorm",
+                            "fleurcannon",
+                            "psychoboost",
+                        ):
+                            self.increment_metric(
+                                self.draco_penalties_applied_by_battle, battle_tag
+                            )
                         elif m_id == "makeitrain":
-                            self.increment_metric(self.make_it_rain_penalties_applied_by_battle, battle_tag)
+                            self.increment_metric(
+                                self.make_it_rain_penalties_applied_by_battle,
+                                battle_tag,
+                            )
 
             # Phase 6.2 Speed/Priority Attack Penalty
-            if (self.config.enable_speed_priority_awareness and 
-                    not self.config.speed_priority_protect_only and 
-                    move.id not in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker", "silktrap", "burningbulwark")):
-                
+            if (
+                self.config.enable_speed_priority_awareness
+                and not self.config.speed_priority_protect_only
+                and move.id
+                not in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "kingsshield",
+                    "banefulbunker",
+                    "silktrap",
+                    "burningbulwark",
+                )
+            ):
                 active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-                threat_info = self.estimate_speed_priority_threat(active_mon, active_opps, battle, order)
-                
+                threat_info = self.estimate_speed_priority_threat(
+                    active_mon, active_opps, battle, order
+                )
+
                 if threat_info["faint_before_moving"]:
                     bypass = False
-                    
+
                     # 1. KO threat
                     for opp in active_opps:
-                        if opp and opp.species in threat_info["faster_opponents"] + threat_info["priority_opponents"]:
-                            if self.check_move_will_ko(move, active_mon, opp, battle, config=self.config):
+                        if (
+                            opp
+                            and opp.species
+                            in threat_info["faster_opponents"]
+                            + threat_info["priority_opponents"]
+                        ):
+                            if self.check_move_will_ko(
+                                move, active_mon, opp, battle, config=self.config
+                            ):
                                 bypass = True
                                 break
-                                
+
                     # 2. No safe defensive options
-                    has_protect = self.has_legal_protect_like_action(active_mon, battle, slot_index=active_idx)
+                    has_protect = self.has_legal_protect_like_action(
+                        active_mon, battle, slot_index=active_idx
+                    )
                     mon_id = self.get_pokemon_identifier(active_mon)
                     key = (active_idx, mon_id)
                     last_turn = self.last_protect_turn.get(battle_tag, {}).get(key, -9)
-                    protect_consecutive = (current_turn - last_turn == 1)
+                    protect_consecutive = current_turn - last_turn == 1
                     protect_avail = has_protect and not protect_consecutive
-                    
+
                     switch_avail = len(getattr(battle, "available_switches", [])) > 0
-                    
+
                     if not protect_avail and not switch_avail:
                         bypass = True
-                        
+
                     # 3. High value action under threat
-                    if self.is_high_value_action_under_threat(order, active_mon, battle, active_opps):
+                    if self.is_high_value_action_under_threat(
+                        order, active_mon, battle, active_opps
+                    ):
                         bypass = True
-                        
+
                     if not bypass:
                         confidence = threat_info.get("threat_confidence", 1.0)
                         if self.config.speed_priority_use_scaled_penalty:
-                            penalty = self.config.speed_priority_attack_penalty_low + confidence * (self.config.speed_priority_attack_penalty_high - self.config.speed_priority_attack_penalty_low)
+                            penalty = (
+                                self.config.speed_priority_attack_penalty_low
+                                + confidence
+                                * (
+                                    self.config.speed_priority_attack_penalty_high
+                                    - self.config.speed_priority_attack_penalty_low
+                                )
+                            )
                         else:
                             penalty = self.config.speed_priority_attack_penalty
-                        penalty = min(penalty, self.config.speed_priority_max_delta_per_action)
+                        penalty = min(
+                            penalty, self.config.speed_priority_max_delta_per_action
+                        )
                         score -= penalty
                         if is_selected:
-                            self._speed_priority_attack_penalty_applied[battle_tag][active_idx] = True
+                            self._speed_priority_attack_penalty_applied[battle_tag][
+                                active_idx
+                            ] = True
 
             return max(score, 0.0)
-
 
         return 0.0
 
@@ -5403,10 +8668,14 @@ class DoublesDamageAwarePlayer(Player):
             slot_1_scores = {}
             if valid_orders[0]:
                 for order_0 in valid_orders[0]:
-                    slot_0_scores[id(order_0)] = self.score_action(order_0, 0, battle, config=config, pure=pure)
+                    slot_0_scores[id(order_0)] = self.score_action(
+                        order_0, 0, battle, config=config, pure=pure
+                    )
             if valid_orders[1]:
                 for order_1 in valid_orders[1]:
-                    slot_1_scores[id(order_1)] = self.score_action(order_1, 1, battle, config=config, pure=pure)
+                    slot_1_scores[id(order_1)] = self.score_action(
+                        order_1, 1, battle, config=config, pure=pure
+                    )
 
             # 2. Revealed-Move One-Ply Defensive Switch Interception
             if config.enable_revealed_move_switch_interception:
@@ -5414,17 +8683,28 @@ class DoublesDamageAwarePlayer(Player):
                     active_mon = battle.active_pokemon[slot_idx]
                     if not active_mon:
                         continue
-                    if slot_idx < len(battle.force_switch) and battle.force_switch[slot_idx]:
+                    if (
+                        slot_idx < len(battle.force_switch)
+                        and battle.force_switch[slot_idx]
+                    ):
                         continue
 
-                    orders_slot = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
-                    switch_orders = [o for o in orders_slot if o and isinstance(o.order, Pokemon)]
+                    orders_slot = (
+                        valid_orders[slot_idx]
+                        if valid_orders and len(valid_orders) > slot_idx
+                        else []
+                    )
+                    switch_orders = [
+                        o for o in orders_slot if o and isinstance(o.order, Pokemon)
+                    ]
                     if not switch_orders:
                         continue
 
                     active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
                     our_actives = battle.active_pokemon
-                    threats = summarize_revealed_move_threats(active_mon, slot_idx, active_opps, our_actives, battle)
+                    threats = summarize_revealed_move_threats(
+                        active_mon, slot_idx, active_opps, our_actives, battle
+                    )
                     if threats["max_pressure"] <= 0:
                         continue
 
@@ -5432,13 +8712,23 @@ class DoublesDamageAwarePlayer(Player):
                     has_ko_action = False
                     for ord_cand in orders_slot:
                         if ord_cand and isinstance(ord_cand.order, Move):
-                            cand_score = slot_0_scores.get(id(ord_cand), 0.0) if slot_idx == 0 else slot_1_scores.get(id(ord_cand), 0.0)
+                            cand_score = (
+                                slot_0_scores.get(id(ord_cand), 0.0)
+                                if slot_idx == 0
+                                else slot_1_scores.get(id(ord_cand), 0.0)
+                            )
                             if cand_score > best_action_score:
                                 best_action_score = cand_score
                             t_pos = getattr(ord_cand, "move_target", None)
                             if t_pos in (1, 2):
                                 t_mon = battle.opponent_active_pokemon[t_pos - 1]
-                                if t_mon and self.check_move_will_ko(ord_cand.order, active_mon, t_mon, battle, config=config):
+                                if t_mon and self.check_move_will_ko(
+                                    ord_cand.order,
+                                    active_mon,
+                                    t_mon,
+                                    battle,
+                                    config=config,
+                                ):
                                     has_ko_action = True
 
                     best_bonus = 0.0
@@ -5450,7 +8740,9 @@ class DoublesDamageAwarePlayer(Player):
                         faint_before = False
                         for opp in active_opps:
                             for mv in get_revealed_damaging_moves(opp):
-                                if self.check_move_will_ko(mv, opp, active_mon, battle, config=config):
+                                if self.check_move_will_ko(
+                                    mv, opp, active_mon, battle, config=config
+                                ):
                                     faint_before = True
                                     break
                             if faint_before:
@@ -5458,13 +8750,18 @@ class DoublesDamageAwarePlayer(Player):
                         if not faint_before:
                             blocked_by_ko = True
 
-                    if best_action_score >= config.revealed_switch_high_value_action_threshold:
+                    if (
+                        best_action_score
+                        >= config.revealed_switch_high_value_action_threshold
+                    ):
                         blocked_by_high_value = True
 
                     if not (blocked_by_ko or blocked_by_high_value):
                         for sw_order in switch_orders:
                             candidate = sw_order.order
-                            interception = evaluate_revealed_move_switch_interception(active_mon, candidate, slot_idx, battle)
+                            interception = evaluate_revealed_move_switch_interception(
+                                active_mon, candidate, slot_idx, battle
+                            )
                             if not interception["interception_valid"]:
                                 continue
                             bonus = interception["proposed_score_bonus"]
@@ -5474,22 +8771,37 @@ class DoublesDamageAwarePlayer(Player):
 
                         if best_bonus_order is not None and best_bonus > 0:
                             sid = id(best_bonus_order)
-                            old_score = slot_0_scores.get(sid, 0.0) if slot_idx == 0 else slot_1_scores.get(sid, 0.0)
+                            old_score = (
+                                slot_0_scores.get(sid, 0.0)
+                                if slot_idx == 0
+                                else slot_1_scores.get(sid, 0.0)
+                            )
                             if slot_idx == 0:
                                 slot_0_scores[sid] = old_score + best_bonus
                             else:
                                 slot_1_scores[sid] = old_score + best_bonus
 
             # 3/3b. Precompute safety blocks (canonical helper)
-            _direct_absorb_blocked, _safety_blocked, _ally_redirect_blocked, _ally_redirect_blocked_meta = _compute_order_safety_blocks(
-                battle, config, valid_orders
-            )
+            (
+                _direct_absorb_blocked,
+                _safety_blocked,
+                _ally_redirect_blocked,
+                _ally_redirect_blocked_meta,
+                _support_target_blocked,
+                _support_target_reasons,
+            ) = _compute_order_safety_blocks(battle, config, valid_orders)
 
             # 4. Switch candidate type safety ranking
             if config.enable_switch_candidate_type_safety:
                 for slot_idx in (0, 1):
-                    orders = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
-                    switch_orders = [o for o in orders if o and isinstance(o.order, Pokemon)]
+                    orders = (
+                        valid_orders[slot_idx]
+                        if valid_orders and len(valid_orders) > slot_idx
+                        else []
+                    )
+                    switch_orders = [
+                        o for o in orders if o and isinstance(o.order, Pokemon)
+                    ]
                     if not switch_orders:
                         continue
 
@@ -5497,16 +8809,24 @@ class DoublesDamageAwarePlayer(Player):
                     candidate_safety = {}
                     for sw_order in switch_orders:
                         candidate = sw_order.order
-                        safety = evaluate_switch_candidate_type_safety(candidate, active_opps, config)
+                        safety = evaluate_switch_candidate_type_safety(
+                            candidate, active_opps, config
+                        )
                         candidate_safety[id(sw_order)] = safety
 
                     if candidate_safety:
-                        best_raw = max(s["raw_safety_score"] for s in candidate_safety.values())
+                        best_raw = max(
+                            s["raw_safety_score"] for s in candidate_safety.values()
+                        )
                         for sw_order in switch_orders:
                             sid = id(sw_order)
                             raw = candidate_safety[sid]["raw_safety_score"]
                             relative_adj = min(0.0, raw - best_raw)
-                            old_score = slot_0_scores.get(sid, 0.0) if slot_idx == 0 else slot_1_scores.get(sid, 0.0)
+                            old_score = (
+                                slot_0_scores.get(sid, 0.0)
+                                if slot_idx == 0
+                                else slot_1_scores.get(sid, 0.0)
+                            )
                             new_score = old_score + relative_adj
                             if slot_idx == 0:
                                 slot_0_scores[sid] = new_score
@@ -5515,9 +8835,15 @@ class DoublesDamageAwarePlayer(Player):
 
             # 5. Canonical joint scoring
             scored_joint_orders = self._compute_joint_scores(
-                battle, config, joint_orders,
-                slot_0_scores, slot_1_scores,
-                _direct_absorb_blocked, _safety_blocked, _ally_redirect_blocked,
+                battle,
+                config,
+                joint_orders,
+                slot_0_scores,
+                slot_1_scores,
+                _direct_absorb_blocked,
+                _safety_blocked,
+                _ally_redirect_blocked,
+                _support_target_blocked=_support_target_blocked,
             )
             return scored_joint_orders[0]
         finally:
@@ -5529,8 +8855,13 @@ class DoublesDamageAwarePlayer(Player):
         if not isinstance(battle, DoubleBattle):
             return self.choose_random_move(battle)
 
+        # Phase 6.3.7f: Scan replay for form change events before scoring
+        _scan_replay_for_form_changes(battle)
+
         # Phase 6.4.3a.3: Timing diagnostics (optional)
-        _timing_enabled = getattr(self.config, "enable_decision_timing_diagnostics", False)
+        _timing_enabled = getattr(
+            self.config, "enable_decision_timing_diagnostics", False
+        )
         _t_start = time.time() if _timing_enabled else 0
         _t_valid_order = 0.0
         _t_score_action = 0.0
@@ -5545,12 +8876,21 @@ class DoublesDamageAwarePlayer(Player):
         battle_tag = battle.battle_tag
         current_turn = battle.turn
 
+        # Phase 6.5: Scan replay for type consumption events
+        if self.config.enable_type_consumption_tracking:
+            _scan_replay_for_type_consumption(battle, self._consumed_types)
+            if battle_tag not in self._consumed_types:
+                self._consumed_types[battle_tag] = {}
+
         # Initialize tracking maps for the turn
         if battle_tag not in self.active_turns:
             self.active_turns[battle_tag] = {}
         if battle_tag not in self.last_protect_turn:
             self.last_protect_turn[battle_tag] = {}
-        if not hasattr(self, "opponent_active_turns") or self.opponent_active_turns is None:
+        if (
+            not hasattr(self, "opponent_active_turns")
+            or self.opponent_active_turns is None
+        ):
             self.opponent_active_turns = {}
         if battle_tag not in self.opponent_active_turns:
             self.opponent_active_turns[battle_tag] = {}
@@ -5564,10 +8904,10 @@ class DoublesDamageAwarePlayer(Player):
         self.meta_setup_predictions_by_battle.setdefault(battle_tag, 0)
         self.meta_coverage_predictions_by_battle.setdefault(battle_tag, 0)
         self.meta_ability_soft_penalties_by_battle.setdefault(battle_tag, 0)
-        
+
         self.meta_species_found_by_battle.setdefault(battle_tag, 0)
         self.meta_species_missing_by_battle.setdefault(battle_tag, 0)
-        
+
         self.candidate_meta_predictions_by_battle.setdefault(battle_tag, 0)
         self.selected_meta_predictions_by_battle.setdefault(battle_tag, 0)
         self.total_meta_score_delta_by_battle.setdefault(battle_tag, 0.0)
@@ -5592,18 +8932,26 @@ class DoublesDamageAwarePlayer(Player):
                 if opp:
                     entry = self.meta_engine.get_species_entry(opp.species)
                     if entry:
-                        self.increment_metric(self.meta_species_found_by_battle, battle_tag)
+                        self.increment_metric(
+                            self.meta_species_found_by_battle, battle_tag
+                        )
                     else:
-                        self.increment_metric(self.meta_species_missing_by_battle, battle_tag)
+                        self.increment_metric(
+                            self.meta_species_missing_by_battle, battle_tag
+                        )
 
         # Database coverage checking -- random set
         if self.config.enable_random_set_opponent_modeling and self.random_set_engine:
             for opp in battle.opponent_active_pokemon:
                 if opp:
                     if self.random_set_engine.is_species_known(opp.species):
-                        self.increment_metric(self.rs_species_found_by_battle, battle_tag)
+                        self.increment_metric(
+                            self.rs_species_found_by_battle, battle_tag
+                        )
                     else:
-                        self.increment_metric(self.rs_species_missing_by_battle, battle_tag)
+                        self.increment_metric(
+                            self.rs_species_missing_by_battle, battle_tag
+                        )
 
         if battle_tag not in self.battle_metrics:
             self.battle_metrics[battle_tag] = {
@@ -5614,7 +8962,7 @@ class DoublesDamageAwarePlayer(Player):
                 "focus_fire": 0,
                 "threat_contribution": 0.0,
                 "tiebreaker_activations": 0,
-                "boosted_override_activations": 0
+                "boosted_override_activations": 0,
             }
 
         # Reset Phase 6.1.2 tracking maps for the current turn
@@ -5636,6 +8984,10 @@ class DoublesDamageAwarePlayer(Player):
         self._protected_due_to_speed_priority[battle_tag] = {0: False, 1: False}
         self._expected_to_faint_before_moving[battle_tag] = {0: False, 1: False}
         self._order_aware_overkill_penalty_applied[battle_tag] = False
+        # Phase 6.4.9: Voluntary switch quality tracking
+        self._voluntary_switch_quality_data[battle_tag] = {0: None, 1: None}
+        self._voluntary_switch_adjustment_applied[battle_tag] = {0: False, 1: False}
+        self._voluntary_switch_penalized[battle_tag] = {0: False, 1: False}
         # Phase 6.4.5: Stale target tracking
         self._stale_target_selected[battle_tag] = False
         self._stale_target_same_target_expected_ko[battle_tag] = False
@@ -5659,7 +9011,7 @@ class DoublesDamageAwarePlayer(Player):
         self._ability_blocked_target_ability[battle_tag] = {0: "", 1: ""}
         self._ally_ability_safe_spread[battle_tag] = {0: False, 1: False}
         self._ability_redirection_avoided[battle_tag] = {0: False, 1: False}
-        
+
         # Reset Phase 6.3.3 tracking maps for the current turn
         self._direct_absorb_hard_block_avoided[battle_tag] = {0: False, 1: False}
         self._direct_absorb_immune_move_selected[battle_tag] = {0: False, 1: False}
@@ -5667,7 +9019,11 @@ class DoublesDamageAwarePlayer(Player):
         self._direct_absorb_target_species[battle_tag] = {0: "", 1: ""}
         self._direct_absorb_target_ability[battle_tag] = {0: "", 1: ""}
         self._direct_absorb_only_legal_action[battle_tag] = {0: False, 1: False}
-        
+
+        # Reset Phase 6.3.8 tracking maps for the current turn
+        self._support_target_wrong_side_blocked[battle_tag] = {0: False, 1: False}
+        self._support_target_block_reason[battle_tag] = {0: "", 1: ""}
+
         # Reset Phase 6.3.6b tracking maps
         self._known_ally_redirect_selected[battle_tag] = {0: False, 1: False}
         self._known_ally_redirect_reason[battle_tag] = {0: "", 1: ""}
@@ -5675,10 +9031,8 @@ class DoublesDamageAwarePlayer(Player):
         self._known_ally_redirect_ally_ability[battle_tag] = {0: "", 1: ""}
         self._known_ally_redirect_move_id[battle_tag] = {0: "", 1: ""}
         self._known_ally_redirect_known_before[battle_tag] = {0: False, 1: False}
-        
+
         self._absorb_streak_state.setdefault(battle_tag, {})
-
-
 
         # Track active turn count per slot
         for i, mon in enumerate(battle.active_pokemon):
@@ -5706,7 +9060,10 @@ class DoublesDamageAwarePlayer(Player):
                     if current_turn == last_turn:
                         pass
                     elif current_turn - last_turn == 1:
-                        self.opponent_active_turns[battle_tag][key] = (count + 1, current_turn)
+                        self.opponent_active_turns[battle_tag][key] = (
+                            count + 1,
+                            current_turn,
+                        )
                     else:
                         self.opponent_active_turns[battle_tag][key] = (1, current_turn)
                 else:
@@ -5726,7 +9083,11 @@ class DoublesDamageAwarePlayer(Player):
         # Phase 6.3.6b: Snapshot known ally abilities before any candidate scoring
         _known_ally_ability_before = [{}, {}]
         for ally_idx in (0, 1):
-            ally = battle.active_pokemon[ally_idx] if ally_idx < len(battle.active_pokemon) else None
+            ally = (
+                battle.active_pokemon[ally_idx]
+                if ally_idx < len(battle.active_pokemon)
+                else None
+            )
             if ally:
                 ab = get_known_ability(ally, battle)
                 _known_ally_ability_before[ally_idx] = ab or ""
@@ -5758,11 +9119,20 @@ class DoublesDamageAwarePlayer(Player):
                 active_mon = battle.active_pokemon[slot_idx]
                 if not active_mon:
                     continue
-                if slot_idx < len(battle.force_switch) and battle.force_switch[slot_idx]:
+                if (
+                    slot_idx < len(battle.force_switch)
+                    and battle.force_switch[slot_idx]
+                ):
                     continue
 
-                orders_slot = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
-                switch_orders = [o for o in orders_slot if o and isinstance(o.order, Pokemon)]
+                orders_slot = (
+                    valid_orders[slot_idx]
+                    if valid_orders and len(valid_orders) > slot_idx
+                    else []
+                )
+                switch_orders = [
+                    o for o in orders_slot if o and isinstance(o.order, Pokemon)
+                ]
 
                 if not switch_orders:
                     continue
@@ -5783,13 +9153,23 @@ class DoublesDamageAwarePlayer(Player):
                 has_high_value_spread = False
                 for ord_cand in orders_slot:
                     if ord_cand and isinstance(ord_cand.order, Move):
-                        cand_score = slot_0_scores.get(id(ord_cand), 0.0) if slot_idx == 0 else slot_1_scores.get(id(ord_cand), 0.0)
+                        cand_score = (
+                            slot_0_scores.get(id(ord_cand), 0.0)
+                            if slot_idx == 0
+                            else slot_1_scores.get(id(ord_cand), 0.0)
+                        )
                         if cand_score > best_action_score:
                             best_action_score = cand_score
                         t_pos = getattr(ord_cand, "move_target", None)
                         if t_pos in (1, 2):
                             t_mon = battle.opponent_active_pokemon[t_pos - 1]
-                            if t_mon and self.check_move_will_ko(ord_cand.order, active_mon, t_mon, battle, config=self.config):
+                            if t_mon and self.check_move_will_ko(
+                                ord_cand.order,
+                                active_mon,
+                                t_mon,
+                                battle,
+                                config=self.config,
+                            ):
                                 has_ko_action = True
                         if self.is_spread_move(ord_cand.order):
                             base_pow = getattr(ord_cand.order, "base_power", 0)
@@ -5807,7 +9187,9 @@ class DoublesDamageAwarePlayer(Player):
                     faint_before = False
                     for opp in active_opps:
                         for mv in get_revealed_damaging_moves(opp):
-                            if self.check_move_will_ko(mv, opp, active_mon, battle, config=self.config):
+                            if self.check_move_will_ko(
+                                mv, opp, active_mon, battle, config=self.config
+                            ):
                                 faint_before = True
                                 break
                         if faint_before:
@@ -5815,7 +9197,10 @@ class DoublesDamageAwarePlayer(Player):
                     if not faint_before:
                         blocked_by_ko = True
 
-                if best_action_score >= self.config.revealed_switch_high_value_action_threshold:
+                if (
+                    best_action_score
+                    >= self.config.revealed_switch_high_value_action_threshold
+                ):
                     blocked_by_high_value = True
 
                 if blocked_by_ko or blocked_by_high_value:
@@ -5841,9 +9226,17 @@ class DoublesDamageAwarePlayer(Player):
                 # Apply the best bonus to the best switch candidate's score
                 if best_bonus_order is not None and best_bonus > 0:
                     sid = id(best_bonus_order)
-                    old_score = slot_0_scores.get(sid, 0.0) if slot_idx == 0 else slot_1_scores.get(sid, 0.0)
-                    slot_0_scores[sid] = old_score + best_bonus if slot_idx == 0 else old_score
-                    slot_1_scores[sid] = old_score + best_bonus if slot_idx == 1 else old_score
+                    old_score = (
+                        slot_0_scores.get(sid, 0.0)
+                        if slot_idx == 0
+                        else slot_1_scores.get(sid, 0.0)
+                    )
+                    slot_0_scores[sid] = (
+                        old_score + best_bonus if slot_idx == 0 else old_score
+                    )
+                    slot_1_scores[sid] = (
+                        old_score + best_bonus if slot_idx == 1 else old_score
+                    )
 
                     # Build interception data for audit
                     candidate = best_bonus_order.order
@@ -5854,27 +9247,39 @@ class DoublesDamageAwarePlayer(Player):
                         active_mon, slot_idx, active_opps, our_actives, battle
                     )
                     _revel_switch_interception_data[slot_idx] = {
-                        "threatening_opponents": threats_for_audit["threatening_opponents"],
+                        "threatening_opponents": threats_for_audit[
+                            "threatening_opponents"
+                        ],
                         "threat_move_ids": threats_for_audit["revealed_move_ids"],
                         "threat_move_types": threats_for_audit["revealed_move_types"],
-                        "target_likelihood": threats_for_audit["target_likelihood_weights"],
+                        "target_likelihood": threats_for_audit[
+                            "target_likelihood_weights"
+                        ],
                         "active_risk": interception["active_risk"],
                         "candidate_risk": interception["candidate_risk"],
                         "risk_reduction": interception["risk_reduction"],
                         "candidate_species": getattr(candidate, "species", ""),
-                        "candidate_types": [str(t) for t in getattr(candidate, "types", []) if t],
+                        "candidate_types": [
+                            str(t) for t in getattr(candidate, "types", []) if t
+                        ],
                         "candidate_hp": interception["candidate_hp"],
                         "bonus_applied": interception["proposed_score_bonus"],
                         "blocked_by_ko": False,
                         "blocked_by_high_value": False,
-                        "worse_other_threat": interception["rejection_reason"] == "worse_other_threat",
+                        "worse_other_threat": interception["rejection_reason"]
+                        == "worse_other_threat",
                         "prediction_available": True,
                     }
 
         # Precompute safety blocks (canonical helper)
-        _direct_absorb_blocked, _safety_blocked, _ally_redirect_blocked, _ally_redirect_blocked_meta = _compute_order_safety_blocks(
-            battle, self.config, valid_orders
-        )
+        (
+            _direct_absorb_blocked,
+            _safety_blocked,
+            _ally_redirect_blocked,
+            _ally_redirect_blocked_meta,
+            _support_target_blocked,
+            _support_target_reasons,
+        ) = _compute_order_safety_blocks(battle, self.config, valid_orders)
 
         # Phase 6.4: Switch candidate type safety ranking
         # Diagnostics always run; score adjustments only when feature enabled
@@ -5889,7 +9294,11 @@ class DoublesDamageAwarePlayer(Player):
         _neg_boost_data_per_slot = {}
 
         for slot_idx in (0, 1):
-            orders = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
+            orders = (
+                valid_orders[slot_idx]
+                if valid_orders and len(valid_orders) > slot_idx
+                else []
+            )
             switch_orders = [o for o in orders if o and isinstance(o.order, Pokemon)]
 
             if not switch_orders:
@@ -5900,7 +9309,9 @@ class DoublesDamageAwarePlayer(Player):
             candidate_safety = {}
             for sw_order in switch_orders:
                 candidate = sw_order.order
-                safety = evaluate_switch_candidate_type_safety(candidate, active_opps, self.config)
+                safety = evaluate_switch_candidate_type_safety(
+                    candidate, active_opps, self.config
+                )
                 candidate_safety[id(sw_order)] = safety
 
             # Find the best raw safety score among candidates
@@ -5914,7 +9325,11 @@ class DoublesDamageAwarePlayer(Player):
                         sid = id(sw_order)
                         raw = candidate_safety[sid]["raw_safety_score"]
                         relative_adj = min(0.0, raw - best_raw)
-                        old_score = slot_0_scores.get(sid, 0.0) if slot_idx == 0 else slot_1_scores.get(sid, 0.0)
+                        old_score = (
+                            slot_0_scores.get(sid, 0.0)
+                            if slot_idx == 0
+                            else slot_1_scores.get(sid, 0.0)
+                        )
                         new_score = old_score + relative_adj
 
                         if slot_idx == 0:
@@ -5926,12 +9341,18 @@ class DoublesDamageAwarePlayer(Player):
 
                 # Find the best safe switch (highest adjusted score among safe candidates)
                 best_safe_order = None
-                best_safe_score = float('-inf')
+                best_safe_score = float("-inf")
                 for sw_order in switch_orders:
                     sid = id(sw_order)
                     safety = candidate_safety[sid]
-                    is_unsafe = safety["double_threat"] or safety["quad_weak_threat_count"] > 0
-                    score = slot_0_scores.get(sid, 0.0) if slot_idx == 0 else slot_1_scores.get(sid, 0.0)
+                    is_unsafe = (
+                        safety["double_threat"] or safety["quad_weak_threat_count"] > 0
+                    )
+                    score = (
+                        slot_0_scores.get(sid, 0.0)
+                        if slot_idx == 0
+                        else slot_1_scores.get(sid, 0.0)
+                    )
                     if not is_unsafe and score > best_safe_score:
                         best_safe_score = score
                         best_safe_order = sw_order
@@ -5962,15 +9383,31 @@ class DoublesDamageAwarePlayer(Player):
                 neg_boosts["negative_boost_best_move_score"] = 0.0
                 neg_boosts["negative_boost_switch_score_gap"] = 0.0
                 neg_boosts["negative_boost_relevant_offensive_drop"] = False
-                neg_boosts["negative_boost_defensive_drop"] = neg_boosts.get("defensive_negative_stages", 0) > 0
-                neg_boosts["negative_boost_speed_drop"] = neg_boosts.get("speed_negative_stage", 0) > 0
+                neg_boosts["negative_boost_defensive_drop"] = (
+                    neg_boosts.get("defensive_negative_stages", 0) > 0
+                )
+                neg_boosts["negative_boost_speed_drop"] = (
+                    neg_boosts.get("speed_negative_stage", 0) > 0
+                )
 
                 # Check eligibility
-                is_forced = battle.force_switch[slot_idx] if slot_idx < len(battle.force_switch) else False
+                is_forced = (
+                    battle.force_switch[slot_idx]
+                    if slot_idx < len(battle.force_switch)
+                    else False
+                )
                 has_legal_switches = len(battle.available_switches) > 0
-                orders_slot = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
-                has_legal_moves = any(o and isinstance(o.order, Move) for o in orders_slot)
-                has_legal_switches_in_slot = any(o and isinstance(o.order, Pokemon) for o in orders_slot)
+                orders_slot = (
+                    valid_orders[slot_idx]
+                    if valid_orders and len(valid_orders) > slot_idx
+                    else []
+                )
+                has_legal_moves = any(
+                    o and isinstance(o.order, Move) for o in orders_slot
+                )
+                has_legal_switches_in_slot = any(
+                    o and isinstance(o.order, Pokemon) for o in orders_slot
+                )
 
                 # Offensive drop relevant to available damaging moves
                 if neg_boosts.get("offensive_negative_stages", 0) > 0:
@@ -5978,15 +9415,22 @@ class DoublesDamageAwarePlayer(Player):
                         if o and isinstance(o.order, Move):
                             cat = getattr(o.order, "category", None)
                             cat_name = getattr(cat, "name", "STATUS")
-                            if cat_name != "STATUS" and getattr(o.order, "base_power", 0) > 0:
-                                neg_boosts["negative_boost_relevant_offensive_drop"] = True
+                            if (
+                                cat_name != "STATUS"
+                                and getattr(o.order, "base_power", 0) > 0
+                            ):
+                                neg_boosts["negative_boost_relevant_offensive_drop"] = (
+                                    True
+                                )
                                 break
 
         # Phase 6.4.7: Conservative Stat-Drop Switch Scoring
         _stat_drop_scoring_data = {}
         for slot_idx in (0, 1):
             _sdata = {
-                "enabled": bool(getattr(self.config, "enable_stat_drop_switch_scoring", False)),
+                "enabled": bool(
+                    getattr(self.config, "enable_stat_drop_switch_scoring", False)
+                ),
                 "pressure_active": False,
                 "categories": [],
                 "pressure_score": 0.0,
@@ -6010,13 +9454,25 @@ class DoublesDamageAwarePlayer(Player):
             if not active_mon:
                 continue
 
-            is_forced = battle.force_switch[slot_idx] if slot_idx < len(battle.force_switch) else False
+            is_forced = (
+                battle.force_switch[slot_idx]
+                if slot_idx < len(battle.force_switch)
+                else False
+            )
             if is_forced:
                 continue
 
-            orders_slot = valid_orders[slot_idx] if valid_orders and len(valid_orders) > slot_idx else []
+            orders_slot = (
+                valid_orders[slot_idx]
+                if valid_orders and len(valid_orders) > slot_idx
+                else []
+            )
             pressure = evaluate_stat_drop_switch_pressure(
-                active_mon, orders_slot, battle, self.config, player=self,
+                active_mon,
+                orders_slot,
+                battle,
+                self.config,
+                player=self,
             )
 
             if not pressure["should_consider_switch"]:
@@ -6050,10 +9506,18 @@ class DoublesDamageAwarePlayer(Player):
                         best_non_switch_score_val = sc
 
             _sdata["best_switch_species"] = best_switch_species_val
-            _sdata["best_switch_score"] = best_switch_score_val if best_switch_score_val > float("-inf") else 0.0
-            _sdata["best_non_switch_score"] = best_non_switch_score_val if best_non_switch_score_val > float("-inf") else 0.0
+            _sdata["best_switch_score"] = (
+                best_switch_score_val if best_switch_score_val > float("-inf") else 0.0
+            )
+            _sdata["best_non_switch_score"] = (
+                best_non_switch_score_val
+                if best_non_switch_score_val > float("-inf")
+                else 0.0
+            )
 
-            switch_bonus = self.config.stat_drop_switch_safe_switch_bonus if self.config else 30.0
+            switch_bonus = (
+                self.config.stat_drop_switch_safe_switch_bonus if self.config else 30.0
+            )
 
             for o in orders_slot:
                 if not o:
@@ -6068,24 +9532,133 @@ class DoublesDamageAwarePlayer(Player):
                     sc -= pressure["stay_penalty"]
                     slot_scores[sid] = sc
 
+        # Preserve raw scores before VSW adjustments for counterfactual
+        _vsw_raw_scores_0 = dict(slot_0_scores)
+        _vsw_raw_scores_1 = dict(slot_1_scores)
+
+        # Phase 6.4.9: Voluntary switch quality evaluation
+        _voluntary_switch_candidate_tables = {0: [], 1: []}
+        if self.config.enable_voluntary_switch_quality_diagnostics:
+            for si in (0, 1):
+                active_mon = (
+                    battle.active_pokemon[si]
+                    if si < len(battle.active_pokemon)
+                    else None
+                )
+                if not active_mon:
+                    continue
+                if si < len(battle.force_switch) and battle.force_switch[si]:
+                    continue
+                orders_slot = (
+                    valid_orders[si] if valid_orders and len(valid_orders) > si else []
+                )
+                switch_orders = [
+                    o for o in orders_slot if o and isinstance(o.order, Pokemon)
+                ]
+                if not switch_orders:
+                    continue
+                # Best stay score from existing raw slot scores
+                best_stay = 0.0
+                for o in orders_slot:
+                    if o and isinstance(o.order, Move):
+                        sc = (
+                            slot_0_scores.get(id(o), 0.0)
+                            if si == 0
+                            else slot_1_scores.get(id(o), 0.0)
+                        )
+                        if sc > best_stay:
+                            best_stay = sc
+                bt = battle_tag
+                history = self._voluntary_switch_history.get((bt, si), {})
+                cand_table = build_voluntary_switch_candidate_table(
+                    active_mon,
+                    switch_orders,
+                    si,
+                    battle,
+                    best_stay,
+                    self.config,
+                    player=self,
+                    voluntary_switch_history=self._voluntary_switch_history,
+                )
+                _voluntary_switch_candidate_tables[si] = cand_table
+
+                # Build order lookup by action key (exact identity, not species text)
+                _order_by_action_key = {}
+                for o in switch_orders:
+                    if o and isinstance(o.order, Pokemon):
+                        ak = _order_action_key(o)
+                        _order_by_action_key[ak] = o
+                if self.config.enable_voluntary_switch_quality_scoring:
+                    for row in cand_table:
+                        ak = row.get("candidate_action_key")
+                        if ak and ak in _order_by_action_key:
+                            o = _order_by_action_key[ak]
+                            oid = id(o)
+                            adj = row["adjusted_switch_score"]
+                            if si == 0:
+                                slot_0_scores[oid] = adj
+                            else:
+                                slot_1_scores[oid] = adj
+
+                    # Phase 6.4.9k: Apply stay penalty to non-switch orders when active is threatened
+                    active_hp = getattr(active_mon, "current_hp_fraction", 1.0)
+                    stay_penalty = getattr(
+                        self.config, "voluntary_switch_stay_penalty", 100.0
+                    )
+
+                    # Apply penalty when active is low HP and has no high-value action
+                    if active_hp < 0.20 and best_stay < 100.0:
+                        # Check if there's at least one safer candidate
+                        has_safer_candidate = any(
+                            row.get("risk_reduction", 0) > 0.5 for row in cand_table
+                        )
+                        if has_safer_candidate:
+                            # Penalize all non-switch orders for this slot
+                            for o in orders_slot:
+                                if o and isinstance(o.order, Move):
+                                    oid = id(o)
+                                    if si == 0:
+                                        slot_0_scores[oid] = (
+                                            slot_0_scores.get(oid, 0.0) - stay_penalty
+                                        )
+                                    else:
+                                        slot_1_scores[oid] = (
+                                            slot_1_scores.get(oid, 0.0) - stay_penalty
+                                        )
+
         _t_js_start = time.time() if _timing_enabled else 0
         scored_joint_orders = self._compute_joint_scores(
-            battle, self.config, joint_orders,
-            slot_0_scores, slot_1_scores,
-            _direct_absorb_blocked, _safety_blocked, _ally_redirect_blocked,
+            battle,
+            self.config,
+            joint_orders,
+            slot_0_scores,
+            slot_1_scores,
+            _direct_absorb_blocked,
+            _safety_blocked,
+            _ally_redirect_blocked,
+            _support_target_blocked=_support_target_blocked,
         )
         _joint_order_count = len(scored_joint_orders)
         best_joint, best_score, best_score_1, best_score_2 = scored_joint_orders[0]
         if _timing_enabled:
             _t_joint_scoring = (time.time() - _t_js_start) * 1000
 
+        # Phase 6.4.9: Mark selected candidate in candidate tables
+        for si in (0, 1):
+            sel_order = best_joint.first_order if si == 0 else best_joint.second_order
+            sel_key = _order_action_key(sel_order)
+            for row in _voluntary_switch_candidate_tables.get(si, []):
+                if row.get("candidate_action_key") == sel_key:
+                    row["selected"] = True
+                    break
+
         # Phase 6.3.5b: Pure Counterfactual Check for Singleton Levitate Safety (per-slot)
         singleton_selection_changed_by_safety_slot = [False, False]
         if self.config.ability_hard_safety_allow_singleton_deduction:
             import dataclasses
+
             config_no_singleton = dataclasses.replace(
-                self.config,
-                ability_hard_safety_allow_singleton_deduction=False
+                self.config, ability_hard_safety_allow_singleton_deduction=False
             )
             cf_result = self._select_best_joint_order(
                 battle,
@@ -6096,8 +9669,14 @@ class DoublesDamageAwarePlayer(Player):
             )
             cf_best_joint = cf_result[0]  # unpack (joint_order, score, s1, s2)
             for _slot_i in (0, 1):
-                sel_order = best_joint.first_order if _slot_i == 0 else best_joint.second_order
-                cf_order = cf_best_joint.first_order if _slot_i == 0 else cf_best_joint.second_order
+                sel_order = (
+                    best_joint.first_order if _slot_i == 0 else best_joint.second_order
+                )
+                cf_order = (
+                    cf_best_joint.first_order
+                    if _slot_i == 0
+                    else cf_best_joint.second_order
+                )
                 sel_key = _order_action_key(sel_order)
                 cf_key = _order_action_key(cf_order)
                 if sel_key != cf_key:
@@ -6122,12 +9701,51 @@ class DoublesDamageAwarePlayer(Player):
                 )
                 _stat_drop_counterfactual_joint = cf_result[0]
                 _stat_drop_counterfactual_actions = [
-                    _order_action_key(cf_result[0].first_order if cf_result[0] else None),
-                    _order_action_key(cf_result[0].second_order if cf_result[0] else None),
+                    _order_action_key(
+                        cf_result[0].first_order if cf_result[0] else None
+                    ),
+                    _order_action_key(
+                        cf_result[0].second_order if cf_result[0] else None
+                    ),
                 ]
             except Exception:
                 _stat_drop_counterfactual_joint = None
                 _stat_drop_counterfactual_actions = [("", "", 0), ("", "", 0)]
+
+        # Phase 6.4.9: Counterfactual -- voluntary switch scoring selection changed
+        _vsw_selection_changed = [False, False]
+        _vsw_joint_selection_changed = False
+        _vsw_counterfactual_actions = [("", "", 0), ("", "", 0)]
+        _vsw_selected_actions = [
+            _order_action_key(best_joint.first_order),
+            _order_action_key(best_joint.second_order),
+        ]
+        if self.config.enable_voluntary_switch_quality_scoring:
+            try:
+                # Use raw (pre-VSW) scores for counterfactual
+                cf_result = select_best_joint_from_score_maps(
+                    battle,
+                    self.config,
+                    joint_orders,
+                    _vsw_raw_scores_0,
+                    _vsw_raw_scores_1,
+                    _direct_absorb_blocked,
+                    _safety_blocked,
+                    _ally_redirect_blocked,
+                    _support_target_blocked,
+                )
+                cf_best = cf_result[0]
+                _vsw_counterfactual_actions = [
+                    _order_action_key(cf_best.first_order if cf_best else None),
+                    _order_action_key(cf_best.second_order if cf_best else None),
+                ]
+                for _si in (0, 1):
+                    if _vsw_selected_actions[_si] != _vsw_counterfactual_actions[_si]:
+                        _vsw_selection_changed[_si] = True
+                if any(_vsw_selection_changed):
+                    _vsw_joint_selection_changed = True
+            except Exception:
+                pass
 
         # Phase 6.4.2: Counterfactual - compute legacy best joint order (without interception bonuses)
         _legacy_joint_order = None
@@ -6139,48 +9757,98 @@ class DoublesDamageAwarePlayer(Player):
             for joint_order in joint_orders:
                 first = joint_order.first_order
                 second = joint_order.second_order
-                legacy_score_1 = _legacy_slot_scores[0].get(id(first), 0.0) if first else 0.0
-                legacy_score_2 = _legacy_slot_scores[1].get(id(second), 0.0) if second else 0.0
+                legacy_score_1 = (
+                    _legacy_slot_scores[0].get(id(first), 0.0) if first else 0.0
+                )
+                legacy_score_2 = (
+                    _legacy_slot_scores[1].get(id(second), 0.0) if second else 0.0
+                )
                 legacy_joint_score = legacy_score_1 + legacy_score_2
                 # Apply same synergy penalties (but not interception bonuses)
-                first_blocked = _direct_absorb_blocked.get(id(first), False) if first else False
-                second_blocked = _direct_absorb_blocked.get(id(second), False) if second else False
+                first_blocked = (
+                    _direct_absorb_blocked.get(id(first), False) if first else False
+                )
+                second_blocked = (
+                    _direct_absorb_blocked.get(id(second), False) if second else False
+                )
                 either_blocked = first_blocked or second_blocked
                 if not either_blocked:
                     if isinstance(first.order, Move) and isinstance(second.order, Move):
-                        if first.move_target == second.move_target and first.move_target in (1, 2):
-                            target_opp = battle.opponent_active_pokemon[first.move_target - 1]
+                        if (
+                            first.move_target == second.move_target
+                            and first.move_target in (1, 2)
+                        ):
+                            target_opp = battle.opponent_active_pokemon[
+                                first.move_target - 1
+                            ]
                             if target_opp:
-                                ko_1 = self.check_move_will_ko(first.order, battle.active_pokemon[0], target_opp, battle, config=self.config)
-                                ko_2 = self.check_move_will_ko(second.order, battle.active_pokemon[1], target_opp, battle, config=self.config)
-                                opp_hp_fraction = getattr(target_opp, "current_hp_fraction", 1.0)
-                                if (ko_1 and ko_2) or (ko_1 or ko_2) and opp_hp_fraction < 0.15 or opp_hp_fraction < 0.08:
+                                ko_1 = self.check_move_will_ko(
+                                    first.order,
+                                    battle.active_pokemon[0],
+                                    target_opp,
+                                    battle,
+                                    config=self.config,
+                                )
+                                ko_2 = self.check_move_will_ko(
+                                    second.order,
+                                    battle.active_pokemon[1],
+                                    target_opp,
+                                    battle,
+                                    config=self.config,
+                                )
+                                opp_hp_fraction = getattr(
+                                    target_opp, "current_hp_fraction", 1.0
+                                )
+                                if (
+                                    (ko_1 and ko_2)
+                                    or (ko_1 or ko_2)
+                                    and opp_hp_fraction < 0.15
+                                    or opp_hp_fraction < 0.08
+                                ):
                                     allow_double = False
                                     if self.config.enable_threat_scoring:
-                                        threat_score = self.score_opponent_threat(target_opp, battle)
+                                        threat_score = self.score_opponent_threat(
+                                            target_opp, battle
+                                        )
                                         if threat_score >= 0.50:
                                             allow_double = True
                                     if not allow_double:
                                         legacy_joint_score -= 250.0
                     if self.config.enable_order_aware_overkill:
-                        if self.selected_target_will_be_koed_before_second_action(first, second, battle, config=self.config):
-                            legacy_joint_score -= self.config.order_aware_overkill_penalty
-                legacy_scored_joint.append((joint_order, legacy_joint_score, legacy_score_1, legacy_score_2))
+                        if self.selected_target_will_be_koed_before_second_action(
+                            first, second, battle, config=self.config
+                        ):
+                            legacy_joint_score -= (
+                                self.config.order_aware_overkill_penalty
+                            )
+                legacy_scored_joint.append(
+                    (joint_order, legacy_joint_score, legacy_score_1, legacy_score_2)
+                )
             legacy_scored_joint.sort(key=lambda x: x[1], reverse=True)
             if legacy_scored_joint:
                 _legacy_joint_order, _, _, _ = legacy_scored_joint[0]
                 # Compare selected vs legacy
-                legacy_msg = self.safe_get_joint_message(_legacy_joint_order) if _legacy_joint_order else ""
-                selected_msg = self.safe_get_joint_message(best_joint) if best_joint else ""
+                legacy_msg = (
+                    self.safe_get_joint_message(_legacy_joint_order)
+                    if _legacy_joint_order
+                    else ""
+                )
+                selected_msg = (
+                    self.safe_get_joint_message(best_joint) if best_joint else ""
+                )
                 if legacy_msg != selected_msg:
                     _selection_changed = True
                     # Check if changed to a switch
                     if _legacy_joint_order:
                         l_first = _legacy_joint_order.first_order
                         l_second = _legacy_joint_order.second_order
-                        if isinstance(l_first, SingleBattleOrder) and isinstance(l_first.order, Pokemon):
+                        if isinstance(l_first, SingleBattleOrder) and isinstance(
+                            l_first.order, Pokemon
+                        ):
                             _changed_to_switch = True
-                        if isinstance(l_second, SingleBattleOrder) and isinstance(l_second.order, Pokemon):
+                        if isinstance(l_second, SingleBattleOrder) and isinstance(
+                            l_second.order, Pokemon
+                        ):
                             _changed_to_switch = True
 
         # Re-run score_action with is_selected=True to record predictions and Phase 6.1.2 flags on chosen moves
@@ -6229,7 +9897,9 @@ class DoublesDamageAwarePlayer(Player):
         singleton_ground_into_levitate_selected_observed_list = [False, False]
         singleton_hard_block_applied_list = [False, False]
         singleton_blocked_candidate_observed_list = [False, False]
-        singleton_selection_changed_by_safety_list = list(singleton_selection_changed_by_safety_slot)
+        singleton_selection_changed_by_safety_list = list(
+            singleton_selection_changed_by_safety_slot
+        )
         singleton_resolution_source_list = ["", ""]
 
         # Phase 6.3.5a: Priority Terrain / Ability Safety tracking lists
@@ -6251,41 +9921,76 @@ class DoublesDamageAwarePlayer(Player):
             active_mon = battle.active_pokemon[active_idx]
             if not active_mon:
                 continue
-            
-            valid_orders_slot = valid_orders[active_idx] if valid_orders and len(valid_orders) > active_idx and valid_orders[active_idx] else []
+
+            valid_orders_slot = (
+                valid_orders[active_idx]
+                if valid_orders
+                and len(valid_orders) > active_idx
+                and valid_orders[active_idx]
+                else []
+            )
 
             # Phase 6.3.5b: Observer Config & Audit Separation
             import dataclasses
-            observer_config = dataclasses.replace(self.config, ability_hard_safety_allow_singleton_deduction=True)
+
+            observer_config = dataclasses.replace(
+                self.config, ability_hard_safety_allow_singleton_deduction=True
+            )
 
             # 1. singleton_levitate_opportunity_observed
             opportunity_observed = False
             for opp in battle.opponent_active_pokemon:
                 if opp and not getattr(opp, "fainted", False):
                     res = resolve_known_ability(opp, battle, config=observer_config)
-                    if res["source"] == "deterministic_singleton" and res["ability"] == "levitate":
+                    if (
+                        res["source"] == "deterministic_singleton"
+                        and res["ability"] == "levitate"
+                    ):
                         opportunity_observed = True
-            singleton_levitate_opportunity_observed_list[active_idx] = opportunity_observed
+            singleton_levitate_opportunity_observed_list[active_idx] = (
+                opportunity_observed
+            )
 
             # 2. singleton_ground_into_levitate_selected_observed
             ground_selected_observed = False
-            chosen_order = best_joint.first_order if active_idx == 0 else best_joint.second_order
+            chosen_order = (
+                best_joint.first_order if active_idx == 0 else best_joint.second_order
+            )
             if chosen_order and isinstance(chosen_order.order, Move):
                 chosen_move = chosen_order.order
                 target_pos = chosen_order.move_target
                 if target_pos in (1, 2):
                     target_mon = battle.opponent_active_pokemon[target_pos - 1]
                     if target_mon and not getattr(target_mon, "fainted", False):
-                        res = resolve_known_ability(target_mon, battle, config=observer_config)
-                        if res["source"] == "deterministic_singleton" and res["ability"] == "levitate" and not res["is_currently_suppressed"]:
+                        res = resolve_known_ability(
+                            target_mon, battle, config=observer_config
+                        )
+                        if (
+                            res["source"] == "deterministic_singleton"
+                            and res["ability"] == "levitate"
+                            and not res["is_currently_suppressed"]
+                        ):
                             move_type = getattr(chosen_move, "type", None)
-                            m_type = move_type.name.upper() if move_type and hasattr(move_type, "name") else str(move_type).upper()
+                            m_type = (
+                                move_type.name.upper()
+                                if move_type and hasattr(move_type, "name")
+                                else str(move_type).upper()
+                            )
                             base_power = getattr(chosen_move, "base_power", 0)
                             if m_type == "GROUND" and base_power > 0:
                                 # Apply exclusions: Gravity, Thousand Arrows, Mold Breaker
-                                if not is_gravity_active(battle) and getattr(chosen_move, "id", "").lower() != "thousandarrows" and not attacker_ignores_target_ability(active_mon, battle):
+                                if (
+                                    not is_gravity_active(battle)
+                                    and getattr(chosen_move, "id", "").lower()
+                                    != "thousandarrows"
+                                    and not attacker_ignores_target_ability(
+                                        active_mon, battle
+                                    )
+                                ):
                                     ground_selected_observed = True
-            singleton_ground_into_levitate_selected_observed_list[active_idx] = ground_selected_observed
+            singleton_ground_into_levitate_selected_observed_list[active_idx] = (
+                ground_selected_observed
+            )
 
             # 3. singleton_hard_block_applied
             hard_block_applied = False
@@ -6295,12 +10000,30 @@ class DoublesDamageAwarePlayer(Player):
                         cand_move = ord_cand.order
                         cand_target_pos = ord_cand.move_target
                         if cand_target_pos in (1, 2):
-                            cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
-                            if cand_target_mon and not getattr(cand_target_mon, "fainted", False):
-                                res_cand = resolve_known_ability(cand_target_mon, battle, self.config)
-                                if res_cand["source"] == "deterministic_singleton" and res_cand["ability"] == "levitate" and not res_cand["is_currently_suppressed"]:
-                                    blocks_cand, reason = ability_hard_blocks_move(cand_move, active_mon, cand_target_mon, battle, config=self.config)
-                                    if blocks_cand and _ability_block_enabled(self.config, reason):
+                            cand_target_mon = battle.opponent_active_pokemon[
+                                cand_target_pos - 1
+                            ]
+                            if cand_target_mon and not getattr(
+                                cand_target_mon, "fainted", False
+                            ):
+                                res_cand = resolve_known_ability(
+                                    cand_target_mon, battle, self.config
+                                )
+                                if (
+                                    res_cand["source"] == "deterministic_singleton"
+                                    and res_cand["ability"] == "levitate"
+                                    and not res_cand["is_currently_suppressed"]
+                                ):
+                                    blocks_cand, reason = ability_hard_blocks_move(
+                                        cand_move,
+                                        active_mon,
+                                        cand_target_mon,
+                                        battle,
+                                        config=self.config,
+                                    )
+                                    if blocks_cand and _ability_block_enabled(
+                                        self.config, reason
+                                    ):
                                         hard_block_applied = True
                                         break
             singleton_hard_block_applied_list[active_idx] = hard_block_applied
@@ -6312,18 +10035,41 @@ class DoublesDamageAwarePlayer(Player):
                     cand_move = ord_cand.order
                     cand_target_pos = ord_cand.move_target
                     if cand_target_pos in (1, 2):
-                        cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
-                        if cand_target_mon and not getattr(cand_target_mon, "fainted", False):
-                            res_cand = resolve_known_ability(cand_target_mon, battle, config=observer_config)
-                            if res_cand["source"] == "deterministic_singleton" and res_cand["ability"] == "levitate" and not res_cand["is_currently_suppressed"]:
+                        cand_target_mon = battle.opponent_active_pokemon[
+                            cand_target_pos - 1
+                        ]
+                        if cand_target_mon and not getattr(
+                            cand_target_mon, "fainted", False
+                        ):
+                            res_cand = resolve_known_ability(
+                                cand_target_mon, battle, config=observer_config
+                            )
+                            if (
+                                res_cand["source"] == "deterministic_singleton"
+                                and res_cand["ability"] == "levitate"
+                                and not res_cand["is_currently_suppressed"]
+                            ):
                                 move_type = getattr(cand_move, "type", None)
-                                m_type = move_type.name.upper() if move_type and hasattr(move_type, "name") else str(move_type).upper()
+                                m_type = (
+                                    move_type.name.upper()
+                                    if move_type and hasattr(move_type, "name")
+                                    else str(move_type).upper()
+                                )
                                 base_power = getattr(cand_move, "base_power", 0)
                                 if m_type == "GROUND" and base_power > 0:
-                                    if not is_gravity_active(battle) and getattr(cand_move, "id", "").lower() != "thousandarrows" and not attacker_ignores_target_ability(active_mon, battle):
+                                    if (
+                                        not is_gravity_active(battle)
+                                        and getattr(cand_move, "id", "").lower()
+                                        != "thousandarrows"
+                                        and not attacker_ignores_target_ability(
+                                            active_mon, battle
+                                        )
+                                    ):
                                         blocked_candidate_observed = True
                                         break
-            singleton_blocked_candidate_observed_list[active_idx] = blocked_candidate_observed
+            singleton_blocked_candidate_observed_list[active_idx] = (
+                blocked_candidate_observed
+            )
 
             # 5. singleton_only_legal_action
             only_legal = False
@@ -6338,18 +10084,26 @@ class DoublesDamageAwarePlayer(Player):
             if chosen_order and isinstance(chosen_order.order, Move):
                 chosen_target_pos = chosen_order.move_target
                 if chosen_target_pos in (1, 2):
-                    chosen_target_mon = battle.opponent_active_pokemon[chosen_target_pos - 1]
+                    chosen_target_mon = battle.opponent_active_pokemon[
+                        chosen_target_pos - 1
+                    ]
                     if chosen_target_mon:
-                        res = resolve_known_ability(chosen_target_mon, battle, config=observer_config)
+                        res = resolve_known_ability(
+                            chosen_target_mon, battle, config=observer_config
+                        )
                         resolution_source = res["source"]
             if not resolution_source:
                 for ord_cand in valid_orders_slot:
                     if ord_cand and isinstance(ord_cand.order, Move):
                         cand_target_pos = ord_cand.move_target
                         if cand_target_pos in (1, 2):
-                            cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
+                            cand_target_mon = battle.opponent_active_pokemon[
+                                cand_target_pos - 1
+                            ]
                             if cand_target_mon:
-                                res_cand = resolve_known_ability(cand_target_mon, battle, config=observer_config)
+                                res_cand = resolve_known_ability(
+                                    cand_target_mon, battle, config=observer_config
+                                )
                                 if res_cand["source"] == "deterministic_singleton":
                                     resolution_source = "deterministic_singleton"
                                     break
@@ -6366,15 +10120,34 @@ class DoublesDamageAwarePlayer(Player):
                         known_ability_resolution_source_list[active_idx] = res["source"]
                         if res["source"] == "deterministic_singleton":
                             deterministic_singleton_ability_used_list[active_idx] = True
-                            deterministic_singleton_ability_list[active_idx] = res["ability"]
-                            deterministic_singleton_target_species_list[active_idx] = target_mon.species
-                        singleton_ability_suppressed_list[active_idx] = res["is_currently_suppressed"]
-                        singleton_ability_suppression_reason_list[active_idx] = res["suppression_reason"]
+                            deterministic_singleton_ability_list[active_idx] = res[
+                                "ability"
+                            ]
+                            deterministic_singleton_target_species_list[active_idx] = (
+                                target_mon.species
+                            )
+                        singleton_ability_suppressed_list[active_idx] = res[
+                            "is_currently_suppressed"
+                        ]
+                        singleton_ability_suppression_reason_list[active_idx] = res[
+                            "suppression_reason"
+                        ]
 
                         move_type = getattr(chosen_move, "type", None)
-                        m_type = move_type.name.upper() if move_type and hasattr(move_type, "name") else str(move_type).upper()
-                        if res["ability"] == "levitate" and m_type == "GROUND" and res["source"] == "deterministic_singleton" and not res["is_currently_suppressed"]:
-                            singleton_ground_into_levitate_selected_list[active_idx] = True
+                        m_type = (
+                            move_type.name.upper()
+                            if move_type and hasattr(move_type, "name")
+                            else str(move_type).upper()
+                        )
+                        if (
+                            res["ability"] == "levitate"
+                            and m_type == "GROUND"
+                            and res["source"] == "deterministic_singleton"
+                            and not res["is_currently_suppressed"]
+                        ):
+                            singleton_ground_into_levitate_selected_list[active_idx] = (
+                                True
+                            )
 
             singleton_blocked_candidate_exists = False
             singleton_blocked_sample = None
@@ -6384,11 +10157,25 @@ class DoublesDamageAwarePlayer(Player):
                 cand_move = ord_cand.order
                 cand_target_pos = ord_cand.move_target
                 if cand_target_pos in (1, 2):
-                    cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
+                    cand_target_mon = battle.opponent_active_pokemon[
+                        cand_target_pos - 1
+                    ]
                     if cand_target_mon:
-                        res_cand = resolve_known_ability(cand_target_mon, battle, self.config)
-                        if res_cand["source"] == "deterministic_singleton" and res_cand["ability"] and not res_cand["is_currently_suppressed"]:
-                            blocks_cand, _ = ability_hard_blocks_move(cand_move, active_mon, cand_target_mon, battle, self.config)
+                        res_cand = resolve_known_ability(
+                            cand_target_mon, battle, self.config
+                        )
+                        if (
+                            res_cand["source"] == "deterministic_singleton"
+                            and res_cand["ability"]
+                            and not res_cand["is_currently_suppressed"]
+                        ):
+                            blocks_cand, _ = ability_hard_blocks_move(
+                                cand_move,
+                                active_mon,
+                                cand_target_mon,
+                                battle,
+                                self.config,
+                            )
                             if blocks_cand:
                                 singleton_blocked_candidate_exists = True
                                 singleton_blocked_sample = (res_cand, cand_target_mon)
@@ -6398,54 +10185,101 @@ class DoublesDamageAwarePlayer(Player):
             if chosen_order and isinstance(chosen_order.order, Move):
                 chosen_target_pos = chosen_order.move_target
                 if chosen_target_pos in (1, 2):
-                    chosen_target_mon = battle.opponent_active_pokemon[chosen_target_pos - 1]
+                    chosen_target_mon = battle.opponent_active_pokemon[
+                        chosen_target_pos - 1
+                    ]
                     if chosen_target_mon:
-                        is_chosen_blocked, _ = ability_hard_blocks_move(chosen_order.order, active_mon, chosen_target_mon, battle, self.config)
+                        is_chosen_blocked, _ = ability_hard_blocks_move(
+                            chosen_order.order,
+                            active_mon,
+                            chosen_target_mon,
+                            battle,
+                            self.config,
+                        )
 
             if singleton_blocked_candidate_exists and not is_chosen_blocked:
                 singleton_ability_hard_block_avoided_list[active_idx] = True
                 if singleton_blocked_sample:
                     res_cand, target_mon = singleton_blocked_sample
-                    known_ability_resolution_source_list[active_idx] = res_cand["source"]
+                    known_ability_resolution_source_list[active_idx] = res_cand[
+                        "source"
+                    ]
                     deterministic_singleton_ability_used_list[active_idx] = True
-                    deterministic_singleton_ability_list[active_idx] = res_cand["ability"]
-                    deterministic_singleton_target_species_list[active_idx] = target_mon.species
-            chosen_order = best_joint.first_order if active_idx == 0 else best_joint.second_order
+                    deterministic_singleton_ability_list[active_idx] = res_cand[
+                        "ability"
+                    ]
+                    deterministic_singleton_target_species_list[active_idx] = (
+                        target_mon.species
+                    )
+            chosen_order = (
+                best_joint.first_order if active_idx == 0 else best_joint.second_order
+            )
             slot_scores = slot_0_scores if active_idx == 0 else slot_1_scores
-            
+
             # 1. Determine if the chosen action is a blocked action or redirected-blocked action
             is_chosen_blocked = False
             is_chosen_redirected = False
-            
+
             if chosen_order and isinstance(chosen_order.order, Move):
                 chosen_move = chosen_order.order
                 chosen_target_pos = chosen_order.move_target
                 if chosen_target_pos in (1, 2):
-                    chosen_target_mon = battle.opponent_active_pokemon[chosen_target_pos - 1]
+                    chosen_target_mon = battle.opponent_active_pokemon[
+                        chosen_target_pos - 1
+                    ]
                     if chosen_target_mon:
-                        blocks, reason = ability_hard_blocks_move(chosen_move, active_mon, chosen_target_mon, battle, config=self.config)
+                        blocks, reason = ability_hard_blocks_move(
+                            chosen_move,
+                            active_mon,
+                            chosen_target_mon,
+                            battle,
+                            config=self.config,
+                        )
                         if blocks and _ability_block_enabled(self.config, reason):
                             is_chosen_blocked = True
                         else:
-                            redirects, red_reason = ability_redirects_single_target_move(
-                                chosen_move, chosen_target_mon, battle.opponent_active_pokemon, active_mon, battle
+                            redirects, red_reason = (
+                                ability_redirects_single_target_move(
+                                    chosen_move,
+                                    chosen_target_mon,
+                                    battle.opponent_active_pokemon,
+                                    active_mon,
+                                    battle,
+                                )
                             )
                             if redirects:
                                 red_target = None
                                 for opp in battle.opponent_active_pokemon:
-                                    if opp and opp != chosen_target_mon and not getattr(opp, "fainted", False):
+                                    if (
+                                        opp
+                                        and opp != chosen_target_mon
+                                        and not getattr(opp, "fainted", False)
+                                    ):
                                         opp_ability = get_known_ability(opp, battle)
-                                        if opp_ability in ("stormdrain", "lightningrod"):
+                                        if opp_ability in (
+                                            "stormdrain",
+                                            "lightningrod",
+                                        ):
                                             red_target = opp
                                             break
                                 if red_target:
-                                    blocks_red, reason_red = ability_hard_blocks_move(chosen_move, active_mon, red_target, battle, config=self.config)
-                                    if blocks_red and _ability_block_enabled(self.config, reason_red):
+                                    blocks_red, reason_red = ability_hard_blocks_move(
+                                        chosen_move,
+                                        active_mon,
+                                        red_target,
+                                        battle,
+                                        config=self.config,
+                                    )
+                                    if blocks_red and _ability_block_enabled(
+                                        self.config, reason_red
+                                    ):
                                         is_chosen_redirected = True
                 elif is_opponent_spread_move(chosen_move, chosen_order):
                     for opp in battle.opponent_active_pokemon:
                         if opp:
-                            blocked, reason = ability_hard_blocks_move(chosen_move, active_mon, opp, battle, config=self.config)
+                            blocked, reason = ability_hard_blocks_move(
+                                chosen_move, active_mon, opp, battle, config=self.config
+                            )
                             if blocked and _ability_block_enabled(self.config, reason):
                                 is_chosen_blocked = True
                                 break
@@ -6455,43 +10289,77 @@ class DoublesDamageAwarePlayer(Player):
             redirection_candidate_exists = False
             block_sample = None  # (reason, target_mon)
             redirection_sample = None  # (reason, target_mon)
-            
+
             for ord_cand in valid_orders_slot:
                 if not ord_cand or not isinstance(ord_cand.order, Move):
                     continue
                 cand_move = ord_cand.order
                 cand_target_pos = ord_cand.move_target
-                
+
                 if cand_target_pos in (1, 2):
-                    cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
+                    cand_target_mon = battle.opponent_active_pokemon[
+                        cand_target_pos - 1
+                    ]
                     if cand_target_mon:
-                        blocks, reason = ability_hard_blocks_move(cand_move, active_mon, cand_target_mon, battle, config=self.config)
+                        blocks, reason = ability_hard_blocks_move(
+                            cand_move,
+                            active_mon,
+                            cand_target_mon,
+                            battle,
+                            config=self.config,
+                        )
                         if blocks and _ability_block_enabled(self.config, reason):
                             hard_block_candidate_exists = True
                             if not block_sample:
                                 block_sample = (reason, cand_target_mon)
                         else:
-                            redirects, red_reason = ability_redirects_single_target_move(
-                                cand_move, cand_target_mon, battle.opponent_active_pokemon, active_mon, battle
+                            redirects, red_reason = (
+                                ability_redirects_single_target_move(
+                                    cand_move,
+                                    cand_target_mon,
+                                    battle.opponent_active_pokemon,
+                                    active_mon,
+                                    battle,
+                                )
                             )
                             if redirects:
                                 red_target = None
                                 for opp in battle.opponent_active_pokemon:
-                                    if opp and opp != cand_target_mon and not getattr(opp, "fainted", False):
+                                    if (
+                                        opp
+                                        and opp != cand_target_mon
+                                        and not getattr(opp, "fainted", False)
+                                    ):
                                         opp_ability = get_known_ability(opp, battle)
-                                        if opp_ability in ("stormdrain", "lightningrod"):
+                                        if opp_ability in (
+                                            "stormdrain",
+                                            "lightningrod",
+                                        ):
                                             red_target = opp
                                             break
                                 if red_target:
-                                    blocks_red, reason_red = ability_hard_blocks_move(cand_move, active_mon, red_target, battle, config=self.config)
-                                    if blocks_red and _ability_block_enabled(self.config, reason_red):
+                                    blocks_red, reason_red = ability_hard_blocks_move(
+                                        cand_move,
+                                        active_mon,
+                                        red_target,
+                                        battle,
+                                        config=self.config,
+                                    )
+                                    if blocks_red and _ability_block_enabled(
+                                        self.config, reason_red
+                                    ):
                                         redirection_candidate_exists = True
                                         if not redirection_sample:
-                                            redirection_sample = (red_reason, red_target)
+                                            redirection_sample = (
+                                                red_reason,
+                                                red_target,
+                                            )
                 elif is_opponent_spread_move(cand_move, ord_cand):
                     for opp in battle.opponent_active_pokemon:
                         if opp:
-                            blocked, reason = ability_hard_blocks_move(cand_move, active_mon, opp, battle, config=self.config)
+                            blocked, reason = ability_hard_blocks_move(
+                                cand_move, active_mon, opp, battle, config=self.config
+                            )
                             if blocked and _ability_block_enabled(self.config, reason):
                                 hard_block_candidate_exists = True
                                 if not block_sample:
@@ -6501,19 +10369,33 @@ class DoublesDamageAwarePlayer(Player):
             # 3. Set the avoided flags and deterministic samples
             if hard_block_candidate_exists and not is_chosen_blocked:
                 self._ability_hard_block_avoided[battle_tag][active_idx] = True
-                if block_sample and not self._ability_block_reason[battle_tag][active_idx]:
+                if (
+                    block_sample
+                    and not self._ability_block_reason[battle_tag][active_idx]
+                ):
                     reason, target_mon = block_sample
                     self._ability_block_reason[battle_tag][active_idx] = reason
-                    self._ability_blocked_target_species[battle_tag][active_idx] = target_mon.species
-                    self._ability_blocked_target_ability[battle_tag][active_idx] = get_known_ability(target_mon, battle) or ""
-            
+                    self._ability_blocked_target_species[battle_tag][active_idx] = (
+                        target_mon.species
+                    )
+                    self._ability_blocked_target_ability[battle_tag][active_idx] = (
+                        get_known_ability(target_mon, battle) or ""
+                    )
+
             if redirection_candidate_exists and not is_chosen_redirected:
                 self._ability_redirection_avoided[battle_tag][active_idx] = True
-                if redirection_sample and not self._ability_block_reason[battle_tag][active_idx]:
+                if (
+                    redirection_sample
+                    and not self._ability_block_reason[battle_tag][active_idx]
+                ):
                     reason, target_mon = redirection_sample
                     self._ability_block_reason[battle_tag][active_idx] = reason
-                    self._ability_blocked_target_species[battle_tag][active_idx] = target_mon.species
-                    self._ability_blocked_target_ability[battle_tag][active_idx] = get_known_ability(target_mon, battle) or ""
+                    self._ability_blocked_target_species[battle_tag][active_idx] = (
+                        target_mon.species
+                    )
+                    self._ability_blocked_target_ability[battle_tag][active_idx] = (
+                        get_known_ability(target_mon, battle) or ""
+                    )
 
             # Phase 6.3.3 direct safety calculations (audit / logging paths)
             is_chosen_direct_blocked = False
@@ -6523,19 +10405,33 @@ class DoublesDamageAwarePlayer(Player):
                 chosen_move = chosen_order.order
                 chosen_target_pos = chosen_order.move_target
                 if chosen_target_pos in (1, 2):
-                    chosen_direct_target_mon = battle.opponent_active_pokemon[chosen_target_pos - 1]
+                    chosen_direct_target_mon = battle.opponent_active_pokemon[
+                        chosen_target_pos - 1
+                    ]
                     if chosen_direct_target_mon:
                         if not is_opponent_spread_move(chosen_move, chosen_order):
-                            blocks_d, reason_d = direct_known_absorb_blocks_move(chosen_move, active_mon, chosen_direct_target_mon, battle, chosen_order)
+                            blocks_d, reason_d = direct_known_absorb_blocks_move(
+                                chosen_move,
+                                active_mon,
+                                chosen_direct_target_mon,
+                                battle,
+                                chosen_order,
+                            )
                             if blocks_d:
                                 is_chosen_direct_blocked = True
                                 chosen_direct_reason = reason_d
 
             if is_chosen_direct_blocked and chosen_direct_target_mon:
                 self._direct_absorb_immune_move_selected[battle_tag][active_idx] = True
-                self._direct_absorb_block_reason[battle_tag][active_idx] = chosen_direct_reason
-                self._direct_absorb_target_species[battle_tag][active_idx] = chosen_direct_target_mon.species
-                self._direct_absorb_target_ability[battle_tag][active_idx] = get_known_ability(chosen_direct_target_mon, battle) or ""
+                self._direct_absorb_block_reason[battle_tag][active_idx] = (
+                    chosen_direct_reason
+                )
+                self._direct_absorb_target_species[battle_tag][active_idx] = (
+                    chosen_direct_target_mon.species
+                )
+                self._direct_absorb_target_ability[battle_tag][active_idx] = (
+                    get_known_ability(chosen_direct_target_mon, battle) or ""
+                )
 
             direct_block_candidate_exists = False
             direct_block_sample = None
@@ -6545,23 +10441,40 @@ class DoublesDamageAwarePlayer(Player):
                 cand_move = ord_cand.order
                 cand_target_pos = ord_cand.move_target
                 if cand_target_pos in (1, 2):
-                    cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
+                    cand_target_mon = battle.opponent_active_pokemon[
+                        cand_target_pos - 1
+                    ]
                     if cand_target_mon:
                         if not is_opponent_spread_move(cand_move, ord_cand):
-                            blocks_d, reason_d = direct_known_absorb_blocks_move(cand_move, active_mon, cand_target_mon, battle, ord_cand)
+                            blocks_d, reason_d = direct_known_absorb_blocks_move(
+                                cand_move, active_mon, cand_target_mon, battle, ord_cand
+                            )
                             if blocks_d:
                                 direct_block_candidate_exists = True
                                 if not direct_block_sample:
                                     direct_block_sample = (reason_d, cand_target_mon)
 
             if direct_block_candidate_exists and not is_chosen_direct_blocked:
-                if getattr(self.config, "ability_hard_safety_direct_absorb_only", False):
-                    self._direct_absorb_hard_block_avoided[battle_tag][active_idx] = True
-                    if direct_block_sample and not self._direct_absorb_block_reason[battle_tag][active_idx]:
+                if getattr(
+                    self.config, "ability_hard_safety_direct_absorb_only", False
+                ):
+                    self._direct_absorb_hard_block_avoided[battle_tag][active_idx] = (
+                        True
+                    )
+                    if (
+                        direct_block_sample
+                        and not self._direct_absorb_block_reason[battle_tag][active_idx]
+                    ):
                         reason_d, target_mon = direct_block_sample
-                        self._direct_absorb_block_reason[battle_tag][active_idx] = reason_d
-                        self._direct_absorb_target_species[battle_tag][active_idx] = target_mon.species
-                        self._direct_absorb_target_ability[battle_tag][active_idx] = get_known_ability(target_mon, battle) or ""
+                        self._direct_absorb_block_reason[battle_tag][active_idx] = (
+                            reason_d
+                        )
+                        self._direct_absorb_target_species[battle_tag][active_idx] = (
+                            target_mon.species
+                        )
+                        self._direct_absorb_target_ability[battle_tag][active_idx] = (
+                            get_known_ability(target_mon, battle) or ""
+                        )
 
             self._direct_absorb_only_legal_action[battle_tag][active_idx] = (
                 is_chosen_direct_blocked and len(valid_orders_slot) == 1
@@ -6589,22 +10502,36 @@ class DoublesDamageAwarePlayer(Player):
 
             blocked_target_species = ""  # effective target for streak key
             blocked_target_reason = ""
-            
-            if chosen_order and isinstance(chosen_order.order, Move) and getattr(chosen_order.order, "base_power", 0) > 0:
+
+            if (
+                chosen_order
+                and isinstance(chosen_order.order, Move)
+                and getattr(chosen_order.order, "base_power", 0) > 0
+            ):
                 chosen_move = chosen_order.order
                 chosen_target_pos = chosen_order.move_target
-                
+
                 absorb_selected_move_id = chosen_move.id
 
                 # Check single-target move
                 if chosen_target_pos in (1, 2):
-                    chosen_target_mon = battle.opponent_active_pokemon[chosen_target_pos - 1]
+                    chosen_target_mon = battle.opponent_active_pokemon[
+                        chosen_target_pos - 1
+                    ]
                     if chosen_target_mon:
                         intended_species = chosen_target_mon.species
-                        intended_ability = get_known_ability(chosen_target_mon, battle) or ""
+                        intended_ability = (
+                            get_known_ability(chosen_target_mon, battle) or ""
+                        )
 
                         # Check direct block
-                        blocks, reason = ability_hard_blocks_move(chosen_move, active_mon, chosen_target_mon, battle, config=self.config)
+                        blocks, reason = ability_hard_blocks_move(
+                            chosen_move,
+                            active_mon,
+                            chosen_target_mon,
+                            battle,
+                            config=self.config,
+                        )
                         if blocks:
                             target_ab = get_known_ability(chosen_target_mon, battle)
                             if is_known_absorb_ability(target_ab):
@@ -6616,46 +10543,86 @@ class DoublesDamageAwarePlayer(Player):
                                 absorb_intended_target_ability = intended_ability
                                 absorb_effective_target_species = intended_species
                                 absorb_effective_target_ability = intended_ability
-                                blocked_target_species = chosen_target_mon.species  # effective for streak
+                                blocked_target_species = (
+                                    chosen_target_mon.species
+                                )  # effective for streak
                                 blocked_target_reason = reason
 
                         # Check redirection block
                         if not absorb_immune_move_selected:
-                            redirects, red_reason = ability_redirects_single_target_move(
-                                chosen_move, chosen_target_mon, battle.opponent_active_pokemon, active_mon, battle
+                            redirects, red_reason = (
+                                ability_redirects_single_target_move(
+                                    chosen_move,
+                                    chosen_target_mon,
+                                    battle.opponent_active_pokemon,
+                                    active_mon,
+                                    battle,
+                                )
                             )
                             if redirects:
                                 red_target = None
                                 for opp in battle.opponent_active_pokemon:
-                                    if opp and opp != chosen_target_mon and not getattr(opp, "fainted", False):
+                                    if (
+                                        opp
+                                        and opp != chosen_target_mon
+                                        and not getattr(opp, "fainted", False)
+                                    ):
                                         opp_ability = get_known_ability(opp, battle)
-                                        if opp_ability in ("stormdrain", "lightningrod"):
+                                        if opp_ability in (
+                                            "stormdrain",
+                                            "lightningrod",
+                                        ):
                                             red_target = opp
                                             break
                                 if red_target:
-                                    blocks_red, reason_red = ability_hard_blocks_move(chosen_move, active_mon, red_target, battle, config=self.config)
+                                    blocks_red, reason_red = ability_hard_blocks_move(
+                                        chosen_move,
+                                        active_mon,
+                                        red_target,
+                                        battle,
+                                        config=self.config,
+                                    )
                                     if blocks_red:
-                                        target_ab = get_known_ability(red_target, battle)
+                                        target_ab = get_known_ability(
+                                            red_target, battle
+                                        )
                                         if is_known_absorb_ability(target_ab):
                                             absorb_immune_move_selected = True
                                             absorb_error_reason = reason_red
                                             # Redirection: intended is chosen slot, effective is redirector
                                             absorb_via_redirection = True
-                                            absorb_intended_target_species = intended_species
-                                            absorb_intended_target_ability = intended_ability
-                                            absorb_effective_target_species = red_target.species
-                                            absorb_effective_target_ability = get_known_ability(red_target, battle) or ""
-                                            blocked_target_species = red_target.species  # effective for streak
+                                            absorb_intended_target_species = (
+                                                intended_species
+                                            )
+                                            absorb_intended_target_ability = (
+                                                intended_ability
+                                            )
+                                            absorb_effective_target_species = (
+                                                red_target.species
+                                            )
+                                            absorb_effective_target_ability = (
+                                                get_known_ability(red_target, battle)
+                                                or ""
+                                            )
+                                            blocked_target_species = (
+                                                red_target.species
+                                            )  # effective for streak
                                             blocked_target_reason = reason_red
 
                 # Check spread move
                 elif is_opponent_spread_move(chosen_move, chosen_order):
-                    opponents = [opp for opp in battle.opponent_active_pokemon if opp and not getattr(opp, "fainted", False)]
+                    opponents = [
+                        opp
+                        for opp in battle.opponent_active_pokemon
+                        if opp and not getattr(opp, "fainted", False)
+                    ]
                     if opponents:
                         blocked_opps = []
                         blocked_reasons = []
                         for opp in opponents:
-                            blocked, reason = ability_hard_blocks_move(chosen_move, active_mon, opp, battle, config=self.config)
+                            blocked, reason = ability_hard_blocks_move(
+                                chosen_move, active_mon, opp, battle, config=self.config
+                            )
                             if blocked:
                                 opp_ab = get_known_ability(opp, battle)
                                 if is_known_absorb_ability(opp_ab):
@@ -6668,15 +10635,26 @@ class DoublesDamageAwarePlayer(Player):
                                 productive_partial_absorb_spread = True
                             else:
                                 productive_partial_absorb_spread = False
-                            blocked_target_species = "+".join(sorted([o.species for o in blocked_opps]))
+                            blocked_target_species = "+".join(
+                                sorted([o.species for o in blocked_opps])
+                            )
                             blocked_target_reason = "+".join(sorted(blocked_reasons))
                             absorb_error_reason = blocked_target_reason
                             # Spread: no redirection concept; intended == effective == all blocked
                             absorb_via_redirection = False
                             absorb_intended_target_species = blocked_target_species
-                            absorb_intended_target_ability = "+".join(sorted([get_known_ability(o, battle) or "" for o in blocked_opps]))
+                            absorb_intended_target_ability = "+".join(
+                                sorted(
+                                    [
+                                        get_known_ability(o, battle) or ""
+                                        for o in blocked_opps
+                                    ]
+                                )
+                            )
                             absorb_effective_target_species = blocked_target_species
-                            absorb_effective_target_ability = absorb_intended_target_ability
+                            absorb_effective_target_ability = (
+                                absorb_intended_target_ability
+                            )
 
             if absorb_immune_move_selected:
                 # Inspect alternative moves using canonical precomputed slot_scores.
@@ -6693,7 +10671,11 @@ class DoublesDamageAwarePlayer(Player):
                     if not ord_cand:
                         continue
                     # Skip the selected order itself to avoid counting it as its own best alternative
-                    if ord_cand is (best_joint.first_order if active_idx == 0 else best_joint.second_order):
+                    if ord_cand is (
+                        best_joint.first_order
+                        if active_idx == 0
+                        else best_joint.second_order
+                    ):
                         continue
                     cand_score = slot_scores.get(id(ord_cand), 0.0)
                     if isinstance(ord_cand.order, Pokemon):
@@ -6703,15 +10685,23 @@ class DoublesDamageAwarePlayer(Player):
                         move_obj = ord_cand.order
                         if getattr(move_obj, "base_power", 0) > 0:
                             # Use canonical precomputed score; safety predicate only
-                            is_safe = is_alternative_safe_damaging_predicate(ord_cand, active_mon, battle)
+                            is_safe = is_alternative_safe_damaging_predicate(
+                                ord_cand, active_mon, battle
+                            )
                             if is_safe and cand_score > 0.0:
                                 safe_alt_available = True
                                 if cand_score > best_safe_alt_score:
                                     best_safe_alt_score = cand_score
                                     best_safe_alt_move = move_obj.id
                                     if ord_cand.move_target in (1, 2):
-                                        t_mon = battle.opponent_active_pokemon[ord_cand.move_target - 1]
-                                        best_safe_alt_target = t_mon.species if t_mon else f"opponent_{ord_cand.move_target}"
+                                        t_mon = battle.opponent_active_pokemon[
+                                            ord_cand.move_target - 1
+                                        ]
+                                        best_safe_alt_target = (
+                                            t_mon.species
+                                            if t_mon
+                                            else f"opponent_{ord_cand.move_target}"
+                                        )
                                     else:
                                         best_safe_alt_target = "spread"
                         else:
@@ -6735,7 +10725,9 @@ class DoublesDamageAwarePlayer(Player):
                 # previous recorded state, preserve streak without incrementing.
                 curr_attacker_ident = self.get_pokemon_identifier(active_mon)
                 curr_move_id = chosen_order.order.id
-                curr_effective_target = blocked_target_species  # effective (redirected) target
+                curr_effective_target = (
+                    blocked_target_species  # effective (redirected) target
+                )
                 curr_reason_key = blocked_target_reason
                 curr_turn = battle.turn
 
@@ -6744,9 +10736,9 @@ class DoublesDamageAwarePlayer(Player):
                 prev_state = battle_streak_map.get(streak_key)
 
                 if prev_state is not None and (
-                    prev_state["move"] == curr_move_id and
-                    prev_state["effective_target"] == curr_effective_target and
-                    prev_state["reason"] == curr_reason_key
+                    prev_state["move"] == curr_move_id
+                    and prev_state["effective_target"] == curr_effective_target
+                    and prev_state["reason"] == curr_reason_key
                 ):
                     if prev_state["turn"] == curr_turn:
                         # Same event evaluated again on the same turn: idempotent, preserve streak
@@ -6766,7 +10758,7 @@ class DoublesDamageAwarePlayer(Player):
                     "effective_target": curr_effective_target,
                     "reason": curr_reason_key,
                     "turn": curr_turn,
-                    "streak": new_streak
+                    "streak": new_streak,
                 }
                 absorb_selected_streak = new_streak
             else:
@@ -6776,10 +10768,12 @@ class DoublesDamageAwarePlayer(Player):
                     curr_attacker_ident = self.get_pokemon_identifier(active_mon)
                     self._absorb_streak_state[battle_tag].pop(curr_attacker_ident, None)
                 absorb_selected_streak = 0
-                
+
             # Phase 6.3.5a: Priority Terrain / Ability Safety Calculations
-            chosen_order = best_joint.first_order if active_idx == 0 else best_joint.second_order
-            
+            chosen_order = (
+                best_joint.first_order if active_idx == 0 else best_joint.second_order
+            )
+
             # 1. Determine if the chosen action is a priority blocked action
             priority_blocked = False
             priority_block_reason = ""
@@ -6791,68 +10785,109 @@ class DoublesDamageAwarePlayer(Player):
             priority_target_type_2 = ""
             priority_blocking_ability = ""
             priority_blocking_ability_source = ""
-            
+
             if chosen_order and isinstance(chosen_order.order, Move):
                 chosen_move = chosen_order.order
                 target_pos = chosen_order.move_target
                 if target_pos in (1, 2):
                     target_mon = battle.opponent_active_pokemon[target_pos - 1]
                     if target_mon:
-                        priority_res = evaluate_priority_move_legality(chosen_move, active_mon, target_mon, battle, self.config)
+                        priority_res = evaluate_priority_move_legality(
+                            chosen_move, active_mon, target_mon, battle, self.config
+                        )
                         if priority_res["is_priority_move"]:
-                            priority_target_grounded = priority_res["intended_target_grounded"]
+                            priority_target_grounded = priority_res[
+                                "intended_target_grounded"
+                            ]
                             priority_target_species = target_mon.species
                             t_types = getattr(target_mon, "types", [])
                             if len(t_types) > 0 and t_types[0]:
-                                priority_target_type_1 = t_types[0].name.upper() if hasattr(t_types[0], "name") else str(t_types[0]).upper()
+                                priority_target_type_1 = (
+                                    t_types[0].name.upper()
+                                    if hasattr(t_types[0], "name")
+                                    else str(t_types[0]).upper()
+                                )
                             if len(t_types) > 1 and t_types[1]:
-                                priority_target_type_2 = t_types[1].name.upper() if hasattr(t_types[1], "name") else str(t_types[1]).upper()
-                            
+                                priority_target_type_2 = (
+                                    t_types[1].name.upper()
+                                    if hasattr(t_types[1], "name")
+                                    else str(t_types[1]).upper()
+                                )
+
                             priority_blocking_ability = priority_res["blocking_ability"]
-                            priority_blocking_ability_source = priority_res["blocking_ability_source"]
-                            
+                            priority_blocking_ability_source = priority_res[
+                                "blocking_ability_source"
+                            ]
+
                             if priority_res["blocked"]:
                                 priority_blocked = True
                                 priority_block_reason = priority_res["reason"]
-                                if priority_res["reason"] == "priority_blocked_by_psychic_terrain":
+                                if (
+                                    priority_res["reason"]
+                                    == "priority_blocked_by_psychic_terrain"
+                                ):
                                     priority_selected_into_psychic_terrain = True
-                                    if getattr(chosen_move, "id", "").lower() == "suckerpunch":
-                                        sucker_punch_selected_into_psychic_terrain = True
+                                    if (
+                                        getattr(chosen_move, "id", "").lower()
+                                        == "suckerpunch"
+                                    ):
+                                        sucker_punch_selected_into_psychic_terrain = (
+                                            True
+                                        )
 
             # 2. Check if a blocked candidate was avoided
             priority_blocked_candidate_exists = False
             priority_blocked_sample = None
-            
+
             for ord_cand in valid_orders_slot:
                 if not ord_cand or not isinstance(ord_cand.order, Move):
                     continue
                 cand_move = ord_cand.order
                 cand_target_pos = ord_cand.move_target
                 if cand_target_pos in (1, 2):
-                    cand_target_mon = battle.opponent_active_pokemon[cand_target_pos - 1]
+                    cand_target_mon = battle.opponent_active_pokemon[
+                        cand_target_pos - 1
+                    ]
                     if cand_target_mon:
-                        priority_res_cand = evaluate_priority_move_legality(cand_move, active_mon, cand_target_mon, battle, self.config)
+                        priority_res_cand = evaluate_priority_move_legality(
+                            cand_move, active_mon, cand_target_mon, battle, self.config
+                        )
                         if priority_res_cand["blocked"]:
                             priority_blocked_candidate_exists = True
-                            priority_blocked_sample = (priority_res_cand, cand_target_mon)
+                            priority_blocked_sample = (
+                                priority_res_cand,
+                                cand_target_mon,
+                            )
                             break
-                            
+
             priority_block_avoided = False
             if priority_blocked_candidate_exists and not priority_blocked:
                 priority_block_avoided = True
                 if priority_blocked_sample:
                     priority_res_cand, target_mon = priority_blocked_sample
-                    priority_target_grounded = priority_res_cand["intended_target_grounded"]
+                    priority_target_grounded = priority_res_cand[
+                        "intended_target_grounded"
+                    ]
                     priority_target_species = target_mon.species
                     t_types = getattr(target_mon, "types", [])
                     if len(t_types) > 0 and t_types[0]:
-                        priority_target_type_1 = t_types[0].name.upper() if hasattr(t_types[0], "name") else str(t_types[0]).upper()
+                        priority_target_type_1 = (
+                            t_types[0].name.upper()
+                            if hasattr(t_types[0], "name")
+                            else str(t_types[0]).upper()
+                        )
                     if len(t_types) > 1 and t_types[1]:
-                        priority_target_type_2 = t_types[1].name.upper() if hasattr(t_types[1], "name") else str(t_types[1]).upper()
+                        priority_target_type_2 = (
+                            t_types[1].name.upper()
+                            if hasattr(t_types[1], "name")
+                            else str(t_types[1]).upper()
+                        )
                     priority_blocking_ability = priority_res_cand["blocking_ability"]
-                    priority_blocking_ability_source = priority_res_cand["blocking_ability_source"]
+                    priority_blocking_ability_source = priority_res_cand[
+                        "blocking_ability_source"
+                    ]
                     priority_block_reason = priority_res_cand["reason"]
-                    
+
             # 3. Check only-legal
             priority_only_legal = False
             if priority_blocked and len(valid_orders_slot) == 1:
@@ -6861,8 +10896,12 @@ class DoublesDamageAwarePlayer(Player):
             # Assign lists
             priority_move_field_blocked_list[active_idx] = priority_blocked
             priority_move_block_reason_list[active_idx] = priority_block_reason
-            priority_move_selected_into_psychic_terrain_list[active_idx] = priority_selected_into_psychic_terrain
-            sucker_punch_selected_into_psychic_terrain_list[active_idx] = sucker_punch_selected_into_psychic_terrain
+            priority_move_selected_into_psychic_terrain_list[active_idx] = (
+                priority_selected_into_psychic_terrain
+            )
+            sucker_punch_selected_into_psychic_terrain_list[active_idx] = (
+                sucker_punch_selected_into_psychic_terrain
+            )
             priority_move_block_avoided_list[active_idx] = priority_block_avoided
             priority_move_only_legal_list[active_idx] = priority_only_legal
             priority_target_grounded_list[active_idx] = priority_target_grounded
@@ -6870,117 +10909,208 @@ class DoublesDamageAwarePlayer(Player):
             priority_target_type_1_list[active_idx] = priority_target_type_1
             priority_target_type_2_list[active_idx] = priority_target_type_2
             priority_blocking_ability_list[active_idx] = priority_blocking_ability
-            priority_blocking_ability_source_list[active_idx] = priority_blocking_ability_source
+            priority_blocking_ability_source_list[active_idx] = (
+                priority_blocking_ability_source
+            )
 
             # Assign lists
             absorb_immune_move_selected_list[active_idx] = absorb_immune_move_selected
             absorb_selection_forced_list[active_idx] = absorb_selection_forced
-            absorb_safe_alternative_available_list[active_idx] = absorb_safe_alternative_available
-            absorb_best_safe_alternative_move_list[active_idx] = absorb_best_safe_alternative_move
-            absorb_best_safe_alternative_target_list[active_idx] = absorb_best_safe_alternative_target
-            absorb_best_safe_alternative_score_list[active_idx] = absorb_best_safe_alternative_score
+            absorb_safe_alternative_available_list[active_idx] = (
+                absorb_safe_alternative_available
+            )
+            absorb_best_safe_alternative_move_list[active_idx] = (
+                absorb_best_safe_alternative_move
+            )
+            absorb_best_safe_alternative_target_list[active_idx] = (
+                absorb_best_safe_alternative_target
+            )
+            absorb_best_safe_alternative_score_list[active_idx] = (
+                absorb_best_safe_alternative_score
+            )
             absorb_selected_score_list[active_idx] = absorb_selected_score
             absorb_selected_streak_list[active_idx] = absorb_selected_streak
             # Phase 6.3.6: Direct known absorb repeat detection
-            _direct_absorb_selected = self._direct_absorb_immune_move_selected.get(battle_tag, {}).get(active_idx, False)
+            _direct_absorb_selected = self._direct_absorb_immune_move_selected.get(
+                battle_tag, {}
+            ).get(active_idx, False)
             direct_known_absorb_repeat_selected_list[active_idx] = (
                 _direct_absorb_selected and absorb_selected_streak >= 2
             )
             avoidable_absorb_error_list[active_idx] = avoidable_absorb_error
-            productive_partial_absorb_spread_list[active_idx] = productive_partial_absorb_spread
+            productive_partial_absorb_spread_list[active_idx] = (
+                productive_partial_absorb_spread
+            )
             absorb_error_reason_list[active_idx] = absorb_error_reason
             # Phase 6.3.2a new target diagnostic fields
             absorb_via_redirection_list[active_idx] = absorb_via_redirection
-            absorb_intended_target_species_list[active_idx] = absorb_intended_target_species
-            absorb_intended_target_ability_list[active_idx] = absorb_intended_target_ability
-            absorb_effective_target_species_list[active_idx] = absorb_effective_target_species
-            absorb_effective_target_ability_list[active_idx] = absorb_effective_target_ability
+            absorb_intended_target_species_list[active_idx] = (
+                absorb_intended_target_species
+            )
+            absorb_intended_target_ability_list[active_idx] = (
+                absorb_intended_target_ability
+            )
+            absorb_effective_target_species_list[active_idx] = (
+                absorb_effective_target_species
+            )
+            absorb_effective_target_ability_list[active_idx] = (
+                absorb_effective_target_ability
+            )
             absorb_selected_move_id_list[active_idx] = absorb_selected_move_id
-
 
         # Re-evaluate Synergy Rule 1 meta Protect penalty for chosen orders -- old meta engine
         if self.config.enable_meta_opponent_modeling and self.meta_engine:
             fo_1 = best_joint.first_order
             fo_2 = best_joint.second_order
-            if fo_1 and fo_2 and isinstance(fo_1.order, Move) and isinstance(fo_2.order, Move):
+            if (
+                fo_1
+                and fo_2
+                and isinstance(fo_1.order, Move)
+                and isinstance(fo_2.order, Move)
+            ):
                 if fo_1.move_target == fo_2.move_target and fo_1.move_target in (1, 2):
                     target_opp = battle.opponent_active_pokemon[fo_1.move_target - 1]
                     if target_opp:
                         t_species = target_opp.species
                         t_revealed = list(target_opp.moves.keys())
-                        likely_protect, prob, reason = self.meta_engine.likely_has_protect(
-                            t_species, t_revealed, threshold=self.config.meta_move_probability_threshold
+                        likely_protect, prob, reason = (
+                            self.meta_engine.likely_has_protect(
+                                t_species,
+                                t_revealed,
+                                threshold=self.config.meta_move_probability_threshold,
+                            )
                         )
                         if likely_protect:
-                            self.increment_metric(self.selected_meta_predictions_by_battle, battle_tag)
-                            self.increment_metric(self.meta_predictions_used_by_battle, battle_tag)
-                            self.increment_metric(self.meta_protect_predictions_by_battle, battle_tag)
-                            self.total_meta_score_delta_by_battle[battle_tag] = self.total_meta_score_delta_by_battle.get(battle_tag, 0.0) + 15.0
+                            self.increment_metric(
+                                self.selected_meta_predictions_by_battle, battle_tag
+                            )
+                            self.increment_metric(
+                                self.meta_predictions_used_by_battle, battle_tag
+                            )
+                            self.increment_metric(
+                                self.meta_protect_predictions_by_battle, battle_tag
+                            )
+                            self.total_meta_score_delta_by_battle[battle_tag] = (
+                                self.total_meta_score_delta_by_battle.get(
+                                    battle_tag, 0.0
+                                )
+                                + 15.0
+                            )
                             if self.verbose:
-                                print(f"[Meta Prediction] species={t_species} type=protect prob={prob:.2f} action=joint_double_target delta=-15.0")
+                                print(
+                                    f"[Meta Prediction] species={t_species} type=protect prob={prob:.2f} action=joint_double_target delta=-15.0"
+                                )
 
         # Re-evaluate joint Protect double-targeting for random-set engine
         if self.config.enable_random_set_opponent_modeling and self.random_set_engine:
             fo_1 = best_joint.first_order
             fo_2 = best_joint.second_order
-            if fo_1 and fo_2 and isinstance(fo_1.order, Move) and isinstance(fo_2.order, Move):
+            if (
+                fo_1
+                and fo_2
+                and isinstance(fo_1.order, Move)
+                and isinstance(fo_2.order, Move)
+            ):
                 if fo_1.move_target == fo_2.move_target and fo_1.move_target in (1, 2):
                     target_opp = battle.opponent_active_pokemon[fo_1.move_target - 1]
                     if target_opp:
                         t_species = target_opp.species
                         t_revealed = list(target_opp.moves.keys())
-                        likely_protect, prob, _ = self.random_set_engine.likely_has_protect(
-                            t_species, t_revealed, threshold=self.config.random_set_probability_threshold
+                        likely_protect, prob, _ = (
+                            self.random_set_engine.likely_has_protect(
+                                t_species,
+                                t_revealed,
+                                threshold=self.config.random_set_probability_threshold,
+                            )
                         )
                         if likely_protect:
-                            self.increment_metric(self.rs_selected_predictions_by_battle, battle_tag)
-                            self.increment_metric(self.rs_predictions_used_by_battle, battle_tag)
-                            self.increment_metric(self.rs_protect_predictions_by_battle, battle_tag)
+                            self.increment_metric(
+                                self.rs_selected_predictions_by_battle, battle_tag
+                            )
+                            self.increment_metric(
+                                self.rs_predictions_used_by_battle, battle_tag
+                            )
+                            self.increment_metric(
+                                self.rs_protect_predictions_by_battle, battle_tag
+                            )
                             self.rs_score_delta_by_battle[battle_tag] = (
-                                self.rs_score_delta_by_battle.get(battle_tag, 0.0) + 12.0
+                                self.rs_score_delta_by_battle.get(battle_tag, 0.0)
+                                + 12.0
                             )
                             if self.verbose:
-                                print(f"[RS Prediction] protect: {t_species} p={prob:.2f} joint_double_target delta=-12.0")
+                                print(
+                                    f"[RS Prediction] protect: {t_species} p={prob:.2f} joint_double_target delta=-12.0"
+                                )
 
         # Increment metrics and track Protect turn for chosen orders
         for idx, order in enumerate([best_joint.first_order, best_joint.second_order]):
             if order and isinstance(order.order, Move):
                 m = order.order
-                if m.id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker"):
+                if m.id in (
+                    "protect",
+                    "detect",
+                    "spikyshield",
+                    "kingsshield",
+                    "banefulbunker",
+                ):
                     self.battle_metrics[battle_tag]["protect"] += 1
                     mon = battle.active_pokemon[idx]
                     if mon:
                         mon_id = self.get_pokemon_identifier(mon)
-                        self.last_protect_turn.setdefault(battle_tag, {})[(idx, mon_id)] = current_turn
+                        self.last_protect_turn.setdefault(battle_tag, {})[
+                            (idx, mon_id)
+                        ] = current_turn
                 elif m.id == "fakeout":
                     self.battle_metrics[battle_tag]["fake_out"] += 1
                 if is_opponent_spread_move(m, order):
                     self.battle_metrics[battle_tag]["spread"] += 1
-                    is_inefficient = self.inefficient_partial_spread_by_battle.get(battle_tag, {}).get(idx, False)
+                    is_inefficient = self.inefficient_partial_spread_by_battle.get(
+                        battle_tag, {}
+                    ).get(idx, False)
                     if not is_inefficient:
-                        self.battle_metrics[battle_tag]["valid_spread"] = self.battle_metrics[battle_tag].get("valid_spread", 0) + 1
+                        self.battle_metrics[battle_tag]["valid_spread"] = (
+                            self.battle_metrics[battle_tag].get("valid_spread", 0) + 1
+                        )
 
         # Check for focus-fire metric (both target the same opponent)
         fo_1 = best_joint.first_order
         fo_2 = best_joint.second_order
-        if fo_1 and fo_2 and isinstance(fo_1.order, Move) and isinstance(fo_2.order, Move):
+        if (
+            fo_1
+            and fo_2
+            and isinstance(fo_1.order, Move)
+            and isinstance(fo_2.order, Move)
+        ):
             if fo_1.move_target == fo_2.move_target and fo_1.move_target in (1, 2):
                 self.battle_metrics[battle_tag]["focus_fire"] += 1
 
         # Increment threat contribution metric if enabled
         if self.config.enable_threat_scoring:
             threat_contrib = 0.0
-            for idx, order in enumerate([best_joint.first_order, best_joint.second_order]):
-                if order and isinstance(order.order, Move) and order.move_target in (1, 2):
+            for idx, order in enumerate(
+                [best_joint.first_order, best_joint.second_order]
+            ):
+                if (
+                    order
+                    and isinstance(order.order, Move)
+                    and order.move_target in (1, 2)
+                ):
                     target_mon = battle.opponent_active_pokemon[order.move_target - 1]
                     if target_mon:
                         threat_score = self.score_opponent_threat(target_mon, battle)
-                        threat_contrib += threat_score * self.config.threat_targeting_weight
+                        threat_contrib += (
+                            threat_score * self.config.threat_targeting_weight
+                        )
             self.battle_metrics[battle_tag]["threat_contribution"] += threat_contrib
 
         # Check and increment tiebreaker and boosted override activations per battle
         for idx, order in enumerate([best_joint.first_order, best_joint.second_order]):
-            if order and isinstance(order.order, Move) and getattr(order.order, "base_power", 0) > 0 and order.move_target in (1, 2):
+            if (
+                order
+                and isinstance(order.order, Move)
+                and getattr(order.order, "base_power", 0) > 0
+                and order.move_target in (1, 2)
+            ):
                 target_mon = battle.opponent_active_pokemon[order.move_target - 1]
                 active_mon = battle.active_pokemon[idx]
                 if target_mon and active_mon:
@@ -6989,30 +11119,61 @@ class DoublesDamageAwarePlayer(Player):
                         # 1. No candidate move can KO
                         any_ko = False
                         for cand_order in self.get_valid_orders_for_slot(idx, battle):
-                            if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                t_mon = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                if t_mon and self.check_move_will_ko(cand_order.order, battle.active_pokemon[idx], t_mon, battle, config=self.config):
+                            if isinstance(
+                                cand_order.order, Move
+                            ) and cand_order.move_target in (1, 2):
+                                t_mon = battle.opponent_active_pokemon[
+                                    cand_order.move_target - 1
+                                ]
+                                if t_mon and self.check_move_will_ko(
+                                    cand_order.order,
+                                    battle.active_pokemon[idx],
+                                    t_mon,
+                                    battle,
+                                    config=self.config,
+                                ):
                                     any_ko = True
                                     break
-                        
+
                         # 2. No opponent HP < 35%
-                        any_low_hp = any(opp and getattr(opp, "current_hp_fraction", 1.0) < self.config.low_hp_target_threshold for opp in battle.opponent_active_pokemon)
-                        
+                        any_low_hp = any(
+                            opp
+                            and getattr(opp, "current_hp_fraction", 1.0)
+                            < self.config.low_hp_target_threshold
+                            for opp in battle.opponent_active_pokemon
+                        )
+
                         if not any_ko and not any_low_hp:
                             # 3. Top candidate scores are close
                             if not self._base_scores_cache[idx]:
-                                for cand_order in self.get_valid_orders_for_slot(idx, battle):
-                                    self._base_scores_cache[idx][id(cand_order)] = self.score_action(
-                                        cand_order, idx, battle, with_tiebreaker=False
+                                for cand_order in self.get_valid_orders_for_slot(
+                                    idx, battle
+                                ):
+                                    self._base_scores_cache[idx][id(cand_order)] = (
+                                        self.score_action(
+                                            cand_order,
+                                            idx,
+                                            battle,
+                                            with_tiebreaker=False,
+                                        )
                                     )
                             cands = list(self._base_scores_cache[idx].values())
                             if len(cands) >= 2:
                                 cands.sort(reverse=True)
-                                if cands[0] - cands[1] <= self.config.threat_tiebreaker_score_gap:
-                                    self.battle_metrics[battle_tag]["tiebreaker_activations"] += 1
-                                    self.tiebreaker_activations_by_battle.setdefault(battle_tag, 0)
-                                    self.tiebreaker_activations_by_battle[battle_tag] += 1
- 
+                                if (
+                                    cands[0] - cands[1]
+                                    <= self.config.threat_tiebreaker_score_gap
+                                ):
+                                    self.battle_metrics[battle_tag][
+                                        "tiebreaker_activations"
+                                    ] += 1
+                                    self.tiebreaker_activations_by_battle.setdefault(
+                                        battle_tag, 0
+                                    )
+                                    self.tiebreaker_activations_by_battle[
+                                        battle_tag
+                                    ] += 1
+
                     # Let's check boosted override
                     if self.config.enable_boosted_threat_override:
                         boosts = self.get_boosts(target_mon)
@@ -7023,21 +11184,47 @@ class DoublesDamageAwarePlayer(Player):
                         if max_boost >= self.config.boosted_override_min_stage:
                             # 1. No candidate move can KO
                             any_ko = False
-                            for cand_order in self.get_valid_orders_for_slot(idx, battle):
-                                if isinstance(cand_order.order, Move) and cand_order.move_target in (1, 2):
-                                    t_mon = battle.opponent_active_pokemon[cand_order.move_target - 1]
-                                    if t_mon and self.check_move_will_ko(cand_order.order, battle.active_pokemon[idx], t_mon, battle, config=self.config):
+                            for cand_order in self.get_valid_orders_for_slot(
+                                idx, battle
+                            ):
+                                if isinstance(
+                                    cand_order.order, Move
+                                ) and cand_order.move_target in (1, 2):
+                                    t_mon = battle.opponent_active_pokemon[
+                                        cand_order.move_target - 1
+                                    ]
+                                    if t_mon and self.check_move_will_ko(
+                                        cand_order.order,
+                                        battle.active_pokemon[idx],
+                                        t_mon,
+                                        battle,
+                                        config=self.config,
+                                    ):
                                         any_ko = True
                                         break
-                            
+
                             # 2. No opponent HP < 35%
-                            any_low_hp = any(opp and getattr(opp, "current_hp_fraction", 1.0) < self.config.low_hp_target_threshold for opp in battle.opponent_active_pokemon)
-                            
-                            is_emergency = max_boost >= self.config.boosted_override_emergency_stage
+                            any_low_hp = any(
+                                opp
+                                and getattr(opp, "current_hp_fraction", 1.0)
+                                < self.config.low_hp_target_threshold
+                                for opp in battle.opponent_active_pokemon
+                            )
+
+                            is_emergency = (
+                                max_boost
+                                >= self.config.boosted_override_emergency_stage
+                            )
                             if is_emergency or (not any_ko and not any_low_hp):
-                                self.battle_metrics[battle_tag]["boosted_override_activations"] += 1
-                                self.boosted_override_activations_by_battle.setdefault(battle_tag, 0)
-                                self.boosted_override_activations_by_battle[battle_tag] += 1
+                                self.battle_metrics[battle_tag][
+                                    "boosted_override_activations"
+                                ] += 1
+                                self.boosted_override_activations_by_battle.setdefault(
+                                    battle_tag, 0
+                                )
+                                self.boosted_override_activations_by_battle[
+                                    battle_tag
+                                ] += 1
 
         active_1 = battle.active_pokemon[0]
         active_2 = battle.active_pokemon[1]
@@ -7046,9 +11233,15 @@ class DoublesDamageAwarePlayer(Player):
 
         if self.verbose:
             print(f"\n--- Turn {battle.turn} | Battle: {battle.battle_tag} ---")
-            print(f"Actives: P1={active_1.species if active_1 else None} | P2={active_2.species if active_2 else None}")
-            print(f"Opponents: O1={opp_1.species if opp_1 else None} | O2={opp_2.species if opp_2 else None}")
-            print(f"Best Joint Order: {self.safe_get_joint_message(best_joint)} (Score: {best_score:.2f} = {best_score_1:.2f} + {best_score_2:.2f})")
+            print(
+                f"Actives: P1={active_1.species if active_1 else None} | P2={active_2.species if active_2 else None}"
+            )
+            print(
+                f"Opponents: O1={opp_1.species if opp_1 else None} | O2={opp_2.species if opp_2 else None}"
+            )
+            print(
+                f"Best Joint Order: {self.safe_get_joint_message(best_joint)} (Score: {best_score:.2f} = {best_score_1:.2f} + {best_score_2:.2f})"
+            )
 
         if self.custom_logger:
             self.custom_logger.log_turn(
@@ -7060,7 +11253,7 @@ class DoublesDamageAwarePlayer(Player):
                 first_order=best_joint.first_order,
                 second_order=best_joint.second_order,
                 first_score=best_score_1,
-                second_score=best_score_2
+                second_score=best_score_2,
             )
 
         # Collect decision audit data if audit_logger is present
@@ -7069,17 +11262,47 @@ class DoublesDamageAwarePlayer(Player):
             overkill_triggered = False
             first_order = best_joint.first_order
             second_order = best_joint.second_order
-            if first_order and second_order and isinstance(first_order.order, Move) and isinstance(second_order.order, Move):
-                if first_order.move_target == second_order.move_target and first_order.move_target in (1, 2):
-                    target_opp = battle.opponent_active_pokemon[first_order.move_target - 1]
+            if (
+                first_order
+                and second_order
+                and isinstance(first_order.order, Move)
+                and isinstance(second_order.order, Move)
+            ):
+                if (
+                    first_order.move_target == second_order.move_target
+                    and first_order.move_target in (1, 2)
+                ):
+                    target_opp = battle.opponent_active_pokemon[
+                        first_order.move_target - 1
+                    ]
                     if target_opp:
-                        ko_1 = self.check_move_will_ko(first_order.order, battle.active_pokemon[0], target_opp, battle, config=self.config)
-                        ko_2 = self.check_move_will_ko(second_order.order, battle.active_pokemon[1], target_opp, battle, config=self.config)
-                        opp_hp_fraction = getattr(target_opp, "current_hp_fraction", 1.0)
-                        if (ko_1 and ko_2) or ((ko_1 or ko_2) and opp_hp_fraction < 0.15) or opp_hp_fraction < 0.08:
+                        ko_1 = self.check_move_will_ko(
+                            first_order.order,
+                            battle.active_pokemon[0],
+                            target_opp,
+                            battle,
+                            config=self.config,
+                        )
+                        ko_2 = self.check_move_will_ko(
+                            second_order.order,
+                            battle.active_pokemon[1],
+                            target_opp,
+                            battle,
+                            config=self.config,
+                        )
+                        opp_hp_fraction = getattr(
+                            target_opp, "current_hp_fraction", 1.0
+                        )
+                        if (
+                            (ko_1 and ko_2)
+                            or ((ko_1 or ko_2) and opp_hp_fraction < 0.15)
+                            or opp_hp_fraction < 0.08
+                        ):
                             allow_double = False
                             if self.config.enable_threat_scoring:
-                                threat_score = self.score_opponent_threat(target_opp, battle)
+                                threat_score = self.score_opponent_threat(
+                                    target_opp, battle
+                                )
                                 if threat_score >= 0.50:
                                     allow_double = True
                             if not allow_double:
@@ -7087,15 +11310,34 @@ class DoublesDamageAwarePlayer(Player):
 
             # 2. focus-fire bonus triggered
             focus_fire_triggered = False
-            if first_order and second_order and isinstance(first_order.order, Move) and isinstance(second_order.order, Move):
-                if first_order.move_target == second_order.move_target and first_order.move_target in (1, 2):
-                    target_opp = battle.opponent_active_pokemon[first_order.move_target - 1]
+            if (
+                first_order
+                and second_order
+                and isinstance(first_order.order, Move)
+                and isinstance(second_order.order, Move)
+            ):
+                if (
+                    first_order.move_target == second_order.move_target
+                    and first_order.move_target in (1, 2)
+                ):
+                    target_opp = battle.opponent_active_pokemon[
+                        first_order.move_target - 1
+                    ]
                     if target_opp:
-                        opp_hp_fraction = getattr(target_opp, "current_hp_fraction", 1.0)
+                        opp_hp_fraction = getattr(
+                            target_opp, "current_hp_fraction", 1.0
+                        )
                         other_idx = 1 if first_order.move_target == 1 else 0
                         other_opp = battle.opponent_active_pokemon[other_idx]
-                        other_hp_fraction = getattr(other_opp, "current_hp_fraction", 1.0) if other_opp else 1.0
-                        if opp_hp_fraction <= other_hp_fraction and opp_hp_fraction < 0.75:
+                        other_hp_fraction = (
+                            getattr(other_opp, "current_hp_fraction", 1.0)
+                            if other_opp
+                            else 1.0
+                        )
+                        if (
+                            opp_hp_fraction <= other_hp_fraction
+                            and opp_hp_fraction < 0.75
+                        ):
                             if self.config.enable_focus_fire_synergy:
                                 focus_fire_triggered = True
 
@@ -7130,20 +11372,35 @@ class DoublesDamageAwarePlayer(Player):
             best_spread_score = [None, None]
             best_ko_score = [None, None]
             for idx in (0, 1):
-                valid_orders_slot = valid_orders[idx] if valid_orders and valid_orders[idx] else []
+                valid_orders_slot = (
+                    valid_orders[idx] if valid_orders and valid_orders[idx] else []
+                )
                 for order in valid_orders_slot:
                     if isinstance(order.order, Move):
                         move = order.order
-                        score = slot_0_scores.get(id(order), 0.0) if idx == 0 else slot_1_scores.get(id(order), 0.0)
+                        score = (
+                            slot_0_scores.get(id(order), 0.0)
+                            if idx == 0
+                            else slot_1_scores.get(id(order), 0.0)
+                        )
                         if self.is_spread_move(move):
-                            if best_spread_score[idx] is None or score > best_spread_score[idx]:
+                            if (
+                                best_spread_score[idx] is None
+                                or score > best_spread_score[idx]
+                            ):
                                 best_spread_score[idx] = score
                         target_mon = None
                         if order.move_target == 1:
                             target_mon = battle.opponent_active_pokemon[0]
                         elif order.move_target == 2:
                             target_mon = battle.opponent_active_pokemon[1]
-                        if target_mon and self.check_move_will_ko(move, battle.active_pokemon[idx], target_mon, battle, config=self.config):
+                        if target_mon and self.check_move_will_ko(
+                            move,
+                            battle.active_pokemon[idx],
+                            target_mon,
+                            battle,
+                            config=self.config,
+                        ):
                             if best_ko_score[idx] is None or score > best_ko_score[idx]:
                                 best_ko_score[idx] = score
 
@@ -7156,9 +11413,16 @@ class DoublesDamageAwarePlayer(Player):
 
             low_hp_opponent_targeted = False
             for order in (first_order, second_order):
-                if order and isinstance(order.order, Move) and order.move_target in (1, 2):
+                if (
+                    order
+                    and isinstance(order.order, Move)
+                    and order.move_target in (1, 2)
+                ):
                     target_opp = battle.opponent_active_pokemon[order.move_target - 1]
-                    if target_opp and getattr(target_opp, "current_hp_fraction", 1.0) <= 0.35:
+                    if (
+                        target_opp
+                        and getattr(target_opp, "current_hp_fraction", 1.0) <= 0.35
+                    ):
                         low_hp_opponent_targeted = True
 
             # 7. expected damage, expected KO, target HP, action, action type, target species for selected slot orders
@@ -7168,8 +11432,21 @@ class DoublesDamageAwarePlayer(Player):
             slot_actions = [None, None]
             slot_action_types = [None, None]
             target_species = [None, None]
+            selected_action_kind = ["pass", "pass"]
+            selected_action_move_id = ["", ""]
+            selected_action_target_position = [0, 0]
+            selected_action_species = ["", ""]
+            selected_action_only_legal = [False, False]
 
             for idx, order in enumerate([first_order, second_order]):
+                orders_for_slot = (
+                    valid_orders[idx]
+                    if valid_orders and len(valid_orders) > idx
+                    else []
+                )
+                selected_action_only_legal[idx] = (
+                    len([o for o in orders_for_slot if o is not None]) <= 1
+                )
                 if order:
                     try:
                         slot_actions[idx] = str(order)
@@ -7178,15 +11455,34 @@ class DoublesDamageAwarePlayer(Player):
                     if slot_actions[idx] is None:
                         slot_actions[idx] = ""
                     # Deduce action types
-                    act_types = {"damaging": False, "status": False, "protect": False, "fakeout": False, "spread": False, "switch": False}
+                    act_types = {
+                        "damaging": False,
+                        "status": False,
+                        "protect": False,
+                        "fakeout": False,
+                        "spread": False,
+                        "switch": False,
+                    }
                     if isinstance(order.order, Move):
                         m = order.order
+                        selected_action_kind[idx] = "move"
+                        selected_action_move_id[idx] = getattr(m, "id", "")
+                        selected_action_target_position[idx] = int(
+                            getattr(order, "move_target", 0) or 0
+                        )
                         cat_name = getattr(m.category, "name", "STATUS")
                         if cat_name == "STATUS":
                             act_types["status"] = True
                         else:
                             act_types["damaging"] = True
-                        if m.id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker", "silktrap"):
+                        if m.id in (
+                            "protect",
+                            "detect",
+                            "spikyshield",
+                            "kingsshield",
+                            "banefulbunker",
+                            "silktrap",
+                        ):
                             act_types["protect"] = True
                         if m.id == "fakeout":
                             act_types["fakeout"] = True
@@ -7202,20 +11498,68 @@ class DoublesDamageAwarePlayer(Player):
 
                         if target_mon:
                             opp_max = self.estimate_opponent_max_hp(target_mon)
-                            expected_damages[idx] = self.get_expected_damage(m, battle.active_pokemon[idx], target_mon, battle, config=self.config) / max(1.0, opp_max)
-                            expected_kos[idx] = self.check_move_will_ko(m, battle.active_pokemon[idx], target_mon, battle, config=self.config)
-                            target_hps[idx] = float(target_mon.current_hp_fraction) if target_mon.current_hp_fraction is not None else 1.0
+                            expected_damages[idx] = self.get_expected_damage(
+                                m,
+                                battle.active_pokemon[idx],
+                                target_mon,
+                                battle,
+                                config=self.config,
+                            ) / max(1.0, opp_max)
+                            expected_kos[idx] = self.check_move_will_ko(
+                                m,
+                                battle.active_pokemon[idx],
+                                target_mon,
+                                battle,
+                                config=self.config,
+                            )
+                            target_hps[idx] = (
+                                float(target_mon.current_hp_fraction)
+                                if target_mon.current_hp_fraction is not None
+                                else 1.0
+                            )
                             target_species[idx] = target_mon.species
                     elif isinstance(order.order, Pokemon):
                         act_types["switch"] = True
+                        selected_action_kind[idx] = "switch"
+                        selected_action_species[idx] = getattr(
+                            order.order, "species", ""
+                        )
+                        # Phase 6.4.9: Track voluntary switch history (consecutive, not cumulative)
+                        is_forced_switch = (
+                            battle.force_switch[idx]
+                            if idx < len(battle.force_switch)
+                            else False
+                        )
+                        if (
+                            not is_forced_switch
+                            and battle.active_pokemon[idx] is not None
+                        ):
+                            key = (battle_tag, idx)
+                            active_ident = self.get_pokemon_identifier(
+                                battle.active_pokemon[idx]
+                            )
+                            self._voluntary_switch_history[key] = {
+                                "last_switch_turn": current_turn,
+                                "last_switch_out_identity": active_ident,
+                                "last_switch_in_identity": getattr(
+                                    order.order, "species", ""
+                                ),
+                            }
                     slot_action_types[idx] = act_types
 
             best_overkill_applied = False
             if best_joint.first_order and best_joint.second_order:
-                best_overkill_applied = self.selected_target_will_be_koed_before_second_action(
-                    best_joint.first_order, best_joint.second_order, battle, config=self.config
+                best_overkill_applied = (
+                    self.selected_target_will_be_koed_before_second_action(
+                        best_joint.first_order,
+                        best_joint.second_order,
+                        battle,
+                        config=self.config,
+                    )
                 )
-            self._order_aware_overkill_penalty_applied[battle_tag] = best_overkill_applied
+            self._order_aware_overkill_penalty_applied[battle_tag] = (
+                best_overkill_applied
+            )
 
             protect_like_available = [False, False]
             switch_available = [False, False]
@@ -7228,7 +11572,11 @@ class DoublesDamageAwarePlayer(Player):
                     stalling = True
                 try:
                     from poke_env.battle.side_condition import SideCondition
-                    if SideCondition.TAILWIND in battle.opponent_side_conditions or SideCondition.TAILWIND in battle.side_conditions:
+
+                    if (
+                        SideCondition.TAILWIND in battle.opponent_side_conditions
+                        or SideCondition.TAILWIND in battle.side_conditions
+                    ):
                         stalling = True
                 except Exception:
                     pass
@@ -7240,13 +11588,19 @@ class DoublesDamageAwarePlayer(Player):
             for idx in (0, 1):
                 active_mon = battle.active_pokemon[idx]
                 if active_mon:
-                    protect_like_available[idx] = self.has_legal_protect_like_action(active_mon, battle, slot_index=idx)
+                    protect_like_available[idx] = self.has_legal_protect_like_action(
+                        active_mon, battle, slot_index=idx
+                    )
                     switch_available[idx] = len(battle.available_switches) > 0
                     stalling_field_condition[idx] = stalling
-                    
+
                     active_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-                    threat_info = self.estimate_speed_priority_threat(active_mon, active_opps, battle)
-                    only_conditional_priority[idx] = threat_info.get("only_conditional_priority", False)
+                    threat_info = self.estimate_speed_priority_threat(
+                        active_mon, active_opps, battle
+                    )
+                    only_conditional_priority[idx] = threat_info.get(
+                        "only_conditional_priority", False
+                    )
 
             # Phase 6.4: Compute switch safety audit data for selected orders
             _t_audit_start = time.time() if _timing_enabled else 0
@@ -7334,6 +11688,22 @@ class DoublesDamageAwarePlayer(Player):
             dynamic_move_type_applied_list = [False, False]
             dynamic_move_type_form_list = ["", ""]
             declared_move_type_list = ["", ""]
+            # Phase 6.3.7f: Dynamic absorb candidate audit
+            dynamic_type_absorb_candidate_blocked_list = [False, False]
+            dynamic_type_absorb_selected_list = [False, False]
+            dynamic_type_absorb_avoided_list = [False, False]
+            dynamic_type_absorb_reason_list = ["", ""]
+            dynamic_type_absorb_target_species_list = ["", ""]
+            dynamic_type_absorb_target_ability_list = ["", ""]
+            dynamic_type_absorb_blocked_move_id_list = ["", ""]
+            dynamic_type_absorb_blocked_candidate_score_list = [0.0, 0.0]
+            dynamic_type_absorb_candidate_available_list = [False, False]
+            dynamic_type_absorb_candidate_move_id_list = ["", ""]
+            dynamic_type_absorb_candidate_declared_type_list = ["", ""]
+            dynamic_type_absorb_candidate_effective_type_list = ["", ""]
+            dynamic_type_absorb_candidate_form_list = ["", ""]
+            dynamic_type_absorb_candidate_source_list = ["", ""]
+            dynamic_type_absorb_candidate_target_table_list = [[], []]
 
             # Phase 6.4.3a.1: Type-immune audit lists (computed, not hardcoded)
             our_type_immune_move_selected_list = [False, False]
@@ -7367,8 +11737,14 @@ class DoublesDamageAwarePlayer(Player):
             forced_switch_candidate_safety_table_list = [None, None]
 
             for idx in (0, 1):
-                chosen_order = best_joint.first_order if idx == 0 else best_joint.second_order
-                is_forced = battle.force_switch[idx] if idx < len(battle.force_switch) else False
+                chosen_order = (
+                    best_joint.first_order if idx == 0 else best_joint.second_order
+                )
+                is_forced = (
+                    battle.force_switch[idx]
+                    if idx < len(battle.force_switch)
+                    else False
+                )
                 forced_switch_list[idx] = is_forced
 
                 # Negative boost diagnostics
@@ -7376,19 +11752,39 @@ class DoublesDamageAwarePlayer(Player):
                 neg_boosts = _neg_boost_data_per_slot.get(idx, {})
                 neg_boost_total_list[idx] = neg_boosts.get("total_negative_stages", 0)
                 neg_boost_lowest_list[idx] = neg_boosts.get("lowest_stage", 0)
-                neg_boost_offensive_list[idx] = neg_boosts.get("offensive_negative_stages", 0)
-                neg_boost_defensive_list[idx] = neg_boosts.get("defensive_negative_stages", 0)
+                neg_boost_offensive_list[idx] = neg_boosts.get(
+                    "offensive_negative_stages", 0
+                )
+                neg_boost_defensive_list[idx] = neg_boosts.get(
+                    "defensive_negative_stages", 0
+                )
                 neg_boost_speed_list[idx] = neg_boosts.get("speed_negative_stage", 0)
-                neg_boost_severe_list[idx] = neg_boosts.get("severe_negative_boost", False)
+                neg_boost_severe_list[idx] = neg_boosts.get(
+                    "severe_negative_boost", False
+                )
                 if chosen_order and hasattr(chosen_order, "order"):
-                    neg_boost_was_switch_list[idx] = isinstance(chosen_order.order, Pokemon)
+                    neg_boost_was_switch_list[idx] = isinstance(
+                        chosen_order.order, Pokemon
+                    )
 
                 # Complete negative-boost eligibility after best_joint is known
                 if neg_boosts:
-                    is_forced_nb = battle.force_switch[idx] if idx < len(battle.force_switch) else False
-                    orders_slot_nb = valid_orders[idx] if valid_orders and len(valid_orders) > idx else []
-                    has_legal_switches_nb = any(o and isinstance(o.order, Pokemon) for o in orders_slot_nb)
-                    has_legal_moves_nb = any(o and isinstance(o.order, Move) for o in orders_slot_nb)
+                    is_forced_nb = (
+                        battle.force_switch[idx]
+                        if idx < len(battle.force_switch)
+                        else False
+                    )
+                    orders_slot_nb = (
+                        valid_orders[idx]
+                        if valid_orders and len(valid_orders) > idx
+                        else []
+                    )
+                    has_legal_switches_nb = any(
+                        o and isinstance(o.order, Pokemon) for o in orders_slot_nb
+                    )
+                    has_legal_moves_nb = any(
+                        o and isinstance(o.order, Move) for o in orders_slot_nb
+                    )
 
                     # Determine selected action kind
                     if chosen_order:
@@ -7396,7 +11792,9 @@ class DoublesDamageAwarePlayer(Player):
                             neg_boosts["negative_boost_selected_action_kind"] = "switch"
                         elif isinstance(chosen_order.order, Move):
                             neg_boosts["negative_boost_selected_action_kind"] = "move"
-                        elif isinstance(chosen_order, (type(None),)) or not hasattr(chosen_order, "order"):
+                        elif isinstance(chosen_order, (type(None),)) or not hasattr(
+                            chosen_order, "order"
+                        ):
                             neg_boosts["negative_boost_selected_action_kind"] = "pass"
                         else:
                             neg_boosts["negative_boost_selected_action_kind"] = "other"
@@ -7409,14 +11807,18 @@ class DoublesDamageAwarePlayer(Player):
                     )
 
                     # Find best switch and best move scores
-                    best_sw_score = float('-inf')
+                    best_sw_score = float("-inf")
                     best_sw_species = ""
-                    best_mv_score = float('-inf')
+                    best_mv_score = float("-inf")
                     for o in orders_slot_nb:
                         if not o:
                             continue
                         sid_o = id(o)
-                        sc = slot_0_scores.get(sid_o, 0.0) if idx == 0 else slot_1_scores.get(sid_o, 0.0)
+                        sc = (
+                            slot_0_scores.get(sid_o, 0.0)
+                            if idx == 0
+                            else slot_1_scores.get(sid_o, 0.0)
+                        )
                         if isinstance(o.order, Pokemon):
                             if sc > best_sw_score:
                                 best_sw_score = sc
@@ -7425,21 +11827,32 @@ class DoublesDamageAwarePlayer(Player):
                             if sc > best_mv_score:
                                 best_mv_score = sc
                     neg_boosts["negative_boost_best_switch_species"] = best_sw_species
-                    neg_boosts["negative_boost_best_switch_score"] = best_sw_score if best_sw_score > float('-inf') else 0.0
-                    neg_boosts["negative_boost_best_move_score"] = best_mv_score if best_mv_score > float('-inf') else 0.0
-                    neg_boosts["negative_boost_switch_score_gap"] = (
-                        (best_sw_score if best_sw_score > float('-inf') else 0.0)
-                        - (best_mv_score if best_mv_score > float('-inf') else 0.0)
+                    neg_boosts["negative_boost_best_switch_score"] = (
+                        best_sw_score if best_sw_score > float("-inf") else 0.0
                     )
+                    neg_boosts["negative_boost_best_move_score"] = (
+                        best_mv_score if best_mv_score > float("-inf") else 0.0
+                    )
+                    neg_boosts["negative_boost_switch_score_gap"] = (
+                        best_sw_score if best_sw_score > float("-inf") else 0.0
+                    ) - (best_mv_score if best_mv_score > float("-inf") else 0.0)
 
                     # Eligibility check
-                    is_pass_default = neg_boosts["negative_boost_selected_action_kind"] in ("pass", "none")
+                    is_pass_default = neg_boosts[
+                        "negative_boost_selected_action_kind"
+                    ] in ("pass", "none")
                     # Deduplicate by stable decision event identifier
-                    dedup_key = (battle_tag, current_turn, idx,
-                                 getattr(active_mon, "species", ""),
-                                 neg_boosts["negative_boost_selected_action_kind"],
-                                 is_forced_nb)
-                    is_duplicate = dedup_key in getattr(self, "_neg_boost_dedup_keys", set())
+                    dedup_key = (
+                        battle_tag,
+                        current_turn,
+                        idx,
+                        getattr(active_mon, "species", ""),
+                        neg_boosts["negative_boost_selected_action_kind"],
+                        is_forced_nb,
+                    )
+                    is_duplicate = dedup_key in getattr(
+                        self, "_neg_boost_dedup_keys", set()
+                    )
                     if not hasattr(self, "_neg_boost_dedup_keys"):
                         self._neg_boost_dedup_keys = set()
 
@@ -7457,29 +11870,54 @@ class DoublesDamageAwarePlayer(Player):
                         self._neg_boost_dedup_keys.add(dedup_key)
 
                 # Phase 6.4.3: Stat-drop switch diagnostics (config-driven thresholds)
-                if getattr(self.config, "enable_stat_drop_switch_diagnostics", False) and active_mon:
+                if (
+                    getattr(self.config, "enable_stat_drop_switch_diagnostics", False)
+                    and active_mon
+                ):
                     boosts = getattr(active_mon, "boosts", None)
-                    orders_slot_sd = valid_orders[idx] if valid_orders and len(valid_orders) > idx else []
-                    sd_class = classify_stat_drop_severity(boosts, self.config, orders_slot_sd)
+                    orders_slot_sd = (
+                        valid_orders[idx]
+                        if valid_orders and len(valid_orders) > idx
+                        else []
+                    )
+                    sd_class = classify_stat_drop_severity(
+                        boosts, self.config, orders_slot_sd
+                    )
 
                     severe_neg_boost_active_list[idx] = sd_class["severe"]
                     severe_neg_boost_categories_list[idx] = sd_class["categories"]
-                    severe_neg_boost_turn_list[idx] = current_turn if sd_class["severe"] else 0
-                    severe_neg_boost_species_list[idx] = getattr(active_mon, "species", "") if sd_class["severe"] else ""
+                    severe_neg_boost_turn_list[idx] = (
+                        current_turn if sd_class["severe"] else 0
+                    )
+                    severe_neg_boost_species_list[idx] = (
+                        getattr(active_mon, "species", "") if sd_class["severe"] else ""
+                    )
 
                     if sd_class["severe"]:
-                        is_forced_sd = battle.force_switch[idx] if idx < len(battle.force_switch) else False
-                        has_switches_sd = any(o and isinstance(o.order, Pokemon) for o in orders_slot_sd)
-                        severe_neg_boost_switch_available_list[idx] = has_switches_sd and not is_forced_sd
+                        is_forced_sd = (
+                            battle.force_switch[idx]
+                            if idx < len(battle.force_switch)
+                            else False
+                        )
+                        has_switches_sd = any(
+                            o and isinstance(o.order, Pokemon) for o in orders_slot_sd
+                        )
+                        severe_neg_boost_switch_available_list[idx] = (
+                            has_switches_sd and not is_forced_sd
+                        )
 
                         # Determine if switched or stayed
-                        is_switch = chosen_order and isinstance(chosen_order.order, Pokemon)
+                        is_switch = chosen_order and isinstance(
+                            chosen_order.order, Pokemon
+                        )
                         severe_neg_boost_switched_list[idx] = is_switch
-                        severe_neg_boost_stayed_list[idx] = not is_switch and not is_forced_sd
+                        severe_neg_boost_stayed_list[idx] = (
+                            not is_switch and not is_forced_sd
+                        )
 
                         # Best switch candidate
                         best_sw_species = ""
-                        best_sw_score = float('-inf')
+                        best_sw_score = float("-inf")
                         slot_scores_sd = slot_0_scores if idx == 0 else slot_1_scores
                         for o in orders_slot_sd:
                             if o and isinstance(o.order, Pokemon):
@@ -7487,13 +11925,19 @@ class DoublesDamageAwarePlayer(Player):
                                 if sc > best_sw_score:
                                     best_sw_score = sc
                                     best_sw_species = getattr(o.order, "species", "")
-                        severe_neg_boost_best_switch_candidate_list[idx] = best_sw_species
+                        severe_neg_boost_best_switch_candidate_list[idx] = (
+                            best_sw_species
+                        )
 
                         # Selected action
                         if is_switch:
-                            severe_neg_boost_selected_action_list[idx] = f"switch:{getattr(chosen_order.order, 'species', '')}"
+                            severe_neg_boost_selected_action_list[idx] = (
+                                f"switch:{getattr(chosen_order.order, 'species', '')}"
+                            )
                         elif chosen_order and isinstance(chosen_order.order, Move):
-                            severe_neg_boost_selected_action_list[idx] = f"move:{getattr(chosen_order.order, 'id', '')}"
+                            severe_neg_boost_selected_action_list[idx] = (
+                                f"move:{getattr(chosen_order.order, 'id', '')}"
+                            )
                         else:
                             severe_neg_boost_selected_action_list[idx] = "pass"
 
@@ -7506,45 +11950,104 @@ class DoublesDamageAwarePlayer(Player):
                             productive = False
                             # Check KO
                             if chosen_order and isinstance(chosen_order.order, Move):
-                                target_pos = getattr(chosen_order, 'move_target', 0)
+                                target_pos = getattr(chosen_order, "move_target", 0)
                                 if target_pos in (1, 2):
-                                    target_opp = battle.opponent_active_pokemon[target_pos - 1]
-                                    if target_opp and self.check_move_will_ko(chosen_order.order, active_mon, target_opp, battle, config=self.config):
+                                    target_opp = battle.opponent_active_pokemon[
+                                        target_pos - 1
+                                    ]
+                                    if target_opp and self.check_move_will_ko(
+                                        chosen_order.order,
+                                        active_mon,
+                                        target_opp,
+                                        battle,
+                                        config=self.config,
+                                    ):
                                         productive = True
                             # Check meaningful damage (configurable threshold)
-                            if not productive and chosen_order and isinstance(chosen_order.order, Move):
-                                target_pos = getattr(chosen_order, 'move_target', 0)
+                            if (
+                                not productive
+                                and chosen_order
+                                and isinstance(chosen_order.order, Move)
+                            ):
+                                target_pos = getattr(chosen_order, "move_target", 0)
                                 if target_pos in (1, 2):
-                                    target_opp = battle.opponent_active_pokemon[target_pos - 1]
+                                    target_opp = battle.opponent_active_pokemon[
+                                        target_pos - 1
+                                    ]
                                     if target_opp:
                                         try:
-                                            dmg = self.get_expected_damage(chosen_order.order, active_mon, target_opp, battle, config=self.config)
-                                            opp_max = self.estimate_opponent_max_hp(target_opp)
-                                            frac = getattr(config, "stat_drop_meaningful_damage_fraction", 0.25) if config else 0.25
+                                            dmg = self.get_expected_damage(
+                                                chosen_order.order,
+                                                active_mon,
+                                                target_opp,
+                                                battle,
+                                                config=self.config,
+                                            )
+                                            opp_max = self.estimate_opponent_max_hp(
+                                                target_opp
+                                            )
+                                            frac = (
+                                                getattr(
+                                                    config,
+                                                    "stat_drop_meaningful_damage_fraction",
+                                                    0.25,
+                                                )
+                                                if config
+                                                else 0.25
+                                            )
                                             if opp_max > 0 and dmg / opp_max >= frac:
                                                 productive = True
                                         except Exception:
                                             pass
                             # Check Protect (only if existing protect safety says it's safe)
-                            if not productive and chosen_order and isinstance(chosen_order.order, Move):
-                                move_id = getattr(chosen_order.order, 'id', '')
-                                if move_id in ("protect", "detect", "spikyshield", "kingsshield", "banefulbunker", "silktrap"):
-                                    productive = True  # Protect is generally safe if selected
+                            if (
+                                not productive
+                                and chosen_order
+                                and isinstance(chosen_order.order, Move)
+                            ):
+                                move_id = getattr(chosen_order.order, "id", "")
+                                if move_id in (
+                                    "protect",
+                                    "detect",
+                                    "spikyshield",
+                                    "kingsshield",
+                                    "banefulbunker",
+                                    "silktrap",
+                                ):
+                                    productive = (
+                                        True  # Protect is generally safe if selected
+                                    )
 
                             severe_neg_boost_stayed_productive_list[idx] = productive
-                            severe_neg_boost_stayed_unproductive_list[idx] = not productive
+                            severe_neg_boost_stayed_unproductive_list[
+                                idx
+                            ] = not productive
 
                 # Phase 6.4.7: Stat-drop switch scoring audit population
                 sdata = _stat_drop_scoring_data.get(idx, {})
                 stat_drop_switch_scoring_enabled_list[idx] = sdata.get("enabled", False)
-                stat_drop_switch_pressure_active_list[idx] = sdata.get("pressure_active", False)
-                stat_drop_switch_pressure_categories_list[idx] = list(sdata.get("categories", []))
-                stat_drop_switch_pressure_score_list[idx] = sdata.get("stay_penalty", 0.0)
-                stat_drop_switch_best_switch_species_list[idx] = sdata.get("best_switch_species", "")
-                stat_drop_switch_best_switch_score_list[idx] = sdata.get("best_switch_score", 0.0)
-                stat_drop_switch_best_non_switch_score_list[idx] = sdata.get("best_non_switch_score", 0.0)
+                stat_drop_switch_pressure_active_list[idx] = sdata.get(
+                    "pressure_active", False
+                )
+                stat_drop_switch_pressure_categories_list[idx] = list(
+                    sdata.get("categories", [])
+                )
+                stat_drop_switch_pressure_score_list[idx] = sdata.get(
+                    "stay_penalty", 0.0
+                )
+                stat_drop_switch_best_switch_species_list[idx] = sdata.get(
+                    "best_switch_species", ""
+                )
+                stat_drop_switch_best_switch_score_list[idx] = sdata.get(
+                    "best_switch_score", 0.0
+                )
+                stat_drop_switch_best_non_switch_score_list[idx] = sdata.get(
+                    "best_non_switch_score", 0.0
+                )
                 stat_drop_switch_reason_list[idx] = sdata.get("reason", "")
-                stat_drop_switch_threshold_source_list[idx] = sdata.get("threshold_source", "")
+                stat_drop_switch_threshold_source_list[idx] = sdata.get(
+                    "threshold_source", ""
+                )
                 if sdata.get("pressure_active", False) and chosen_order:
                     order_obj = getattr(chosen_order, "order", None)
                     if order_obj is not None and getattr(order_obj, "species", None):
@@ -7557,26 +12060,65 @@ class DoublesDamageAwarePlayer(Player):
                             stat_drop_switch_stayed_unproductive_list[idx] = True
 
                 # Phase 6.4.7c: Populate selection_changed from counterfactual
-                if sdata.get("enabled", False) and _stat_drop_counterfactual_joint is not None:
-                    actual_key = _stat_drop_actual_actions[idx] if idx < len(_stat_drop_actual_actions) else ("", "", 0)
-                    cf_key = _stat_drop_counterfactual_actions[idx] if idx < len(_stat_drop_counterfactual_actions) else ("", "", 0)
+                if (
+                    sdata.get("enabled", False)
+                    and _stat_drop_counterfactual_joint is not None
+                ):
+                    actual_key = (
+                        _stat_drop_actual_actions[idx]
+                        if idx < len(_stat_drop_actual_actions)
+                        else ("", "", 0)
+                    )
+                    cf_key = (
+                        _stat_drop_counterfactual_actions[idx]
+                        if idx < len(_stat_drop_counterfactual_actions)
+                        else ("", "", 0)
+                    )
                     if actual_key != cf_key:
                         stat_drop_switch_selection_changed_list[idx] = True
 
                 # Phase 6.3.6b: Known Ally Redirection audit population
-                known_ally_redirection_selected_list[idx] = self._known_ally_redirect_selected.get(battle_tag, {}).get(idx, False)
-                known_ally_redirection_reason_list[idx] = self._known_ally_redirect_reason.get(battle_tag, {}).get(idx, "")
-                known_ally_redirection_ally_species_list[idx] = self._known_ally_redirect_ally_species.get(battle_tag, {}).get(idx, "")
-                known_ally_redirection_ally_ability_list[idx] = self._known_ally_redirect_ally_ability.get(battle_tag, {}).get(idx, "")
-                known_ally_redirection_move_id_list[idx] = self._known_ally_redirect_move_id.get(battle_tag, {}).get(idx, "")
-                ally_before_ability = _known_ally_ability_before[1 - idx] if (1 - idx) < len(_known_ally_ability_before) else ""
-                ally_after_ability = self._known_ally_redirect_ally_ability.get(battle_tag, {}).get(idx, "")
-                known_ally_redirection_known_before_decision_list[idx] = bool(ally_before_ability and ally_before_ability == ally_after_ability)
+                known_ally_redirection_selected_list[idx] = (
+                    self._known_ally_redirect_selected.get(battle_tag, {}).get(
+                        idx, False
+                    )
+                )
+                known_ally_redirection_reason_list[idx] = (
+                    self._known_ally_redirect_reason.get(battle_tag, {}).get(idx, "")
+                )
+                known_ally_redirection_ally_species_list[idx] = (
+                    self._known_ally_redirect_ally_species.get(battle_tag, {}).get(
+                        idx, ""
+                    )
+                )
+                known_ally_redirection_ally_ability_list[idx] = (
+                    self._known_ally_redirect_ally_ability.get(battle_tag, {}).get(
+                        idx, ""
+                    )
+                )
+                known_ally_redirection_move_id_list[idx] = (
+                    self._known_ally_redirect_move_id.get(battle_tag, {}).get(idx, "")
+                )
+                ally_before_ability = (
+                    _known_ally_ability_before[1 - idx]
+                    if (1 - idx) < len(_known_ally_ability_before)
+                    else ""
+                )
+                ally_after_ability = self._known_ally_redirect_ally_ability.get(
+                    battle_tag, {}
+                ).get(idx, "")
+                known_ally_redirection_known_before_decision_list[idx] = bool(
+                    ally_before_ability and ally_before_ability == ally_after_ability
+                )
 
                 # Phase 6.3.7: Dynamic move type audit population
                 if chosen_order and isinstance(chosen_order.order, Move):
                     ch_move = chosen_order.order
-                    ch_active = battle.active_pokemon[idx] if idx < len(battle.active_pokemon) else None
+                    ch_active = (
+                        battle.active_pokemon[idx]
+                        if idx < len(battle.active_pokemon)
+                        else None
+                    )
                     resolved = resolve_effective_move_type(ch_move, ch_active, battle)
                     declared_move_type_list[idx] = resolved["declared_type"]
                     effective_move_type_list[idx] = resolved["effective_type"]
@@ -7584,22 +12126,100 @@ class DoublesDamageAwarePlayer(Player):
                     dynamic_move_type_applied_list[idx] = resolved["dynamic_applied"]
                     dynamic_move_type_form_list[idx] = resolved["observed_form"]
 
+                # Phase 6.3.7j: Dynamic absorb candidate classification
+                orders_slot_abs = (
+                    valid_orders[idx]
+                    if valid_orders and len(valid_orders) > idx
+                    else []
+                )
+                slot_scores_abs = slot_0_scores if idx == 0 else slot_1_scores
+                active_abs = (
+                    battle.active_pokemon[idx]
+                    if idx < len(battle.active_pokemon)
+                    else None
+                )
+                absorb_result = classify_dynamic_type_absorb_candidates(
+                    orders_slot_abs,
+                    chosen_order,
+                    active_abs,
+                    battle.opponent_active_pokemon,
+                    battle,
+                    self.config,
+                    slot_scores_abs,
+                )
+                dynamic_type_absorb_candidate_blocked_list[idx] = absorb_result[
+                    "candidate_blocked"
+                ]
+                dynamic_type_absorb_selected_list[idx] = absorb_result["selected"]
+                dynamic_type_absorb_avoided_list[idx] = absorb_result["avoided"]
+                dynamic_type_absorb_reason_list[idx] = absorb_result["reason"]
+                dynamic_type_absorb_target_species_list[idx] = absorb_result[
+                    "target_species"
+                ]
+                dynamic_type_absorb_target_ability_list[idx] = absorb_result[
+                    "target_ability"
+                ]
+                dynamic_type_absorb_blocked_move_id_list[idx] = absorb_result[
+                    "blocked_order_id"
+                ]
+                dynamic_type_absorb_blocked_candidate_score_list[idx] = absorb_result[
+                    "blocked_candidate_score"
+                ]
+                dynamic_type_absorb_candidate_available_list[idx] = absorb_result[
+                    "dynamic_candidate_available"
+                ]
+                dynamic_type_absorb_candidate_move_id_list[idx] = absorb_result[
+                    "dynamic_candidate_move_id"
+                ]
+                dynamic_type_absorb_candidate_declared_type_list[idx] = absorb_result[
+                    "dynamic_candidate_declared_type"
+                ]
+                dynamic_type_absorb_candidate_effective_type_list[idx] = absorb_result[
+                    "dynamic_candidate_effective_type"
+                ]
+                dynamic_type_absorb_candidate_form_list[idx] = absorb_result[
+                    "dynamic_candidate_form"
+                ]
+                dynamic_type_absorb_candidate_source_list[idx] = absorb_result[
+                    "dynamic_candidate_source"
+                ]
+                dynamic_type_absorb_candidate_target_table_list[idx] = absorb_result[
+                    "dynamic_candidate_target_table"
+                ]
+
                 is_selected_ar = known_ally_redirection_selected_list[idx]
                 is_known_before = known_ally_redirection_known_before_decision_list[idx]
-                candidate_blocked = _ally_redirect_blocked.get(id(chosen_order), False) if chosen_order else False
+                candidate_blocked = (
+                    _ally_redirect_blocked.get(id(chosen_order), False)
+                    if chosen_order
+                    else False
+                )
                 known_ally_redirection_candidate_blocked_list[idx] = candidate_blocked
 
                 # Safe alternative: any legal joint has a different non-blocked action for this slot
                 safe_alt_exists = False
                 if candidate_blocked or is_selected_ar:
                     for alt_best_joint, _, _, _ in scored_joint_orders[1:]:
-                        alt_order = alt_best_joint.first_order if idx == 0 else alt_best_joint.second_order
-                        if alt_order and id(alt_order) != (id(chosen_order) if chosen_order else None):
+                        alt_order = (
+                            alt_best_joint.first_order
+                            if idx == 0
+                            else alt_best_joint.second_order
+                        )
+                        if alt_order and id(alt_order) != (
+                            id(chosen_order) if chosen_order else None
+                        ):
                             if not _ally_redirect_blocked.get(id(alt_order), False):
                                 safe_alt_exists = True
                                 break
 
-                blocked_candidate_exists = any(_ally_redirect_blocked.get(id(o), False) for o in valid_orders[idx]) if valid_orders and len(valid_orders) > idx else False
+                blocked_candidate_exists = (
+                    any(
+                        _ally_redirect_blocked.get(id(o), False)
+                        for o in valid_orders[idx]
+                    )
+                    if valid_orders and len(valid_orders) > idx
+                    else False
+                )
 
                 # Phase 6.3.6b pure helper: audit classification
                 audit = classify_known_ally_redirection_audit(
@@ -7608,7 +12228,9 @@ class DoublesDamageAwarePlayer(Player):
                     safe_alternative_exists=safe_alt_exists,
                 )
                 known_ally_redirection_only_legal_list[idx] = audit["only_legal"]
-                known_ally_redirection_safe_alternative_available_list[idx] = safe_alt_exists
+                known_ally_redirection_safe_alternative_available_list[idx] = (
+                    safe_alt_exists
+                )
                 known_ally_redirection_avoided_list[idx] = audit["avoided"]
 
                 # Phase 6.3.6b pure helper: error ownership
@@ -7622,14 +12244,22 @@ class DoublesDamageAwarePlayer(Player):
 
                 # Phase 6.3.6b pure helper: repeat detection
                 if is_selected_ar:
-                    key = (self.get_pokemon_identifier(battle.active_pokemon[idx]) if battle.active_pokemon[idx] else "",
-                           known_ally_redirection_move_id_list[idx],
-                           known_ally_redirection_ally_species_list[idx],
-                           known_ally_redirection_ally_ability_list[idx])
+                    key = (
+                        self.get_pokemon_identifier(battle.active_pokemon[idx])
+                        if battle.active_pokemon[idx]
+                        else "",
+                        known_ally_redirection_move_id_list[idx],
+                        known_ally_redirection_ally_species_list[idx],
+                        known_ally_redirection_ally_ability_list[idx],
+                    )
                     s = getattr(self, "_known_ally_redirect_streak", {})
-                    repeat_result = update_known_ally_redirection_repeat_state(key, battle_tag, current_turn, s)
+                    repeat_result = update_known_ally_redirection_repeat_state(
+                        key, battle_tag, current_turn, s
+                    )
                     self._known_ally_redirect_streak = repeat_result["streak_state"]
-                    known_ally_redirection_repeat_selected_list[idx] = repeat_result["repeat_detected"]
+                    known_ally_redirection_repeat_selected_list[idx] = repeat_result[
+                        "repeat_detected"
+                    ]
 
                 # Phase 6.3.6b.6: Populate blocked-candidate metadata from precomputation
                 ar_meta = _ally_redirect_blocked_meta
@@ -7641,7 +12271,11 @@ class DoublesDamageAwarePlayer(Player):
                         blocked_for_slot[oid] = meta
                     if safe_alt_exists:
                         for alt_best_joint, jscore, _, _ in scored_joint_orders[1:]:
-                            alt_order = alt_best_joint.first_order if idx == 0 else alt_best_joint.second_order
+                            alt_order = (
+                                alt_best_joint.first_order
+                                if idx == 0
+                                else alt_best_joint.second_order
+                            )
                             if alt_order and not ar_meta.get(id(alt_order)):
                                 if jscore > best_safe_alt_score:
                                     best_safe_alt_score = jscore
@@ -7654,64 +12288,134 @@ class DoublesDamageAwarePlayer(Player):
                 has_opportunity = len(ar_meta or {}) > 0
                 known_ally_redirection_opportunity_observed_list[idx] = has_opportunity
                 if has_opportunity and first_blocked:
-                    known_ally_redirection_blocked_candidate_move_id_list[idx] = first_blocked.get("move_id", "")
-                    known_ally_redirection_blocked_candidate_attacker_species_list[idx] = first_blocked.get("attacker_species", "")
-                    known_ally_redirection_blocked_candidate_target_species_list[idx] = first_blocked.get("target_species", "")
-                    known_ally_redirection_blocked_candidate_ally_species_list[idx] = first_blocked.get("ally_species", "")
-                    known_ally_redirection_blocked_candidate_ally_ability_list[idx] = first_blocked.get("ally_ability", "")
-                    known_ally_redirection_blocked_candidate_reason_list[idx] = first_blocked.get("reason", "")
-                    known_ally_redirection_blocked_candidate_known_before_list[idx] = first_blocked.get("known_before_decision", False)
+                    known_ally_redirection_blocked_candidate_move_id_list[idx] = (
+                        first_blocked.get("move_id", "")
+                    )
+                    known_ally_redirection_blocked_candidate_attacker_species_list[
+                        idx
+                    ] = first_blocked.get("attacker_species", "")
+                    known_ally_redirection_blocked_candidate_target_species_list[
+                        idx
+                    ] = first_blocked.get("target_species", "")
+                    known_ally_redirection_blocked_candidate_ally_species_list[idx] = (
+                        first_blocked.get("ally_species", "")
+                    )
+                    known_ally_redirection_blocked_candidate_ally_ability_list[idx] = (
+                        first_blocked.get("ally_ability", "")
+                    )
+                    known_ally_redirection_blocked_candidate_reason_list[idx] = (
+                        first_blocked.get("reason", "")
+                    )
+                    known_ally_redirection_blocked_candidate_known_before_list[idx] = (
+                        first_blocked.get("known_before_decision", False)
+                    )
                 slot_scores_for_pop = slot_0_scores if idx == 0 else slot_1_scores
-                for oid in (ar_meta or {}):
-                    known_ally_redirection_blocked_candidate_score_list[idx] = slot_scores_for_pop.get(oid, 0.0)
+                for oid in ar_meta or {}:
+                    known_ally_redirection_blocked_candidate_score_list[idx] = (
+                        slot_scores_for_pop.get(oid, 0.0)
+                    )
                     break  # first blocked only
                 if best_safe_alt_id is not None:
                     know_alt_order = None
                     for alt_best_joint, _, _, _ in scored_joint_orders[1:]:
-                        alt_order = alt_best_joint.first_order if idx == 0 else alt_best_joint.second_order
+                        alt_order = (
+                            alt_best_joint.first_order
+                            if idx == 0
+                            else alt_best_joint.second_order
+                        )
                         if alt_order and id(alt_order) == best_safe_alt_id:
-                            known_ally_redirection_best_safe_alternative_list[idx] = getattr(getattr(alt_order, "order", None), "id", "") if alt_order and hasattr(alt_order, "order") else ""
+                            known_ally_redirection_best_safe_alternative_list[idx] = (
+                                getattr(getattr(alt_order, "order", None), "id", "")
+                                if alt_order and hasattr(alt_order, "order")
+                                else ""
+                            )
                             break
-                    known_ally_redirection_best_safe_alternative_score_list[idx] = best_safe_alt_score if best_safe_alt_score > float("-inf") else 0.0
+                    known_ally_redirection_best_safe_alternative_score_list[idx] = (
+                        best_safe_alt_score
+                        if best_safe_alt_score > float("-inf")
+                        else 0.0
+                    )
 
                 # Phase 6.4.3a.1: Type-immune audit computation
                 if chosen_order and isinstance(chosen_order.order, Move):
                     chosen_move = chosen_order.order
-                    chosen_active = battle.active_pokemon[idx] if idx < len(battle.active_pokemon) else None
+                    chosen_active = (
+                        battle.active_pokemon[idx]
+                        if idx < len(battle.active_pokemon)
+                        else None
+                    )
                     chosen_target = None
-                    if hasattr(chosen_order, 'move_target'):
+                    if hasattr(chosen_order, "move_target"):
                         t_pos = chosen_order.move_target
-                        if t_pos in (1, 2) and t_pos - 1 < len(battle.opponent_active_pokemon):
+                        if t_pos in (1, 2) and t_pos - 1 < len(
+                            battle.opponent_active_pokemon
+                        ):
                             chosen_target = battle.opponent_active_pokemon[t_pos - 1]
 
-                    if chosen_active and chosen_target and getattr(chosen_move, 'base_power', 0) > 0:
-                        immune, reason = is_type_immune(chosen_move, chosen_active, chosen_target, battle)
+                    if (
+                        chosen_active
+                        and chosen_target
+                        and getattr(chosen_move, "base_power", 0) > 0
+                    ):
+                        immune, reason = is_type_immune(
+                            chosen_move, chosen_active, chosen_target, battle
+                        )
                         if immune:
                             our_type_immune_move_selected_list[idx] = True
-                            our_type_immune_attacker_list[idx] = getattr(chosen_active, 'species', '')
-                            our_type_immune_move_list[idx] = getattr(chosen_move, 'id', '')
-                            our_type_immune_target_list[idx] = getattr(chosen_target, 'species', '')
+                            our_type_immune_attacker_list[idx] = getattr(
+                                chosen_active, "species", ""
+                            )
+                            our_type_immune_move_list[idx] = getattr(
+                                chosen_move, "id", ""
+                            )
+                            our_type_immune_target_list[idx] = getattr(
+                                chosen_target, "species", ""
+                            )
                             t_types_str = ""
-                            if hasattr(chosen_target, 'types') and chosen_target.types:
+                            if hasattr(chosen_target, "types") and chosen_target.types:
                                 t_types_str = "+".join(
-                                    t.name.title() if hasattr(t, 'name') else str(t)
-                                    for t in chosen_target.types if t
+                                    t.name.title() if hasattr(t, "name") else str(t)
+                                    for t in chosen_target.types
+                                    if t
                                 )
                             our_type_immune_target_types_list[idx] = t_types_str
                             our_type_immune_reason_list[idx] = reason
 
                             # Check if this was the only legal damaging move
-                            orders_slot_imm = valid_orders[idx] if valid_orders and len(valid_orders) > idx else []
+                            orders_slot_imm = (
+                                valid_orders[idx]
+                                if valid_orders and len(valid_orders) > idx
+                                else []
+                            )
                             safe_alternatives = 0
                             for alt_o in orders_slot_imm:
-                                if alt_o and isinstance(alt_o.order, Move) and getattr(alt_o.order, 'base_power', 0) > 0:
+                                if (
+                                    alt_o
+                                    and isinstance(alt_o.order, Move)
+                                    and getattr(alt_o.order, "base_power", 0) > 0
+                                ):
                                     alt_target = None
-                                    if hasattr(alt_o, 'move_target') and alt_o.move_target in (1, 2):
-                                        alt_target = battle.opponent_active_pokemon[alt_o.move_target - 1]
+                                    if hasattr(
+                                        alt_o, "move_target"
+                                    ) and alt_o.move_target in (1, 2):
+                                        alt_target = battle.opponent_active_pokemon[
+                                            alt_o.move_target - 1
+                                        ]
                                     if alt_target:
-                                        alt_imm, _ = is_type_immune(alt_o.order, chosen_active, alt_target, battle)
+                                        alt_imm, _ = is_type_immune(
+                                            alt_o.order,
+                                            chosen_active,
+                                            alt_target,
+                                            battle,
+                                        )
                                         if not alt_imm:
-                                            alt_blocked, _ = ability_hard_blocks_move(alt_o.order, chosen_active, alt_target, battle, config=self.config)
+                                            alt_blocked, _ = ability_hard_blocks_move(
+                                                alt_o.order,
+                                                chosen_active,
+                                                alt_target,
+                                                battle,
+                                                config=self.config,
+                                            )
                                             if not alt_blocked:
                                                 safe_alternatives += 1
                             if safe_alternatives == 0:
@@ -7722,17 +12426,29 @@ class DoublesDamageAwarePlayer(Player):
                 # Phase 6.4.3a.2 / 6.4.4: Forced switch diagnostic computation
                 if is_forced:
                     forced_switch_safety_enabled_list[idx] = bool(
-                        getattr(self.config, "enable_forced_switch_replacement_safety", False)
+                        getattr(
+                            self.config,
+                            "enable_forced_switch_replacement_safety",
+                            False,
+                        )
                     )
-                    orders_slot_fs = valid_orders[idx] if valid_orders and len(valid_orders) > idx else []
-                    switch_candidates = [o for o in orders_slot_fs if o and isinstance(o.order, Pokemon)]
+                    orders_slot_fs = (
+                        valid_orders[idx]
+                        if valid_orders and len(valid_orders) > idx
+                        else []
+                    )
+                    switch_candidates = [
+                        o for o in orders_slot_fs if o and isinstance(o.order, Pokemon)
+                    ]
                     forced_switch_candidate_count_list[idx] = len(switch_candidates)
 
                     # Find the selected switch index and species
                     selected_safety_result = None
                     best_safety_result = None
                     if chosen_order and isinstance(chosen_order.order, Pokemon):
-                        forced_switch_selected_species_list[idx] = getattr(chosen_order.order, 'species', '')
+                        forced_switch_selected_species_list[idx] = getattr(
+                            chosen_order.order, "species", ""
+                        )
                         for ci, cand in enumerate(switch_candidates):
                             if id(cand) == id(chosen_order):
                                 forced_switch_selected_index_list[idx] = ci
@@ -7742,32 +12458,40 @@ class DoublesDamageAwarePlayer(Player):
                     # as the actual scoring path (evaluate_forced_switch_replacement_safety).
                     # Previous code incorrectly used evaluate_switch_candidate_type_safety
                     # which has different scoring constants and thresholds.
-                    best_safety_score = float('-inf')
+                    best_safety_score = float("-inf")
                     best_safety_species = ""
                     selected_safety_score = 0.0
                     active_opps_fs = [o for o in battle.opponent_active_pokemon if o]
                     candidate_safety_table = []
                     for cand in switch_candidates:
-                        cand_species = getattr(cand.order, 'species', '')
+                        cand_species = getattr(cand.order, "species", "")
                         safety = evaluate_forced_switch_replacement_safety(
                             cand.order,
                             active_opps_fs,
                             battle=battle,
-                            config=self.config
+                            config=self.config,
                         )
                         s_score = safety.get("score", 0.0)
                         # Build per-candidate audit entry
-                        candidate_safety_table.append({
-                            "species": cand_species,
-                            "score": round(s_score, 2),
-                            "max_threat_multiplier": safety.get("max_threat_multiplier", 1.0),
-                            "opponent_threat_count": safety.get("opponent_threat_count", 0),
-                            "quad_weak_count": safety.get("quad_weak_count", 0),
-                            "resistance_count": safety.get("resistance_count", 0),
-                            "immunity_count": safety.get("immunity_count", 0),
-                            "low_hp_penalty_applied": safety.get("low_hp_penalty_applied", False),
-                            "reasons": safety.get("reasons", []),
-                        })
+                        candidate_safety_table.append(
+                            {
+                                "species": cand_species,
+                                "score": round(s_score, 2),
+                                "max_threat_multiplier": safety.get(
+                                    "max_threat_multiplier", 1.0
+                                ),
+                                "opponent_threat_count": safety.get(
+                                    "opponent_threat_count", 0
+                                ),
+                                "quad_weak_count": safety.get("quad_weak_count", 0),
+                                "resistance_count": safety.get("resistance_count", 0),
+                                "immunity_count": safety.get("immunity_count", 0),
+                                "low_hp_penalty_applied": safety.get(
+                                    "low_hp_penalty_applied", False
+                                ),
+                                "reasons": safety.get("reasons", []),
+                            }
+                        )
                         if s_score > best_safety_score:
                             best_safety_score = s_score
                             best_safety_species = cand_species
@@ -7777,12 +12501,21 @@ class DoublesDamageAwarePlayer(Player):
                             selected_safety_result = safety
 
                     forced_switch_best_safety_species_list[idx] = best_safety_species
-                    forced_switch_selected_safety_score_list[idx] = selected_safety_score
-                    forced_switch_best_safety_score_list[idx] = best_safety_score if best_safety_score > float('-inf') else 0.0
-                    forced_switch_candidate_safety_table_list[idx] = candidate_safety_table if candidate_safety_table else None
+                    forced_switch_selected_safety_score_list[idx] = (
+                        selected_safety_score
+                    )
+                    forced_switch_best_safety_score_list[idx] = (
+                        best_safety_score if best_safety_score > float("-inf") else 0.0
+                    )
+                    forced_switch_candidate_safety_table_list[idx] = (
+                        candidate_safety_table if candidate_safety_table else None
+                    )
 
                     # Detect list-order fallback
-                    if forced_switch_selected_index_list[idx] == 0 and len(switch_candidates) > 1:
+                    if (
+                        forced_switch_selected_index_list[idx] == 0
+                        and len(switch_candidates) > 1
+                    ):
                         forced_switch_order_fallback_used_list[idx] = True
 
                     # Phase 6.4.4: Additional audit fields
@@ -7793,7 +12526,9 @@ class DoublesDamageAwarePlayer(Player):
                         forced_switch_selected_quad_weak_list[idx] = bool(
                             "quad_weak" in selected_safety_result.get("reasons", [])
                         )
-                        forced_switch_selected_low_hp_list[idx] = selected_safety_result.get("low_hp_penalty_applied", False)
+                        forced_switch_selected_low_hp_list[idx] = (
+                            selected_safety_result.get("low_hp_penalty_applied", False)
+                        )
                     if best_safety_result:
                         forced_switch_best_avoids_double_threat_list[idx] = (
                             "double_threat" not in best_safety_result.get("reasons", [])
@@ -7803,9 +12538,12 @@ class DoublesDamageAwarePlayer(Player):
                         )
 
                     # Selection changed: best safety species differs from selected
-                    if (best_safety_species
-                            and forced_switch_selected_species_list[idx]
-                            and best_safety_species != forced_switch_selected_species_list[idx]):
+                    if (
+                        best_safety_species
+                        and forced_switch_selected_species_list[idx]
+                        and best_safety_species
+                        != forced_switch_selected_species_list[idx]
+                    ):
                         forced_switch_safety_selection_changed_list[idx] = True
 
                     # Reason string
@@ -7822,50 +12560,94 @@ class DoublesDamageAwarePlayer(Player):
                     safety = cand_safety.get(sid, None)
 
                     if safety:
-                        selected_switch_species_list[idx] = getattr(switch_candidate, "species", "")
+                        selected_switch_species_list[idx] = getattr(
+                            switch_candidate, "species", ""
+                        )
                         types = []
                         t1 = getattr(switch_candidate, "type_1", None)
                         t2 = getattr(switch_candidate, "type_2", None)
                         if t1:
-                            types.append(t1.name.title() if hasattr(t1, "name") else str(t1))
+                            types.append(
+                                t1.name.title() if hasattr(t1, "name") else str(t1)
+                            )
                         if t2:
-                            types.append(t2.name.title() if hasattr(t2, "name") else str(t2))
+                            types.append(
+                                t2.name.title() if hasattr(t2, "name") else str(t2)
+                            )
                         selected_switch_types_list[idx] = "+".join(types)
-                        selected_switch_hp_fraction_list[idx] = safety.get("candidate_hp_fraction", 1.0)
-                        selected_switch_raw_safety_score_list[idx] = safety.get("raw_safety_score", 0.0)
-                        selected_switch_worst_multiplier_list[idx] = safety.get("worst_multiplier", 1.0)
-                        selected_switch_double_threat_list[idx] = safety.get("double_threat", False)
+                        selected_switch_hp_fraction_list[idx] = safety.get(
+                            "candidate_hp_fraction", 1.0
+                        )
+                        selected_switch_raw_safety_score_list[idx] = safety.get(
+                            "raw_safety_score", 0.0
+                        )
+                        selected_switch_worst_multiplier_list[idx] = safety.get(
+                            "worst_multiplier", 1.0
+                        )
+                        selected_switch_double_threat_list[idx] = safety.get(
+                            "double_threat", False
+                        )
 
                         best_raw = _switch_best_raw_scores.get(idx, 0.0)
-                        relative_adj = min(0.0, safety.get("raw_safety_score", 0.0) - best_raw)
+                        relative_adj = min(
+                            0.0, safety.get("raw_safety_score", 0.0) - best_raw
+                        )
                         selected_switch_relative_adjustment_list[idx] = relative_adj
 
-                        is_unsafe = safety.get("double_threat", False) or safety.get("quad_weak_threat_count", 0) > 0
+                        is_unsafe = (
+                            safety.get("double_threat", False)
+                            or safety.get("quad_weak_threat_count", 0) > 0
+                        )
                         if is_unsafe:
                             unsafe_switch_candidate_selected_list[idx] = True
 
                             # Joint-legality: find best safe switch that doesn't conflict
                             # with the other slot's selected switch
                             other_idx = 1 - idx
-                            other_chosen = best_joint.first_order if other_idx == 0 else best_joint.second_order
+                            other_chosen = (
+                                best_joint.first_order
+                                if other_idx == 0
+                                else best_joint.second_order
+                            )
                             other_species = None
                             if other_chosen and isinstance(other_chosen.order, Pokemon):
-                                other_species = getattr(other_chosen.order, "species", None)
+                                other_species = getattr(
+                                    other_chosen.order, "species", None
+                                )
 
                             best_safe_order = None
-                            best_safe_score = float('-inf')
-                            for sw_order in (cand_safety.keys()):
+                            best_safe_score = float("-inf")
+                            for sw_order in cand_safety.keys():
                                 sw_safety = cand_safety[sw_order]
-                                sw_unsafe = sw_safety.get("double_threat", False) or sw_safety.get("quad_weak_threat_count", 0) > 0
+                                sw_unsafe = (
+                                    sw_safety.get("double_threat", False)
+                                    or sw_safety.get("quad_weak_threat_count", 0) > 0
+                                )
                                 if sw_unsafe:
                                     continue
                                 # Find the actual order object to check species
-                                for so in switch_orders if idx == 0 else (valid_orders[other_idx] if valid_orders and len(valid_orders) > other_idx else []):
+                                for so in (
+                                    switch_orders
+                                    if idx == 0
+                                    else (
+                                        valid_orders[other_idx]
+                                        if valid_orders
+                                        and len(valid_orders) > other_idx
+                                        else []
+                                    )
+                                ):
                                     if id(so) == sw_order:
                                         sw_species = getattr(so.order, "species", None)
-                                        if other_species and sw_species == other_species:
+                                        if (
+                                            other_species
+                                            and sw_species == other_species
+                                        ):
                                             break  # conflicts with other slot
-                                        sw_score = slot_0_scores.get(sw_order, 0.0) if idx == 0 else slot_1_scores.get(sw_order, 0.0)
+                                        sw_score = (
+                                            slot_0_scores.get(sw_order, 0.0)
+                                            if idx == 0
+                                            else slot_1_scores.get(sw_order, 0.0)
+                                        )
                                         if sw_score > best_safe_score:
                                             best_safe_score = sw_score
                                             best_safe_order = so
@@ -7873,14 +12655,18 @@ class DoublesDamageAwarePlayer(Player):
 
                             if best_safe_order:
                                 safer_switch_candidate_available_list[idx] = True
-                                best_safe_switch_species_list[idx] = getattr(best_safe_order.order, "species", "")
+                                best_safe_switch_species_list[idx] = getattr(
+                                    best_safe_order.order, "species", ""
+                                )
                                 best_safe_switch_score_list[idx] = best_safe_score
                             else:
                                 safer_switch_candidate_available_list[idx] = False
 
                             # switch_type_safety_avoided: only when feature is ON and selection changed
-                            if (self.config.enable_switch_candidate_type_safety
-                                    and safer_switch_candidate_available_list[idx]):
+                            if (
+                                self.config.enable_switch_candidate_type_safety
+                                and safer_switch_candidate_available_list[idx]
+                            ):
                                 switch_type_safety_avoided_list[idx] = True
                         else:
                             safer_switch_candidate_available_list[idx] = False
@@ -7906,71 +12692,268 @@ class DoublesDamageAwarePlayer(Player):
 
             first_order = best_joint.first_order
             second_order = best_joint.second_order
-            if first_order and second_order and isinstance(first_order.order, Move) and isinstance(second_order.order, Move):
+            if (
+                first_order
+                and second_order
+                and isinstance(first_order.order, Move)
+                and isinstance(second_order.order, Move)
+            ):
                 ft = getattr(first_order, "move_target", None)
                 st = getattr(second_order, "move_target", None)
                 if ft in (1, 2) and st in (1, 2) and ft == st:
-                    if getattr(first_order.order, "base_power", 0) > 0 and getattr(second_order.order, "base_power", 0) > 0:
-                        if not self.is_spread_move(first_order.order) and not self.is_spread_move(second_order.order):
+                    if (
+                        getattr(first_order.order, "base_power", 0) > 0
+                        and getattr(second_order.order, "base_power", 0) > 0
+                    ):
+                        if not self.is_spread_move(
+                            first_order.order
+                        ) and not self.is_spread_move(second_order.order):
                             target_opp = battle.opponent_active_pokemon[ft - 1]
                             if target_opp:
-                                ko_1 = self.check_move_will_ko(first_order.order, battle.active_pokemon[0], target_opp, battle, config=self.config)
+                                ko_1 = self.check_move_will_ko(
+                                    first_order.order,
+                                    battle.active_pokemon[0],
+                                    target_opp,
+                                    battle,
+                                    config=self.config,
+                                )
                                 if ko_1:
-                                    visible_opps = [o for o in battle.opponent_active_pokemon if o and not getattr(o, "fainted", False)]
+                                    visible_opps = [
+                                        o
+                                        for o in battle.opponent_active_pokemon
+                                        if o and not getattr(o, "fainted", False)
+                                    ]
                                     stale = detect_stale_target_after_ally_ko_risk(
-                                        first_order, second_order, ko_1, target_opp, target_opp,
-                                        visible_opps, battle=battle, config=self.config,
+                                        first_order,
+                                        second_order,
+                                        ko_1,
+                                        target_opp,
+                                        target_opp,
+                                        visible_opps,
+                                        battle=battle,
+                                        config=self.config,
                                     )
                                     if stale["risk"]:
                                         stale_target_selected = True
                                         stale_target_same_target_expected_ko = True
-                                        stale_target_caused_no_effect = stale["fallback_target_no_effect"]
-                                        stale_target_caused_type_immune = stale["fallback_target_type_immune"]
+                                        stale_target_caused_no_effect = stale[
+                                            "fallback_target_no_effect"
+                                        ]
+                                        stale_target_caused_type_immune = stale[
+                                            "fallback_target_type_immune"
+                                        ]
                                         stale_target_first_slot_val = 0
                                         stale_target_first_move = stale["first_move_id"]
-                                        stale_target_first_target = stale["first_target_species"]
+                                        stale_target_first_target = stale[
+                                            "first_target_species"
+                                        ]
                                         stale_target_second_slot_val = 1
-                                        stale_target_second_move = stale["second_move_id"]
-                                        stale_target_second_intended_target = stale["second_target_species"]
-                                        stale_target_fallback_target = stale["fallback_target_species"]
+                                        stale_target_second_move = stale[
+                                            "second_move_id"
+                                        ]
+                                        stale_target_second_intended_target = stale[
+                                            "second_target_species"
+                                        ]
+                                        stale_target_fallback_target = stale[
+                                            "fallback_target_species"
+                                        ]
                                         stale_target_reason = stale["reason"]
 
             # Check if stale target was avoided: any alternative had risk but selected didn't
-            if not stale_target_selected and self.config.enable_stale_target_after_ally_ko_safety:
-                for alt_joint, alt_score, _, _ in scored_joint_orders[1:min(6, len(scored_joint_orders))]:
+            if (
+                not stale_target_selected
+                and self.config.enable_stale_target_after_ally_ko_safety
+            ):
+                for alt_joint, alt_score, _, _ in scored_joint_orders[
+                    1 : min(6, len(scored_joint_orders))
+                ]:
                     alt_first = alt_joint.first_order
                     alt_second = alt_joint.second_order
-                    if alt_first and alt_second and isinstance(alt_first.order, Move) and isinstance(alt_second.order, Move):
+                    if (
+                        alt_first
+                        and alt_second
+                        and isinstance(alt_first.order, Move)
+                        and isinstance(alt_second.order, Move)
+                    ):
                         at = getattr(alt_first, "move_target", None)
                         bt = getattr(alt_second, "move_target", None)
                         if at in (1, 2) and bt in (1, 2) and at == bt:
-                            if getattr(alt_first.order, "base_power", 0) > 0 and getattr(alt_second.order, "base_power", 0) > 0:
-                                if not self.is_spread_move(alt_first.order) and not self.is_spread_move(alt_second.order):
+                            if (
+                                getattr(alt_first.order, "base_power", 0) > 0
+                                and getattr(alt_second.order, "base_power", 0) > 0
+                            ):
+                                if not self.is_spread_move(
+                                    alt_first.order
+                                ) and not self.is_spread_move(alt_second.order):
                                     alt_target = battle.opponent_active_pokemon[at - 1]
                                     if alt_target:
-                                        alt_ko = self.check_move_will_ko(alt_first.order, battle.active_pokemon[0], alt_target, battle, config=self.config)
+                                        alt_ko = self.check_move_will_ko(
+                                            alt_first.order,
+                                            battle.active_pokemon[0],
+                                            alt_target,
+                                            battle,
+                                            config=self.config,
+                                        )
                                         if alt_ko:
-                                            vis_opps = [o for o in battle.opponent_active_pokemon if o and not getattr(o, "fainted", False)]
-                                            alt_stale = detect_stale_target_after_ally_ko_risk(
-                                                alt_first, alt_second, alt_ko, alt_target, alt_target,
-                                                vis_opps, battle=battle, config=self.config,
+                                            vis_opps = [
+                                                o
+                                                for o in battle.opponent_active_pokemon
+                                                if o
+                                                and not getattr(o, "fainted", False)
+                                            ]
+                                            alt_stale = (
+                                                detect_stale_target_after_ally_ko_risk(
+                                                    alt_first,
+                                                    alt_second,
+                                                    alt_ko,
+                                                    alt_target,
+                                                    alt_target,
+                                                    vis_opps,
+                                                    battle=battle,
+                                                    config=self.config,
+                                                )
                                             )
                                             if alt_stale["risk"]:
                                                 stale_target_avoided = True
                                                 break
 
             self._stale_target_selected[battle_tag] = stale_target_selected
-            self._stale_target_same_target_expected_ko[battle_tag] = stale_target_same_target_expected_ko
-            self._stale_target_caused_no_effect[battle_tag] = stale_target_caused_no_effect
-            self._stale_target_caused_type_immune[battle_tag] = stale_target_caused_type_immune
+            self._stale_target_same_target_expected_ko[battle_tag] = (
+                stale_target_same_target_expected_ko
+            )
+            self._stale_target_caused_no_effect[battle_tag] = (
+                stale_target_caused_no_effect
+            )
+            self._stale_target_caused_type_immune[battle_tag] = (
+                stale_target_caused_type_immune
+            )
             self._stale_target_first_slot[battle_tag] = stale_target_first_slot_val
             self._stale_target_first_move[battle_tag] = stale_target_first_move
             self._stale_target_first_target[battle_tag] = stale_target_first_target
             self._stale_target_second_slot[battle_tag] = stale_target_second_slot_val
             self._stale_target_second_move[battle_tag] = stale_target_second_move
-            self._stale_target_second_intended_target[battle_tag] = stale_target_second_intended_target
-            self._stale_target_fallback_target[battle_tag] = stale_target_fallback_target
+            self._stale_target_second_intended_target[battle_tag] = (
+                stale_target_second_intended_target
+            )
+            self._stale_target_fallback_target[battle_tag] = (
+                stale_target_fallback_target
+            )
             self._stale_target_reason[battle_tag] = stale_target_reason
+
+            # Phase 6.3.8a: Build support target candidate table from valid orders
+            _support_target_candidates = []
+            for si in (0, 1):
+                orders_slot = (
+                    valid_orders[si] if valid_orders and len(valid_orders) > si else []
+                )
+                slot_candidates = build_support_target_candidate_table(
+                    orders_slot, si, battle, config=self.config
+                )
+                # Mark the selected candidate
+                sel_order = (
+                    best_joint.first_order if si == 0 else best_joint.second_order
+                )
+                sel_move = (
+                    getattr(getattr(sel_order, "order", None), "id", "")
+                    if sel_order
+                    else ""
+                )
+                sel_target = (
+                    getattr(sel_order, "move_target", None) if sel_order else None
+                )
+                for row in slot_candidates:
+                    if (
+                        row["move_id"] == sel_move
+                        and row["target_position"] == sel_target
+                    ):
+                        row["selected"] = True
+                _support_target_candidates.extend(slot_candidates)
+
+            # Phase 6.4.9: Compute authoritative VSW outcome fields
+            _vsw_unnecessary = [False, False]
+            _vsw_unsafe = [False, False]
+            _vsw_repeat = [False, False]
+            _vsw_sac_opp = [False, False]
+            _vsw_healthy = [False, False]
+            _vsw_safer = [False, False]
+            _vsw_active_species = ["", ""]
+            _vsw_active_hp = [0.0, 0.0]
+            _vsw_best_stay = [0.0, 0.0]
+            _vsw_sel_active_risk = [0.0, 0.0]
+            _vsw_sel_cand_risk = [0.0, 0.0]
+            _vsw_sel_risk_red = [0.0, 0.0]
+            _vsw_sel_score_adj = [0.0, 0.0]
+            _vsw_reason_codes = [[], []]
+            for _si in (0, 1):
+                _tbl = _voluntary_switch_candidate_tables.get(_si, [])
+                _sel_row = next((r for r in _tbl if r.get("selected")), None)
+                _active = (
+                    battle.active_pokemon[_si]
+                    if _si < len(battle.active_pokemon)
+                    else None
+                )
+                if _active:
+                    _vsw_active_species[_si] = getattr(_active, "species", "")
+                    _vsw_active_hp[_si] = float(
+                        getattr(_active, "current_hp_fraction", 1.0) or 1.0
+                    )
+                _vsw_selected_si = _sel_row is not None
+                _best = 0.0
+                _orders_si = (
+                    valid_orders[_si]
+                    if valid_orders and len(valid_orders) > _si
+                    else []
+                )
+                for _o in _orders_si:
+                    if _o and isinstance(_o.order, Move):
+                        sc = (
+                            slot_0_scores.get(id(_o), 0.0)
+                            if _si == 0
+                            else slot_1_scores.get(id(_o), 0.0)
+                        )
+                        if sc > _best:
+                            _best = sc
+                _vsw_best_stay[_si] = _best
+                _ar = 0.0
+                if _sel_row:
+                    _vsw_sel_active_risk[_si] = _sel_row.get("active_risk", 0.0)
+                    _vsw_sel_cand_risk[_si] = _sel_row.get("candidate_risk", 0.0)
+                    _vsw_sel_risk_red[_si] = _sel_row.get("risk_reduction", 0.0)
+                    _vsw_sel_score_adj[_si] = _sel_row.get("score_adjustment", 0.0)
+                    _vsw_reason_codes[_si] = list(_sel_row.get("reason_codes", []))
+                    _has_use = _sel_row.get("active_has_useful_action", False)
+                    _impr = _sel_row.get("switch_improves_position", False)
+                    _dt = _sel_row.get("double_threat", False)
+                    _qw = _sel_row.get("quad_weak", False)
+                    _cr = _sel_row.get("candidate_risk", 0.0)
+                    _ar = _sel_row.get("active_risk", 0.0)
+                    if _has_use and (not _impr or _cr >= _ar or _dt or _qw):
+                        _vsw_unnecessary[_si] = True
+                    if _dt or _qw or _cr > _ar:
+                        _vsw_unsafe[_si] = True
+                    if _sel_row.get("repeat_penalty", 0) > 0:
+                        _vsw_repeat[_si] = True
+                    for _r in _tbl:
+                        if _r.get("switch_improves_position", False) and not _r.get(
+                            "selected", False
+                        ):
+                            _vsw_safer[_si] = True
+                            break
+                _active_low = _vsw_active_hp[_si] <= getattr(
+                    self.config, "voluntary_switch_sacrifice_hp_threshold", 0.15
+                )
+                _has_useful = _best > getattr(
+                    self.config, "voluntary_switch_useful_action_threshold", 40.0
+                )
+                _vsw_sac_opp[_si] = _active_low and _has_useful
+                if not _vsw_selected_si and _vsw_sac_opp[_si]:
+                    for _r in _tbl:
+                        if (
+                            _r.get("hp", 1.0) >= _vsw_active_hp[_si]
+                            and _r.get("candidate_risk", 0.0) >= _ar
+                        ):
+                            _vsw_healthy[_si] = True
+                            break
 
             self.audit_logger.log_turn_decision(
                 battle_tag=battle_tag,
@@ -7993,102 +12976,193 @@ class DoublesDamageAwarePlayer(Player):
                 slot_actions=slot_actions,
                 slot_action_types=slot_action_types,
                 target_species=target_species,
+                selected_action_kind=selected_action_kind,
+                selected_action_move_id=selected_action_move_id,
+                selected_action_target_position=selected_action_target_position,
+                selected_action_species=selected_action_species,
+                selected_action_only_legal=selected_action_only_legal,
                 partial_immune_spread_selected=[
-                    self.partial_immune_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self.partial_immune_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self.partial_immune_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self.partial_immune_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 partial_ability_immune_spread_selected=[
-                    self.partial_ability_immune_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self.partial_ability_immune_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self.partial_ability_immune_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self.partial_ability_immune_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 efficient_partial_spread_selected=[
-                    self.efficient_partial_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self.efficient_partial_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self.efficient_partial_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self.efficient_partial_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 inefficient_partial_spread_selected=[
-                    self.inefficient_partial_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self.inefficient_partial_spread_by_battle.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self.inefficient_partial_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self.inefficient_partial_spread_by_battle.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 immune_target_species=[
-                    self.immune_target_species_by_battle.setdefault(battle_tag, {0: [], 1: []})[0],
-                    self.immune_target_species_by_battle.setdefault(battle_tag, {0: [], 1: []})[1]
+                    self.immune_target_species_by_battle.setdefault(
+                        battle_tag, {0: [], 1: []}
+                    )[0],
+                    self.immune_target_species_by_battle.setdefault(
+                        battle_tag, {0: [], 1: []}
+                    )[1],
                 ],
                 damaged_target_species=[
-                    self.damaged_target_species_by_battle.setdefault(battle_tag, {0: [], 1: []})[0],
-                    self.damaged_target_species_by_battle.setdefault(battle_tag, {0: [], 1: []})[1]
+                    self.damaged_target_species_by_battle.setdefault(
+                        battle_tag, {0: [], 1: []}
+                    )[0],
+                    self.damaged_target_species_by_battle.setdefault(
+                        battle_tag, {0: [], 1: []}
+                    )[1],
                 ],
                 best_single_target_alternative=[
-                    self.best_single_alternative_by_battle.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self.best_single_alternative_by_battle.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self.best_single_alternative_by_battle.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self.best_single_alternative_by_battle.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 speed_priority_threatened=[
-                    self._speed_priority_threatened.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._speed_priority_threatened.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._speed_priority_threatened.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._speed_priority_threatened.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 faster_opponents=[
                     self._faster_opponents.setdefault(battle_tag, {0: [], 1: []})[0],
-                    self._faster_opponents.setdefault(battle_tag, {0: [], 1: []})[1]
+                    self._faster_opponents.setdefault(battle_tag, {0: [], 1: []})[1],
                 ],
                 priority_opponents=[
                     self._priority_opponents.setdefault(battle_tag, {0: [], 1: []})[0],
-                    self._priority_opponents.setdefault(battle_tag, {0: [], 1: []})[1]
+                    self._priority_opponents.setdefault(battle_tag, {0: [], 1: []})[1],
                 ],
                 speed_priority_protect_bonus_applied=[
-                    self._speed_priority_protect_bonus_applied.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._speed_priority_protect_bonus_applied.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._speed_priority_protect_bonus_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._speed_priority_protect_bonus_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 speed_priority_attack_penalty_applied=[
-                    self._speed_priority_attack_penalty_applied.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._speed_priority_attack_penalty_applied.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._speed_priority_attack_penalty_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._speed_priority_attack_penalty_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 speed_priority_switch_bonus_applied=[
-                    self._speed_priority_switch_bonus_applied.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._speed_priority_switch_bonus_applied.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._speed_priority_switch_bonus_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._speed_priority_switch_bonus_applied.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
-                order_aware_overkill_penalty_applied=self._order_aware_overkill_penalty_applied.setdefault(battle_tag, False),
+                order_aware_overkill_penalty_applied=self._order_aware_overkill_penalty_applied.setdefault(
+                    battle_tag, False
+                ),
                 expected_to_faint_before_moving=[
-                    self._expected_to_faint_before_moving.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._expected_to_faint_before_moving.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._expected_to_faint_before_moving.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._expected_to_faint_before_moving.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 protected_due_to_speed_priority=[
-                    self._protected_due_to_speed_priority.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._protected_due_to_speed_priority.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._protected_due_to_speed_priority.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._protected_due_to_speed_priority.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 protect_like_available=protect_like_available,
                 switch_available=switch_available,
                 only_conditional_priority=only_conditional_priority,
                 stalling_field_condition=stalling_field_condition,
                 ability_hard_block_avoided=[
-                    self._ability_hard_block_avoided.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._ability_hard_block_avoided.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._ability_hard_block_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._ability_hard_block_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 ability_immune_move_selected=[
-                    self._ability_immune_move_selected.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._ability_immune_move_selected.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._ability_immune_move_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._ability_immune_move_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 ground_into_levitate_selected=[
-                    self._ground_into_levitate_selected.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._ground_into_levitate_selected.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._ground_into_levitate_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._ground_into_levitate_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 ability_block_reason=[
-                    self._ability_block_reason.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._ability_block_reason.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._ability_block_reason.setdefault(battle_tag, {0: "", 1: ""})[
+                        0
+                    ],
+                    self._ability_block_reason.setdefault(battle_tag, {0: "", 1: ""})[
+                        1
+                    ],
                 ],
                 ability_blocked_target_species=[
-                    self._ability_blocked_target_species.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._ability_blocked_target_species.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._ability_blocked_target_species.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self._ability_blocked_target_species.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 ability_blocked_target_ability=[
-                    self._ability_blocked_target_ability.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._ability_blocked_target_ability.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._ability_blocked_target_ability.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self._ability_blocked_target_ability.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 ally_ability_safe_spread=[
-                    self._ally_ability_safe_spread.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._ally_ability_safe_spread.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._ally_ability_safe_spread.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._ally_ability_safe_spread.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 ability_redirection_avoided=[
-                    self._ability_redirection_avoided.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._ability_redirection_avoided.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._ability_redirection_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._ability_redirection_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 absorb_immune_move_selected=absorb_immune_move_selected_list,
                 absorb_selection_forced=absorb_selection_forced_list,
@@ -8108,28 +13182,52 @@ class DoublesDamageAwarePlayer(Player):
                 absorb_effective_target_ability=absorb_effective_target_ability_list,
                 absorb_selected_move_id=absorb_selected_move_id_list,
                 direct_absorb_hard_block_avoided=[
-                    self._direct_absorb_hard_block_avoided.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._direct_absorb_hard_block_avoided.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._direct_absorb_hard_block_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._direct_absorb_hard_block_avoided.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 direct_absorb_immune_move_selected=[
-                    self._direct_absorb_immune_move_selected.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._direct_absorb_immune_move_selected.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._direct_absorb_immune_move_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._direct_absorb_immune_move_selected.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 direct_absorb_block_reason=[
-                    self._direct_absorb_block_reason.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._direct_absorb_block_reason.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._direct_absorb_block_reason.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self._direct_absorb_block_reason.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 direct_absorb_target_species=[
-                    self._direct_absorb_target_species.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._direct_absorb_target_species.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._direct_absorb_target_species.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self._direct_absorb_target_species.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 direct_absorb_target_ability=[
-                    self._direct_absorb_target_ability.setdefault(battle_tag, {0: "", 1: ""})[0],
-                    self._direct_absorb_target_ability.setdefault(battle_tag, {0: "", 1: ""})[1]
+                    self._direct_absorb_target_ability.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[0],
+                    self._direct_absorb_target_ability.setdefault(
+                        battle_tag, {0: "", 1: ""}
+                    )[1],
                 ],
                 direct_absorb_only_legal_action=[
-                    self._direct_absorb_only_legal_action.setdefault(battle_tag, {0: False, 1: False})[0],
-                    self._direct_absorb_only_legal_action.setdefault(battle_tag, {0: False, 1: False})[1]
+                    self._direct_absorb_only_legal_action.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[0],
+                    self._direct_absorb_only_legal_action.setdefault(
+                        battle_tag, {0: False, 1: False}
+                    )[1],
                 ],
                 direct_known_absorb_repeat_selected=direct_known_absorb_repeat_selected_list,
                 forced_switch=forced_switch_list,
@@ -8171,16 +13269,86 @@ class DoublesDamageAwarePlayer(Player):
                 neg_boost_speed_negative_stage=neg_boost_speed_list,
                 neg_boost_severe_negative_boost=neg_boost_severe_list,
                 neg_boost_was_switch=neg_boost_was_switch_list,
-                neg_boost_decision_eligible=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_decision_eligible", False), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_decision_eligible", False)],
-                neg_boost_selected_action_kind=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_selected_action_kind", ""), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_selected_action_kind", "")],
-                neg_boost_legal_switch_count=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_legal_switch_count", 0), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_legal_switch_count", 0)],
-                neg_boost_best_switch_species=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_best_switch_species", ""), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_best_switch_species", "")],
-                neg_boost_best_switch_score=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_best_switch_score", 0.0), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_best_switch_score", 0.0)],
-                neg_boost_best_move_score=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_best_move_score", 0.0), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_best_move_score", 0.0)],
-                neg_boost_switch_score_gap=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_switch_score_gap", 0.0), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_switch_score_gap", 0.0)],
-                neg_boost_relevant_offensive_drop=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_relevant_offensive_drop", False), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_relevant_offensive_drop", False)],
-                neg_boost_defensive_drop=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_defensive_drop", False), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_defensive_drop", False)],
-                neg_boost_speed_drop=[_neg_boost_data_per_slot.get(0, {}).get("negative_boost_speed_drop", False), _neg_boost_data_per_slot.get(1, {}).get("negative_boost_speed_drop", False)],
+                neg_boost_decision_eligible=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_decision_eligible", False
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_decision_eligible", False
+                    ),
+                ],
+                neg_boost_selected_action_kind=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_selected_action_kind", ""
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_selected_action_kind", ""
+                    ),
+                ],
+                neg_boost_legal_switch_count=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_legal_switch_count", 0
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_legal_switch_count", 0
+                    ),
+                ],
+                neg_boost_best_switch_species=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_best_switch_species", ""
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_best_switch_species", ""
+                    ),
+                ],
+                neg_boost_best_switch_score=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_best_switch_score", 0.0
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_best_switch_score", 0.0
+                    ),
+                ],
+                neg_boost_best_move_score=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_best_move_score", 0.0
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_best_move_score", 0.0
+                    ),
+                ],
+                neg_boost_switch_score_gap=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_switch_score_gap", 0.0
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_switch_score_gap", 0.0
+                    ),
+                ],
+                neg_boost_relevant_offensive_drop=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_relevant_offensive_drop", False
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_relevant_offensive_drop", False
+                    ),
+                ],
+                neg_boost_defensive_drop=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_defensive_drop", False
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_defensive_drop", False
+                    ),
+                ],
+                neg_boost_speed_drop=[
+                    _neg_boost_data_per_slot.get(0, {}).get(
+                        "negative_boost_speed_drop", False
+                    ),
+                    _neg_boost_data_per_slot.get(1, {}).get(
+                        "negative_boost_speed_drop", False
+                    ),
+                ],
                 # Phase 6.4.3: Stat-drop switch diagnostic fields
                 severe_neg_boost_active=severe_neg_boost_active_list,
                 severe_neg_boost_categories=severe_neg_boost_categories_list,
@@ -8229,6 +13397,22 @@ class DoublesDamageAwarePlayer(Player):
                 effective_move_type_source=effective_move_type_source_list,
                 dynamic_move_type_applied=dynamic_move_type_applied_list,
                 dynamic_move_type_form=dynamic_move_type_form_list,
+                # Phase 6.3.7f: Dynamic absorb candidate audit
+                dynamic_type_absorb_candidate_blocked=dynamic_type_absorb_candidate_blocked_list,
+                dynamic_type_absorb_selected=dynamic_type_absorb_selected_list,
+                dynamic_type_absorb_avoided=dynamic_type_absorb_avoided_list,
+                dynamic_type_absorb_reason=dynamic_type_absorb_reason_list,
+                dynamic_type_absorb_target_species=dynamic_type_absorb_target_species_list,
+                dynamic_type_absorb_target_ability=dynamic_type_absorb_target_ability_list,
+                dynamic_type_absorb_blocked_move_id=dynamic_type_absorb_blocked_move_id_list,
+                dynamic_type_absorb_blocked_candidate_score=dynamic_type_absorb_blocked_candidate_score_list,
+                dynamic_type_absorb_candidate_available=dynamic_type_absorb_candidate_available_list,
+                dynamic_type_absorb_candidate_move_id=dynamic_type_absorb_candidate_move_id_list,
+                dynamic_type_absorb_candidate_declared_type=dynamic_type_absorb_candidate_declared_type_list,
+                dynamic_type_absorb_candidate_effective_type=dynamic_type_absorb_candidate_effective_type_list,
+                dynamic_type_absorb_candidate_form=dynamic_type_absorb_candidate_form_list,
+                dynamic_type_absorb_candidate_source=dynamic_type_absorb_candidate_source_list,
+                dynamic_type_absorb_candidate_target_table=dynamic_type_absorb_candidate_target_table_list,
                 # Phase 6.3.6b.6: Blocked candidate metadata
                 known_ally_redirection_opportunity_observed=known_ally_redirection_opportunity_observed_list,
                 known_ally_redirection_blocked_candidate_move_id=known_ally_redirection_blocked_candidate_move_id_list,
@@ -8242,23 +13426,185 @@ class DoublesDamageAwarePlayer(Player):
                 known_ally_redirection_best_safe_alternative=known_ally_redirection_best_safe_alternative_list,
                 known_ally_redirection_best_safe_alternative_score=known_ally_redirection_best_safe_alternative_score_list,
                 # Phase 6.4.2: Revealed-Move Switch Interception audit fields
-                revealed_switch_prediction_available=[_revel_switch_interception_data.get(0) is not None, _revel_switch_interception_data.get(1) is not None],
-                revealed_switch_interception_selected=[_revel_switch_interception_data.get(0, {}).get("prediction_available", False) if _revel_switch_interception_data.get(0) and isinstance(best_joint.first_order, type(None)) is False and best_joint.first_order and isinstance(best_joint.first_order.order, Pokemon) else False, _revel_switch_interception_data.get(1, {}).get("prediction_available", False) if _revel_switch_interception_data.get(1) and isinstance(best_joint.second_order, type(None)) is False and best_joint.second_order and isinstance(best_joint.second_order.order, Pokemon) else False],
+                revealed_switch_prediction_available=[
+                    _revel_switch_interception_data.get(0) is not None,
+                    _revel_switch_interception_data.get(1) is not None,
+                ],
+                revealed_switch_interception_selected=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "prediction_available", False
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    and isinstance(best_joint.first_order, type(None)) is False
+                    and best_joint.first_order
+                    and isinstance(best_joint.first_order.order, Pokemon)
+                    else False,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "prediction_available", False
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    and isinstance(best_joint.second_order, type(None)) is False
+                    and best_joint.second_order
+                    and isinstance(best_joint.second_order.order, Pokemon)
+                    else False,
+                ],
                 revealed_switch_selection_changed=_sel_changed_per_slot,
-                revealed_switch_threatening_opponent=[_revel_switch_interception_data.get(0, {}).get("threatening_opponents", "") if _revel_switch_interception_data.get(0) else "", _revel_switch_interception_data.get(1, {}).get("threatening_opponents", "") if _revel_switch_interception_data.get(1) else ""],
-                revealed_switch_threat_move_ids=[_revel_switch_interception_data.get(0, {}).get("threat_move_ids", []) if _revel_switch_interception_data.get(0) else [], _revel_switch_interception_data.get(1, {}).get("threat_move_ids", []) if _revel_switch_interception_data.get(1) else []],
-                revealed_switch_threat_move_types=[_revel_switch_interception_data.get(0, {}).get("threat_move_types", []) if _revel_switch_interception_data.get(0) else [], _revel_switch_interception_data.get(1, {}).get("threat_move_types", []) if _revel_switch_interception_data.get(1) else []],
-                revealed_switch_target_likelihood=[_revel_switch_interception_data.get(0, {}).get("target_likelihood", []) if _revel_switch_interception_data.get(0) else [], _revel_switch_interception_data.get(1, {}).get("target_likelihood", []) if _revel_switch_interception_data.get(1) else []],
-                revealed_switch_active_risk=[_revel_switch_interception_data.get(0, {}).get("active_risk", 0.0) if _revel_switch_interception_data.get(0) else 0.0, _revel_switch_interception_data.get(1, {}).get("active_risk", 0.0) if _revel_switch_interception_data.get(1) else 0.0],
-                revealed_switch_candidate_risk=[_revel_switch_interception_data.get(0, {}).get("candidate_risk", 0.0) if _revel_switch_interception_data.get(0) else 0.0, _revel_switch_interception_data.get(1, {}).get("candidate_risk", 0.0) if _revel_switch_interception_data.get(1) else 0.0],
-                revealed_switch_risk_reduction=[_revel_switch_interception_data.get(0, {}).get("risk_reduction", 0.0) if _revel_switch_interception_data.get(0) else 0.0, _revel_switch_interception_data.get(1, {}).get("risk_reduction", 0.0) if _revel_switch_interception_data.get(1) else 0.0],
-                revealed_switch_candidate_species=[_revel_switch_interception_data.get(0, {}).get("candidate_species", "") if _revel_switch_interception_data.get(0) else "", _revel_switch_interception_data.get(1, {}).get("candidate_species", "") if _revel_switch_interception_data.get(1) else ""],
-                revealed_switch_candidate_types=[_revel_switch_interception_data.get(0, {}).get("candidate_types", "") if _revel_switch_interception_data.get(0) else "", _revel_switch_interception_data.get(1, {}).get("candidate_types", "") if _revel_switch_interception_data.get(1) else ""],
-                revealed_switch_candidate_hp=[_revel_switch_interception_data.get(0, {}).get("candidate_hp", 1.0) if _revel_switch_interception_data.get(0) else 1.0, _revel_switch_interception_data.get(1, {}).get("candidate_hp", 1.0) if _revel_switch_interception_data.get(1) else 1.0],
-                revealed_switch_bonus_applied=[_revel_switch_interception_data.get(0, {}).get("bonus_applied", 0.0) if _revel_switch_interception_data.get(0) else 0.0, _revel_switch_interception_data.get(1, {}).get("bonus_applied", 0.0) if _revel_switch_interception_data.get(1) else 0.0],
-                revealed_switch_blocked_by_ko_action=[_revel_switch_interception_data.get(0, {}).get("blocked_by_ko", False) if _revel_switch_interception_data.get(0) else False, _revel_switch_interception_data.get(1, {}).get("blocked_by_ko", False) if _revel_switch_interception_data.get(1) else False],
-                revealed_switch_blocked_by_high_value_action=[_revel_switch_interception_data.get(0, {}).get("blocked_by_high_value", False) if _revel_switch_interception_data.get(0) else False, _revel_switch_interception_data.get(1, {}).get("blocked_by_high_value", False) if _revel_switch_interception_data.get(1) else False],
-                revealed_switch_rejected_worse_other_threat=[_revel_switch_interception_data.get(0, {}).get("worse_other_threat", False) if _revel_switch_interception_data.get(0) else False, _revel_switch_interception_data.get(1, {}).get("worse_other_threat", False) if _revel_switch_interception_data.get(1) else False],
+                revealed_switch_threatening_opponent=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "threatening_opponents", ""
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else "",
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "threatening_opponents", ""
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else "",
+                ],
+                revealed_switch_threat_move_ids=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "threat_move_ids", []
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else [],
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "threat_move_ids", []
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else [],
+                ],
+                revealed_switch_threat_move_types=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "threat_move_types", []
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else [],
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "threat_move_types", []
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else [],
+                ],
+                revealed_switch_target_likelihood=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "target_likelihood", []
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else [],
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "target_likelihood", []
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else [],
+                ],
+                revealed_switch_active_risk=[
+                    _revel_switch_interception_data.get(0, {}).get("active_risk", 0.0)
+                    if _revel_switch_interception_data.get(0)
+                    else 0.0,
+                    _revel_switch_interception_data.get(1, {}).get("active_risk", 0.0)
+                    if _revel_switch_interception_data.get(1)
+                    else 0.0,
+                ],
+                revealed_switch_candidate_risk=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "candidate_risk", 0.0
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else 0.0,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "candidate_risk", 0.0
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else 0.0,
+                ],
+                revealed_switch_risk_reduction=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "risk_reduction", 0.0
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else 0.0,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "risk_reduction", 0.0
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else 0.0,
+                ],
+                revealed_switch_candidate_species=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "candidate_species", ""
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else "",
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "candidate_species", ""
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else "",
+                ],
+                revealed_switch_candidate_types=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "candidate_types", ""
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else "",
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "candidate_types", ""
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else "",
+                ],
+                revealed_switch_candidate_hp=[
+                    _revel_switch_interception_data.get(0, {}).get("candidate_hp", 1.0)
+                    if _revel_switch_interception_data.get(0)
+                    else 1.0,
+                    _revel_switch_interception_data.get(1, {}).get("candidate_hp", 1.0)
+                    if _revel_switch_interception_data.get(1)
+                    else 1.0,
+                ],
+                revealed_switch_bonus_applied=[
+                    _revel_switch_interception_data.get(0, {}).get("bonus_applied", 0.0)
+                    if _revel_switch_interception_data.get(0)
+                    else 0.0,
+                    _revel_switch_interception_data.get(1, {}).get("bonus_applied", 0.0)
+                    if _revel_switch_interception_data.get(1)
+                    else 0.0,
+                ],
+                revealed_switch_blocked_by_ko_action=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "blocked_by_ko", False
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else False,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "blocked_by_ko", False
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else False,
+                ],
+                revealed_switch_blocked_by_high_value_action=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "blocked_by_high_value", False
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else False,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "blocked_by_high_value", False
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else False,
+                ],
+                revealed_switch_rejected_worse_other_threat=[
+                    _revel_switch_interception_data.get(0, {}).get(
+                        "worse_other_threat", False
+                    )
+                    if _revel_switch_interception_data.get(0)
+                    else False,
+                    _revel_switch_interception_data.get(1, {}).get(
+                        "worse_other_threat", False
+                    )
+                    if _revel_switch_interception_data.get(1)
+                    else False,
+                ],
                 revealed_switch_post_turn_damage_taken=[None, None],
                 revealed_switch_post_turn_survived=[None, None],
                 revealed_switch_predicted_move_used=["", ""],
@@ -8302,12 +13648,18 @@ class DoublesDamageAwarePlayer(Player):
                 singleton_selection_changed_by_safety=singleton_selection_changed_by_safety_list,
                 singleton_resolution_source=singleton_resolution_source_list,
                 # Phase 6.4.3a.3: Decision timing diagnostics
-                decision_time_ms=((time.time() - _t_start) * 1000) if _timing_enabled else None,
+                decision_time_ms=((time.time() - _t_start) * 1000)
+                if _timing_enabled
+                else None,
                 valid_order_time_ms=_t_valid_order if _timing_enabled else None,
                 score_action_time_ms=_t_score_action if _timing_enabled else None,
                 joint_scoring_time_ms=_t_joint_scoring if _timing_enabled else None,
-                audit_postprocess_time_ms=((time.time() - _t_audit_start) * 1000) if _timing_enabled else None,
-                score_action_call_count=_score_action_call_count if _timing_enabled else None,
+                audit_postprocess_time_ms=((time.time() - _t_audit_start) * 1000)
+                if _timing_enabled
+                else None,
+                score_action_call_count=_score_action_call_count
+                if _timing_enabled
+                else None,
                 joint_order_count=_joint_order_count if _timing_enabled else None,
                 config=self.config,
                 # Phase 6.4.5: Stale target safety audit fields
@@ -8324,12 +13676,68 @@ class DoublesDamageAwarePlayer(Player):
                 stale_target_second_intended_target=stale_target_second_intended_target,
                 stale_target_fallback_target=stale_target_fallback_target,
                 stale_target_reason=stale_target_reason,
+                support_target_candidates=_support_target_candidates,
+                # Phase 6.4.9: Voluntary switch quality fields
+                voluntary_switch_decision_eligible=[
+                    bool(_voluntary_switch_candidate_tables.get(0, [])),
+                    bool(_voluntary_switch_candidate_tables.get(1, [])),
+                ],
+                voluntary_switch_selected=[
+                    any(
+                        c.get("selected")
+                        for c in _voluntary_switch_candidate_tables.get(0, [])
+                    ),
+                    any(
+                        c.get("selected")
+                        for c in _voluntary_switch_candidate_tables.get(1, [])
+                    ),
+                ],
+                voluntary_switch_selected_species=[
+                    next(
+                        (
+                            c.get("species", "")
+                            for c in _voluntary_switch_candidate_tables.get(0, [])
+                            if c.get("selected")
+                        ),
+                        "",
+                    ),
+                    next(
+                        (
+                            c.get("species", "")
+                            for c in _voluntary_switch_candidate_tables.get(1, [])
+                            if c.get("selected")
+                        ),
+                        "",
+                    ),
+                ],
+                voluntary_switch_selection_changed=_vsw_selection_changed,
+                voluntary_switch_joint_selection_changed=_vsw_joint_selection_changed,
+                voluntary_switch_counterfactual_action=_vsw_counterfactual_actions,
+                voluntary_switch_selected_action=_vsw_selected_actions,
+                voluntary_switch_candidate_table=[
+                    _voluntary_switch_candidate_tables.get(0, []),
+                    _voluntary_switch_candidate_tables.get(1, []),
+                ],
+                voluntary_switch_unnecessary_selected=_vsw_unnecessary,
+                voluntary_switch_unsafe_candidate_selected=_vsw_unsafe,
+                voluntary_switch_repeat_selected=_vsw_repeat,
+                voluntary_switch_sacrifice_opportunity=_vsw_sac_opp,
+                voluntary_switch_healthy_bench_preserved=_vsw_healthy,
+                voluntary_switch_safer_candidate_available=_vsw_safer,
+                voluntary_switch_active_species=_vsw_active_species,
+                voluntary_switch_active_hp=_vsw_active_hp,
+                voluntary_switch_best_stay_score=_vsw_best_stay,
+                voluntary_switch_selected_active_risk=_vsw_sel_active_risk,
+                voluntary_switch_selected_candidate_risk=_vsw_sel_cand_risk,
+                voluntary_switch_selected_risk_reduction=_vsw_sel_risk_red,
+                voluntary_switch_selected_score_adjustment=_vsw_sel_score_adj,
+                voluntary_switch_reason_codes=_vsw_reason_codes,
             )
-
 
         return best_joint
 
     def _battle_finished_callback(self, battle: AbstractBattle):
+        clear_observed_form_state(getattr(battle, "battle_tag", ""))
         if self.custom_logger:
             if battle.won is True:
                 winner = self.username
@@ -8339,17 +13747,21 @@ class DoublesDamageAwarePlayer(Player):
                     try:
                         players = getattr(battle, "players", None)
                         if players:
-                            opp_name = players[1] if players[0] == self.username else players[0]
+                            opp_name = (
+                                players[1]
+                                if players[0] == self.username
+                                else players[0]
+                            )
                     except Exception:
                         pass
                 winner = opp_name or "Opponent"
             else:
                 winner = "Tie / Unknown"
-                
+
             self.custom_logger.save_battle(
                 battle_tag=getattr(battle, "battle_tag", "Unknown"),
                 winner=winner,
-                total_turns=getattr(battle, "turn", 0)
+                total_turns=getattr(battle, "turn", 0),
             )
 
         if self.audit_logger:
@@ -8361,15 +13773,28 @@ class DoublesDamageAwarePlayer(Player):
                     try:
                         players = getattr(battle, "players", None)
                         if players:
-                            opp_name = players[1] if players[0] == self.username else players[0]
+                            opp_name = (
+                                players[1]
+                                if players[0] == self.username
+                                else players[0]
+                            )
                     except Exception:
                         pass
                 winner = opp_name or "Opponent"
             else:
                 winner = "Tie / Unknown"
-                
+
             self.audit_logger.save_battle(
                 battle_tag=getattr(battle, "battle_tag", "Unknown"),
                 winner=winner,
-                battle=battle
+                battle=battle,
             )
+
+        bt = getattr(battle, "battle_tag", "")
+        # History is keyed by (battle_tag, slot) tuples
+        for key in list(self._voluntary_switch_history.keys()):
+            if isinstance(key, tuple) and len(key) >= 1 and key[0] == bt:
+                del self._voluntary_switch_history[key]
+        self._voluntary_switch_quality_data.pop(bt, None)
+        self._voluntary_switch_adjustment_applied.pop(bt, None)
+        self._voluntary_switch_penalized.pop(bt, None)

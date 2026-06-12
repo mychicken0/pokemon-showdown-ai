@@ -102,7 +102,7 @@ class TestBlockedCandidateMap(unittest.TestCase):
         class O: pass
         o = O(); o.order = move; o.move_target = 1
         with patch("bot_doubles_damage_aware.get_known_ability", return_value="stormdrain"):
-            _, _, ar, _ = _compute_order_safety_blocks(battle, config, [[o], []])
+            _, _, ar, _, _, _ = _compute_order_safety_blocks(battle, config, [[o], []])
         self.assertTrue(ar.get(id(o), False))
 
     def test_safe_move_not_mapped(self):
@@ -113,7 +113,7 @@ class TestBlockedCandidateMap(unittest.TestCase):
         class O: pass
         o = O(); o.order = move; o.move_target = 1
         with patch("bot_doubles_damage_aware.get_known_ability", return_value="stormdrain"):
-            _, _, ar, _ = _compute_order_safety_blocks(battle, config, [[o], []])
+            _, _, ar, _, _, _ = _compute_order_safety_blocks(battle, config, [[o], []])
         self.assertFalse(ar.get(id(o), False))
 
 

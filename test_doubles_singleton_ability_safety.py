@@ -543,7 +543,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         battle = PriorityMockBattle(fields=[MockField("psychicterrain")])
         battle._replay_data = None
         battle.opponent_active_pokemon = [target, None]
-        
+
         blocked, reason = priority_move_is_field_blocked(move, attacker, target, battle, config)
         self.assertTrue(blocked)
         self.assertEqual(reason, "priority_blocked_by_psychic_terrain")
@@ -594,7 +594,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         battle._replay_data = None
         battle.active_pokemon = [attacker, None]
         battle.opponent_active_pokemon = [target, None]
-        
+
         player = DoublesDamageAwarePlayer.__new__(DoublesDamageAwarePlayer)
         player.config = config
         player.verbose = False
@@ -615,7 +615,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         battle._replay_data = None
         battle.active_pokemon = [attacker, None]
         battle.opponent_active_pokemon = [target, None]
-        
+
         player = DoublesDamageAwarePlayer.__new__(DoublesDamageAwarePlayer)
         player.config = config
         player.verbose = False
@@ -641,7 +641,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         battle.active_pokemon = [attacker, None]
         battle.opponent_active_pokemon = [target, None]
         battle.available_moves = [[move], []]
-        
+
         player = DoublesDamageAwarePlayer.__new__(DoublesDamageAwarePlayer)
         player.config = config
         player.verbose = False
@@ -770,17 +770,17 @@ class TestPriorityFieldSafety(unittest.TestCase):
         target = MockPokemon("garchomp", ["DRAGON", "GROUND"])
         move = MockMove("suckerpunch", "DARK", base_power=70)
         move.priority = 1
-        
+
         opp_blocker = MockPokemon("farigiraf", ["NORMAL", "PSYCHIC"])
         opp_blocker.ability = "armortail"
-        
+
         class PriorityMockBattle(MockBattle):
             def is_grounded(self, mon):
                 return True
         battle = PriorityMockBattle()
         battle._replay_data = None
         battle.opponent_active_pokemon = [target, opp_blocker]
-        
+
         res = evaluate_priority_move_legality(move, attacker, target, battle, config)
         self.assertTrue(res["blocked"])
         self.assertEqual(res["reason"], "priority_blocked_by_ability_armortail")
@@ -792,16 +792,16 @@ class TestPriorityFieldSafety(unittest.TestCase):
         target = MockPokemon("tsareena", ["GRASS"])
         move = MockMove("suckerpunch", "DARK", base_power=70)
         move.priority = 1
-        
+
         target.ability = "queenlymajesty"
-        
+
         class PriorityMockBattle(MockBattle):
             def is_grounded(self, mon):
                 return True
         battle = PriorityMockBattle()
         battle._replay_data = None
         battle.opponent_active_pokemon = [target, None]
-        
+
         res = evaluate_priority_move_legality(move, attacker, target, battle, config)
         self.assertTrue(res["blocked"])
         self.assertEqual(res["reason"], "priority_blocked_by_ability_queenlymajesty")
@@ -813,16 +813,16 @@ class TestPriorityFieldSafety(unittest.TestCase):
         target = MockPokemon("bruxish", ["WATER", "PSYCHIC"])
         move = MockMove("suckerpunch", "DARK", base_power=70)
         move.priority = 1
-        
+
         target.ability = "dazzling"
-        
+
         class PriorityMockBattle(MockBattle):
             def is_grounded(self, mon):
                 return True
         battle = PriorityMockBattle()
         battle._replay_data = None
         battle.opponent_active_pokemon = [target, None]
-        
+
         res = evaluate_priority_move_legality(move, attacker, target, battle, config)
         self.assertTrue(res["blocked"])
         self.assertEqual(res["reason"], "priority_blocked_by_ability_dazzling")
@@ -939,7 +939,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         # Run pure scoring
         from poke_env.battle.double_battle import SingleBattleOrder
         order = SingleBattleOrder(move, 1)
-        
+
         # Calling with pure=True should keep cache and metrics unchanged
         score = player.score_action(order, 0, battle, config=config, pure=True)
         self.assertEqual(player._base_scores_cache, {0: {123: 50.0}, 1: {}})
@@ -1076,7 +1076,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         slot_1_scores = {}
 
         # Compute safety blocks
-        _da, _sb, _ar, _ar_meta = _compute_order_safety_blocks(battle, config, valid_orders)
+        _da, _sb, _ar, _ar_meta, _st, _st_reason = _compute_order_safety_blocks(battle, config, valid_orders)
 
         # Ground into singleton Levitate must be safety-blocked
         self.assertTrue(_sb.get(id(ground_order), False),
