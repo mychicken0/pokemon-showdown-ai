@@ -1,6 +1,6 @@
 # Current Project State
 
-Last verified: 2026-06-12 19:59 (Asia/Bangkok)
+Last verified: 2026-06-13 08:53 (Asia/Bangkok)
 
 This file is the concise handoff document for the current repository state.
 Source code and fresh command output take precedence over older reports in
@@ -1205,3 +1205,93 @@ were run. Outcomes are used only as offline diagnostic labels and do
 not enter feature extraction or policy selection. No official server,
 online API, hidden item, hidden move, or probabilistic ability input
 was used.
+
+## Phase V2i — Outcome-Blind Matchup Evaluator v2 (2026-06-13)
+
+**Status:** Complete after Codex review. Decision **B — continue
+offline evaluator work**. `matchup_top4_v4` was not implemented and
+Phase V3 remains **BLOCKED**.
+
+New files:
+
+- `vgc2026_matchup_evaluator_v2.py`
+- `analyze_vgc2026_phaseV2i_matchup_evaluator.py`
+- `inspect_vgc2026_phaseV2i_matchup.py`
+- `test_vgc2026_phaseV2i.py`
+
+Codex review corrected three material evaluator defects:
+
+1. Offensive and defensive pressure used species types instead of the
+   types of preview-visible damaging moves.
+2. Back-switch defensive coverage treated our own lead attacks as
+   threats to our bench.
+3. Worst-case lead-pair resilience was inverted, awarding a maximum
+   score when no opponent slot was threatened.
+
+The analyzer also now uses paired bootstrap resampling for paired
+comparisons, never silently substitutes Random when a policy selector
+fails, skips the expensive 129-team comparison in synthetic tests,
+and records an explicit A/B decision.
+
+Verified V2f diagnostic:
+
+- V3-both: 30
+- Random-both: 25
+- Split: 45
+- Decisive n: 55
+- Exact two-sided p: `0.5900533317766357`
+- Exact one-sided p: `0.29502666588831783`
+- V3-both minus Random-both evaluator mean: `-0.237`
+- Unpaired 95% bootstrap CI: `[-0.786, +0.325]`
+- Within Random-both V3-minus-Random mean: `+0.243`
+- Paired 95% bootstrap CI: `[-0.209, +0.669]`
+
+Both failure-comparison intervals cover zero, so the predeclared gate
+for designing a narrow V4 change is not met.
+
+Offline 129-team evaluation completed with zero selection errors:
+
+| Policy | Evaluator mean |
+|---|---:|
+| basic_top4 | 6.304 |
+| random | 5.975 |
+| matchup_top4_v2 | 6.301 |
+| matchup_top4_v3 | 6.413 |
+
+V3-minus-V2 is `+0.112`, paired 95% CI `[+0.028, +0.209]`. This only
+shows that V3 aligns better with the frozen V2i evaluator; it is not
+battle-outcome evidence and does not unblock V3.
+
+Verification:
+
+```text
+V2i-only:
+Ran 79 tests in 11.648s
+OK
+EXIT=0 ELAPSED=11.85s
+
+Cross-phase VGC:
+Ran 421 tests in 35.518s
+OK
+EXIT=0 ELAPSED=36.60s
+
+Analyzer:
+EXIT=0 ELAPSED=17.82s
+```
+
+The repository-wide discovery run completed 1,274 tests but is not
+green: 10 errors and 5 failures remain in
+`test_doubles_dynamic_move_type_safety.py` because expected dynamic
+absorb fields are absent from logger output. V2i does not modify the
+doubles player, logger, analyzer, or those tests; the focused and
+cross-phase VGC suites above are green. The dynamic-type regression
+must be handled as a separate doubles correctness task.
+
+Artifacts:
+
+- `logs/vgc2026_phaseV2i_matchup_evaluator.json`
+- `logs/vgc2026_phaseV2i_matchup_evaluator.md`
+
+No battle was run. Outcome labels were loaded only after evaluator
+configuration freeze. The final fingerprint is
+`c86d75271f833ede664b756c717dd4ce1c9c6791505c5c32d1864101ebfaa22a`.

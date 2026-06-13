@@ -1035,3 +1035,88 @@ Artifacts:
 
 - `logs/vgc2026_phaseV2h_feature_stability.json`
 - `logs/vgc2026_phaseV2h_feature_stability.md`
+
+## Phase V2i — Outcome-Blind Matchup Evaluator v2
+
+Phase V2i introduced a frozen, preview-visible matchup evaluator that
+scores an exact 4/2/2 plan against all 15 possible opponent lead
+pairs. It uses the local Gen 9 dex and no online or post-preview data.
+
+### Review Corrections
+
+The initial implementation passed its tests but had three semantic
+errors:
+
+1. Type pressure was inferred from Pokémon species types rather than
+   the actual damaging moves on the open team sheet.
+2. Back-switch safety included our own lead move types as incoming
+   threats.
+3. Worst-case resilience returned `1.0` when no opponent lead was
+   threatened.
+
+These paths now use preview-visible damaging move metadata, opponent
+attacks only, and the correct minimum threatened-slot fraction.
+Regression tests pin each behavior. The frozen fingerprint changed to
+`c86d75271f833ede664b756c717dd4ce1c9c6791505c5c32d1864101ebfaa22a`.
+The fingerprint payload includes
+`EVALUATOR_ALGORITHM_VERSION="v2i.1-preview-move-types"` so future
+semantic changes cannot reuse a constants-only fingerprint.
+
+The analyzer was also corrected to:
+
+- bootstrap paired comparisons by pair index;
+- expose explicit CI-excludes-zero semantics;
+- report policy selection errors instead of silently falling back to
+  Random;
+- skip the 129-team evaluation for synthetic unit-test inputs;
+- render the 129-team table and final A/B decision.
+
+### Results
+
+| Comparison | Mean difference | 95% bootstrap CI |
+|---|---:|---:|
+| V3-both vs Random-both | -0.237 | [-0.786, +0.325] |
+| Within Random-both, V3 vs Random | +0.243 | [-0.209, +0.669] |
+
+The V2f sign test is unchanged: V3-both 30, Random-both 25, split 45,
+two-sided `p=0.590053`, one-sided `p=0.295027`.
+
+The offline 129-team comparison completed all 129 inputs with no
+selection errors. Evaluator means were 6.304 for basic_top4, 5.975 for
+Random, 6.301 for V2, and 6.413 for V3. V3-minus-V2 was +0.112 with a
+paired 95% CI `[+0.028, +0.209]`. This is evaluator agreement, not
+battle evidence.
+
+### Verification
+
+```text
+Ran 79 tests in 11.648s
+OK
+EXIT=0 ELAPSED=11.85s
+
+Cross-phase VGC:
+Ran 421 tests in 35.518s
+OK
+EXIT=0 ELAPSED=36.60s
+
+Analyzer EXIT=0 ELAPSED=17.82s
+```
+
+The full repository discovery run executed 1,274 tests and exposed
+10 errors plus 5 failures in the pre-existing dynamic-move-type audit
+path (`test_doubles_dynamic_move_type_safety.py`). V2i changed none of
+the doubles logger or dynamic-type files. This is recorded as a
+separate unresolved doubles regression rather than hidden by the
+passing VGC suites.
+
+The inspector was exercised against both synthetic and real pair data
+with component, opponent-lead, best/worst lead, policy-comparison, and
+ablation flags.
+
+### Decision
+
+**B — continue offline evaluator work.**
+
+Both predeclared failure-comparison confidence intervals cover zero.
+`matchup_top4_v4` was not implemented. Phase V3 remains **BLOCKED**.
+No battle was run.
