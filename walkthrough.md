@@ -1120,3 +1120,314 @@ ablation flags.
 Both predeclared failure-comparison confidence intervals cover zero.
 `matchup_top4_v4` was not implemented. Phase V3 remains **BLOCKED**.
 No battle was run.
+
+## Repository Regression Cleanup after Phase V2i (2026-06-13)
+
+**Status:** Complete after Codex review. No V2i behavior was changed.
+Phase V3 remains **BLOCKED**.
+
+### Root Cause
+
+The repository-wide unittest discovery completed 1,274 tests with
+10 errors and 5 failures, all in
+`test_doubles_dynamic_move_type_safety.py`. The production caller in
+`bot_doubles_damage_aware.py` already built 15 per-slot lists for the
+dynamic-type absorb audit and passed them as keyword arguments to
+`DoublesDecisionAuditLogger.log_turn_decision()`. The logger accepted
+these via `**kwargs` but never added them to the `slot_0` / `slot_1`
+audit dictionaries. The saved JSONL therefore had no dynamic-type
+absorb fields, the analyzer's `Dynamic Move Type Safety Report`
+reported zero candidates, and the inspector's
+`--candidate-blocked` / `--selected` / `--reason ...` filters could
+never return a real case.
+
+The 15 missing per-slot fields were: `candidate_blocked`,
+`selected`, `avoided`, `reason`, `target_species`, `target_ability`,
+`blocked_move_id`, `blocked_candidate_score`, `candidate_available`,
+`candidate_move_id`, `candidate_declared_type`,
+`candidate_effective_type`, `candidate_form`, `candidate_source`,
+`candidate_target_table`. All 15 share the
+`dynamic_type_absorb_` prefix and the test file already used exact
+field names with `.get(..., default)` access.
+
+### Changed Files
+
+- `doubles_decision_audit_logger.py` only.
+- `bot_doubles_damage_aware.py`, `analyze_doubles_decision_audit.py`,
+  `inspect_dynamic_move_type_cases.py`, the V2i test files, the
+  V2i matchup evaluator, the V2i analyzer, and the V2i test for
+  the production caller were not modified.
+- `DoublesDamageAwareConfig` defaults were not touched.
+
+### Production Data Flow Fix
+
+1. `classify_dynamic_type_absorb_candidates()` in
+   `bot_doubles_damage_aware.py` already returned the 15 per-slot
+   fields and the structured `dynamic_candidate_target_table`.
+2. The per-slot lists were already constructed and passed into
+   `logger.log_turn_decision(...)` at
+   `bot_doubles_damage_aware.py:13401`.
+3. In `doubles_decision_audit_logger.py`:
+   - The 15 fields were promoted from implicit `**kwargs` to
+     first-class named parameters on `log_turn_decision`.
+   - Each field was added to `slot_0` indexing the per-slot list
+     with `[0]`, defaulting to `False` / `""` / `0.0` / `[]`.
+   - Each field was added to `slot_1` with the same pattern
+     using `[1]`.
+   - The `dynamic_type_absorb_candidate_target_table` value is
+     forwarded as the inner list of structured target rows;
+     the list is not aliased between slots, so slot 0 cannot
+     leak into slot 1.
+4. The analyzer, inspector, validator, and metrics code already
+   read the same field names with `.get(..., default)` access,
+   so no other files needed changes.
+
+### Tests and Exit Codes
+
+Focused:
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 60s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py
+
+Ran 110 tests in 1.206s
+OK
+EXIT=0 ELAPSED=1.60s
+```
+
+Neighboring:
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 90s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py \
+  test_doubles_known_absorb_hard_safety.py \
+  test_doubles_known_ally_redirection_safety.py \
+  test_doubles_singleton_ability_safety.py
+
+Ran 267 tests in 4.077s
+OK
+EXIT=0 ELAPSED=4.85s
+```
+
+V2i regression (unchanged behavior):
+
+```text
+Ran 79 tests in 18.419s
+OK
+EXIT=0 ELAPSED=18.79s
+```
+
+Full discovery:
+
+```text
+timeout --foreground --signal=TERM --kill-after=30s 300s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest
+
+Ran 1275 tests in 52.638s
+OK
+EXIT=0 ELAPSED=55.43s
+```
+
+The earlier V2i "15 dynamic-type failures" claim is **superseded**.
+The latest discovery observed 1,275 tests, while the earlier run
+observed 1,274. The exact source of that +1 difference was not
+established by the logger-only patch.
+
+### Acceptance Items
+
+- Full discovery `EXIT=0` under 300s foreground timeout.
+- No `ResourceWarning` under `-W error::ResourceWarning`.
+- No timeout kill, no `os._exit`, no `atexit.register` placeholder.
+- Analyzer's `Dynamic Move Type Safety Report` prints
+  `dynamic absorb candidates blocked / selected / avoided`,
+  `block reason split`, `blocked move ID split`, `target species
+  split`, `target ability split`, `accounting invariant:
+  blocked == selected + avoided : PASS`, and `attacker:`
+  metadata inside the sample cases when a blocked record exists.
+- Inspector's `--candidate-blocked`, `--selected`, and
+  `--reason ...` filters return real `SELECTED` /
+  `AVOIDED` rows; default filter still excludes ordinary
+  static moves.
+- `test_target_table_slot_isolation` and
+  `test_slot1_does_not_inherit_slot0_metadata` prove slot 0
+  metadata does not leak into slot 1.
+- V2i focused suite (`test_vgc2026_phaseV2i.py`) still passes
+  in 79 / 79 with no behavior change.
+- Phase V3 remains **BLOCKED**.
+- No battle was run; no server was contacted.
+- All `logs/` artifacts are at their previous sizes and mtimes.
+
+### Watchdog Settings
+
+- Focused: 60s, 10s kill-after.
+- Neighboring: 90s, 10s kill-after.
+- Full discovery: 300s, 30s kill-after.
+- All runs use foreground timeouts under
+  `-W error::ResourceWarning`.
+
+### Unchanged Defaults
+
+- `DoublesDamageAwareConfig` source-of-truth values were not
+  modified.
+- `ability_hard_safety_avoid_absorb = True`,
+  `ability_hard_safety_direct_absorb_only = True`,
+  `ability_hard_safety_allow_singleton_deduction = True`.
+- `enable_support_move_target_hard_safety = False`,
+  `enable_priority_field_hard_safety = False`,
+  `enable_known_ally_redirection_hard_safety = False`,
+  and every other adopted-disallow flag remain at their
+  previous values.
+- `EVALUATOR_ALGORITHM_VERSION` remains
+  `"v2i.1-preview-move-types"` and the V2i fingerprint remains
+  `c86d75271f833ede664b756c717dd4ce1c9c6791505c5c32d1864101ebfaa22a`.
+
+## V2i Regression Cleanup — Slot-1 Guard Hardening (2026-06-13)
+
+**Status:** Complete after Codex review. No V2i behavior was
+changed. Phase V3 remains **BLOCKED**.
+
+### Codex Review Finding
+
+The previous V2i regression fix indexed every per-slot
+`dynamic_type_absorb_*` field on `value[1]` when computing the
+slot 1 audit record, gated only by a truthiness check on
+`value`. A 1-element list (e.g., `[True]`) would pass the
+truthiness check and then raise `IndexError` when the code
+read `value[1]`. This was a latent production bug; the
+production caller always passes 2-element lists, so the
+existing tests never exercised the failure mode.
+
+### Changed Files
+
+- `doubles_decision_audit_logger.py` only.
+- `test_doubles_dynamic_move_type_safety.py` — 6 new tests.
+- `CURRENT_STATE.md` and `walkthrough.md` — corrected the
+  test-count delta narrative.
+
+### Slot-1 Guard Strategy
+
+For each of the 15 fields, the slot 1 branch is now:
+
+```python
+"dynamic_type_absorb_<field>": (
+    <coerce>(value[1])
+    if (value is not None and len(value) > 1)
+    else <default>
+)
+```
+
+- `None` → default.
+- `[]` → default (`len(value) > 1` is `False`).
+- `[x]` → default (`len(value) > 1` is `False`; the old code
+  raised `IndexError` here).
+- `[a, b]` → coerced `b`.
+- Slot 0 path is unchanged.
+
+Defaults preserved exactly:
+
+- `False` for the four `bool` fields.
+- `""` for the nine `str` fields.
+- `0.0` for `dynamic_type_absorb_blocked_candidate_score`.
+- `[]` for `dynamic_type_absorb_candidate_target_table`.
+
+### New Tests
+
+Added 6 tests to `TestLoggerAnalyzer` in
+`test_doubles_dynamic_move_type_safety.py`:
+
+1. `test_slot1_none_inputs_return_defaults`
+2. `test_slot1_empty_lists_return_defaults`
+3. `test_slot1_one_element_lists_return_defaults`
+4. `test_slot1_two_element_lists_use_index_one`
+5. `test_slot0_one_element_lists_use_index_zero` (no
+   regression on the existing slot 0 path)
+6. `test_target_table_slot_isolation_with_two_element_lists`
+
+### Tests and Exit Codes
+
+Focused (with `ResourceWarning` promoted to error):
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 60s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py
+
+Ran 116 tests in 1.036s
+OK
+EXIT=0 ELAPSED=1.35s
+```
+
+Neighboring:
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 90s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py \
+  test_doubles_known_absorb_hard_safety.py \
+  test_doubles_known_ally_redirection_safety.py \
+  test_doubles_singleton_ability_safety.py
+
+Ran 273 tests in 3.736s
+OK
+EXIT=0 ELAPSED=4.39s
+```
+
+V2i focused (unchanged behavior):
+
+```text
+Ran 79 tests in 16.448s
+OK
+EXIT=0 ELAPSED=16.76s
+```
+
+Full discovery:
+
+```text
+timeout --foreground --signal=TERM --kill-after=30s 300s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest
+
+Ran 1281 tests in 52.544s
+OK
+EXIT=0 ELAPSED=46.31s
+```
+
+### Test Count Delta
+
+- Earlier V2i run (before this regression cleanup): 1,274
+  tests observed.
+- V2i regression cleanup: 1,275 tests observed.
+- V2i regression cleanup + slot-1 guard fix: 1,281 tests
+  observed.
+
+The +6 delta between 1,275 and 1,281 matches the 6 new tests
+added in this patch. The exact source of the +1 delta
+between the original 1,274 count and the 1,275 count was
+**not** established by the previous logger-only patch. The
+"re-enabled previously failing-but-collected test methods"
+claim has been removed.
+
+### Watchdog Settings
+
+- Focused: 60s, 10s kill-after.
+- Neighboring: 90s, 10s kill-after.
+- Full discovery: 300s, 30s kill-after.
+- All runs use foreground timeouts under
+  `-W error::ResourceWarning`.
+
+### Unchanged Defaults
+
+- `DoublesDamageAwareConfig` source-of-truth values were not
+  modified.
+- `ability_hard_safety_avoid_absorb = True`,
+  `ability_hard_safety_direct_absorb_only = True`,
+  `ability_hard_safety_allow_singleton_deduction = True`.
+- `enable_support_move_target_hard_safety = False`,
+  `enable_priority_field_hard_safety = False`,
+  `enable_known_ally_redirection_hard_safety = False`,
+  and every other adopted-disallow flag remain at their
+  previous values.
+- Production scoring in `bot_doubles_damage_aware.py` was not
+  modified. Classifier semantics, analyzer, inspector, and
+  config defaults are unchanged.

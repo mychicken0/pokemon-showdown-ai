@@ -1,6 +1,6 @@
 # Current Project State
 
-Last verified: 2026-06-13 08:53 (Asia/Bangkok)
+Last verified: 2026-06-13 09:30 (Asia/Bangkok)
 
 This file is the concise handoff document for the current repository state.
 Source code and fresh command output take precedence over older reports in
@@ -1279,13 +1279,29 @@ Analyzer:
 EXIT=0 ELAPSED=17.82s
 ```
 
-The repository-wide discovery run completed 1,274 tests but is not
-green: 10 errors and 5 failures remain in
-`test_doubles_dynamic_move_type_safety.py` because expected dynamic
-absorb fields are absent from logger output. V2i does not modify the
-doubles player, logger, analyzer, or those tests; the focused and
-cross-phase VGC suites above are green. The dynamic-type regression
-must be handled as a separate doubles correctness task.
+The repository-wide discovery run is now GREEN:
+
+```text
+Ran 1275 tests in 52.638s
+OK
+EXIT=0 ELAPSED=55.43s
+```
+
+The earlier V2i statement that the full discovery exposed 10 errors plus 5
+failures in `test_doubles_dynamic_move_type_safety.py` is **superseded**.
+Those 15 dynamic-type failures were caused by missing per-slot
+`dynamic_type_absorb_*` fields in the `slot_0`/`slot_1` audit dictionaries of
+`doubles_decision_audit_logger.py`. The production caller
+(`bot_doubles_damage_aware.py`) was already passing these 15 per-slot lists
+correctly, but the logger was capturing them in `**kwargs` without writing
+them to the per-slot JSON. The 15 fields are now first-class named
+parameters in `log_turn_decision` and are stored in both `slot_0` and
+`slot_1` exactly as the analyzer, inspector, and tests expect. See the
+"Repository Regression Cleanup" section below for details.
+
+V2i did not modify the doubles player, logger, analyzer, or those tests;
+the focused and cross-phase VGC suites remain green. Phase V3 remains
+**BLOCKED**.
 
 Artifacts:
 
@@ -1295,3 +1311,299 @@ Artifacts:
 No battle was run. Outcome labels were loaded only after evaluator
 configuration freeze. The final fingerprint is
 `c86d75271f833ede664b756c717dd4ce1c9c6791505c5c32d1864101ebfaa22a`.
+
+## Repository Regression Cleanup after Phase V2i (2026-06-13)
+
+**Status:** Complete after Codex review. No V2i behavior changed.
+Phase V3 remains **BLOCKED**.
+
+### Root Cause
+
+The repository-wide unittest discovery completed 1,274 tests with 10
+errors and 5 failures, all in
+`test_doubles_dynamic_move_type_safety.py`. The failures stemmed from a
+serialization gap in the doubles decision audit logger.
+
+The production caller in `bot_doubles_damage_aware.py` already built 15
+per-slot lists for the dynamic-type absorb audit and passed them as
+keyword arguments to `DoublesDecisionAuditLogger.log_turn_decision()`.
+The logger accepted these via `**kwargs` but did not add them to the
+`slot_0` / `slot_1` audit dictionaries. As a result, every per-slot
+dynamic-type absorb field was missing from the saved JSONL, the
+analyzer's `Dynamic Move Type Safety Report` reported zero candidates,
+and the inspector's `--candidate-blocked` / `--selected` /
+`--reason ...` filters could never return a real case.
+
+The 15 missing per-slot fields were:
+
+- `dynamic_type_absorb_candidate_blocked`
+- `dynamic_type_absorb_selected`
+- `dynamic_type_absorb_avoided`
+- `dynamic_type_absorb_reason`
+- `dynamic_type_absorb_target_species`
+- `dynamic_type_absorb_target_ability`
+- `dynamic_type_absorb_blocked_move_id`
+- `dynamic_type_absorb_blocked_candidate_score`
+- `dynamic_type_absorb_candidate_available`
+- `dynamic_type_absorb_candidate_move_id`
+- `dynamic_type_absorb_candidate_declared_type`
+- `dynamic_type_absorb_candidate_effective_type`
+- `dynamic_type_absorb_candidate_form`
+- `dynamic_type_absorb_candidate_source`
+- `dynamic_type_absorb_candidate_target_table`
+
+### Changed Files
+
+- `doubles_decision_audit_logger.py` only. The test, the production
+  caller, the analyzer, the inspector, and the VGC path were all
+  unchanged.
+
+### Production Data Flow Fix
+
+1. `classify_dynamic_type_absorb_candidates()` in
+   `bot_doubles_damage_aware.py` was already returning the 15 per-slot
+   fields and the structured `dynamic_candidate_target_table` for every
+   legal `Move` and observed form.
+2. The per-slot lists were already constructed and passed into
+   `logger.log_turn_decision(...)` at `bot_doubles_damage_aware.py`
+   line 13401 onward.
+3. The fix in `doubles_decision_audit_logger.py`:
+   - Promoted the 15 fields from implicit `**kwargs` to first-class
+     named parameters on `log_turn_decision` so the signature is
+     explicit and the IDE/grep surface matches the test contract.
+   - Added each field to the `slot_0` audit dictionary, indexing the
+     per-slot list with `[0]` and defaulting to `False` / `""` /
+     `0.0` / `[]` when no list was supplied.
+   - Added each field to the `slot_1` audit dictionary using the
+     same pattern with `[1]`.
+   - The `dynamic_type_absorb_candidate_target_table` value is
+     forwarded as the inner list of structured target rows; the
+     list is not aliased between slots, so slot 0 cannot leak into
+     slot 1.
+4. The analyzer, inspector, validator, and metrics code already
+   consumed the same field names with `.get(..., default)` access,
+   so no other files needed changes.
+
+### Verified Tests
+
+Focused:
+
+```text
+Ran 110 tests in 1.206s
+OK
+EXIT=0 ELAPSED=1.60s
+```
+
+Neighboring suites:
+
+```text
+Ran 267 tests in 4.077s
+OK
+EXIT=0 ELAPSED=4.85s
+```
+
+V2i focused regression (unchanged behavior):
+
+```text
+Ran 79 tests in 18.419s
+OK
+EXIT=0 ELAPSED=18.79s
+```
+
+Full repository discovery:
+
+```text
+Ran 1275 tests in 52.638s
+OK
+EXIT=0 ELAPSED=55.43s
+```
+
+- Zero `ResourceWarning` under `-W error::ResourceWarning`.
+- Natural termination under the 300-second foreground timeout.
+- No `os._exit`, no `atexit.register` placeholder, no test skip.
+- The 1,275-test count includes 110 dynamic-type tests, 79 V2i
+  tests, 421 cross-phase VGC tests, and the rest of the
+  maintained suite.
+
+### Defaults Confirmation
+
+- `DoublesDamageAwareConfig` defaults were not touched.
+- All `enable_*` flags in the dynamic-type audit path
+  (`ability_hard_safety_avoid_absorb`, etc.) remain at their
+  adopted values.
+- Static moves still do not enter dynamic-type opportunity
+  metrics: the analyzer gates the report on
+  `s.get("dynamic_move_type_applied", False)`, and the
+  inspector's default filter excludes any row where that flag
+  and `dynamic_type_absorb_candidate_blocked` are both false.
+- Object-identity Morpeko form tracking and replay cursor
+  behavior are unchanged (no changes in
+  `bot_doubles_damage_aware.py`).
+- The `candidate_blocked == selected + avoided` accounting
+  invariant and the `selected ∧ avoided` mutual-exclusion
+  constraint are preserved at the audit layer because the
+  logger now forwards the same three flags the classifier
+  returned.
+- `enable_support_move_target_hard_safety`,
+  `enable_priority_field_hard_safety`,
+  `enable_known_ally_redirection_hard_safety`, and every
+  other adopted-disallow flag remain `False`.
+
+### No Battle / No Server Confirmation
+
+- No benchmark runner was started.
+- No connection to `localhost:8000` or any other Showdown
+  server was attempted.
+- The `Bot` / `Player` lifecycle was not exercised; the
+  affected tests build `DoublesDecisionAuditLogger` and write
+  to a `TemporaryDirectory` JSONL.
+- All audit artifacts under `logs/` remain at their previous
+  sizes and mtimes; the cleanup did not regenerate any
+  benchmark, qualification, or analyzer artifact.
+
+## Phase V2i Regression Cleanup — Slot-1 Guard Hardening (2026-06-13)
+
+**Status:** Complete after Codex review. No V2i behavior was
+changed. Phase V3 remains **BLOCKED**.
+
+### Codex Review Findings
+
+The previous V2i regression fix added 15 per-slot
+`dynamic_type_absorb_*` fields to the logger but indexed slot 1
+with the same truthiness check as slot 0. If a caller passed a
+1-element list (e.g., `[True]`), the slot 1 branch would compute
+`value[1]` and raise `IndexError`. The fix below replaces every
+slot 1 truthiness check with a `len(value) > 1` guard, preserves
+the existing defaults, and leaves slot 0 behavior unchanged.
+
+### Changed Files
+
+- `doubles_decision_audit_logger.py` — all 15 dynamic-type
+  absorb slot-1 serializations now require
+  `len(value) > 1` before reading `value[1]`.
+- `test_doubles_dynamic_move_type_safety.py` — added 6 focused
+  tests covering None / empty / one-element / two-element list
+  inputs, plus a 2-element target-table slot-isolation test.
+- `CURRENT_STATE.md` and `walkthrough.md` — corrected the
+  test-count delta explanation (see "Test Count Delta" below).
+
+### Slot-1 Guard Strategy
+
+For each of the 15 fields, the slot 1 branch is now:
+
+```python
+"dynamic_type_absorb_<field>": (
+    <coerce>(value[1])
+    if (value is not None and len(value) > 1)
+    else <default>
+)
+```
+
+- `None` → default.
+- `[]` → default (length is not > 1).
+- `[x]` → default (length is not > 1; the old code raised
+  `IndexError` here).
+- `[a, b]` → coerced `b`.
+- Slot 0 path is unchanged: it still uses
+  `bool(value[0]) if value else False` (and the analogous
+  `str(...)` / `float(...)` / `list(...)` patterns), because
+  reading index 0 of a 1-element list is safe.
+
+Defaults preserved exactly:
+
+- `False` for the four `bool` fields.
+- `""` for the nine `str` fields.
+- `0.0` for `dynamic_type_absorb_blocked_candidate_score`.
+- `[]` for `dynamic_type_absorb_candidate_target_table`.
+
+### New Focused Tests
+
+Added 6 tests to
+`TestLoggerAnalyzer` in
+`test_doubles_dynamic_move_type_safety.py`:
+
+1. `test_slot1_none_inputs_return_defaults` — every field
+   defaults when the caller passes `None`.
+2. `test_slot1_empty_lists_return_defaults` — every field
+   defaults when the caller passes `[]`.
+3. `test_slot1_one_element_lists_return_defaults` — every
+   field defaults when the caller passes a 1-element list
+   (this case used to raise `IndexError`).
+4. `test_slot1_two_element_lists_use_index_one` — slot 1
+   reads `value[1]` correctly for a 2-element list.
+5. `test_slot0_one_element_lists_use_index_zero` — slot 0
+   still reads `value[0]` from a 1-element list (no
+   regression).
+6. `test_target_table_slot_isolation_with_two_element_lists` —
+   slot 0 and slot 1 target tables do not leak into each
+   other.
+
+### Tests and Exit Codes
+
+Focused (with `ResourceWarning` promoted to error):
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 60s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py
+
+Ran 116 tests in 1.036s
+OK
+EXIT=0 ELAPSED=1.35s
+```
+
+(110 pre-existing + 6 new = 116.)
+
+Neighboring suites:
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 90s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_doubles_dynamic_move_type_safety.py \
+  test_doubles_known_absorb_hard_safety.py \
+  test_doubles_known_ally_redirection_safety.py \
+  test_doubles_singleton_ability_safety.py
+
+Ran 273 tests in 3.736s
+OK
+EXIT=0 ELAPSED=4.39s
+```
+
+V2i focused regression (unchanged behavior):
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 60s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_vgc2026_phaseV2i.py
+
+Ran 79 tests in 16.448s
+OK
+EXIT=0 ELAPSED=16.76s
+```
+
+Full repository discovery:
+
+```text
+timeout --foreground --signal=TERM --kill-after=30s 300s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest
+
+Ran 1281 tests in 52.544s
+OK
+EXIT=0 ELAPSED=46.31s
+```
+
+### Test Count Delta
+
+- Earlier V2i run (before this regression cleanup): 1,274
+  tests observed.
+- V2i regression cleanup: 1,275 tests observed.
+- V2i regression cleanup + slot-1 guard fix: 1,281 tests
+  observed.
+
+The +6 delta between the 1,275 count and the latest 1,281
+count matches the 6 new tests added in this patch. The
+exact source of the original +1 delta between the 1,274
+and 1,275 counts was **not** established by the previous
+logger-only patch. It is no longer claimed to be the
+re-enabling of previously failing-but-collected test
+methods.

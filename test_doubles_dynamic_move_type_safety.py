@@ -1820,6 +1820,339 @@ class TestLoggerAnalyzer(unittest.TestCase):
         self.assertEqual(len(s1.get("dynamic_type_absorb_candidate_target_table", [])), 0)
         shutil.rmtree(tmp, ignore_errors=True)
 
+    def _make_slot_dict(self, **overrides):
+        """Build a minimal battle + slot dict for log_turn_decision slot-1 guard tests."""
+        from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+        attacker = MockPokemon("morpeko")
+        target = MockPokemon("thundurus"); target.species = "thundurus"
+        ally = MockPokemon("b")
+        b = MagicMock(); b.turn = 1; b.battle_tag = "guardbt"
+        b.active_pokemon = [attacker, ally]
+        b.opponent_active_pokemon = [target, None]; b.fields = []
+        b.available_moves = [[], []]; b.available_switches = [[]]; b.force_switch = [False, False]
+        b.side_conditions = {}; b.opponent_side_conditions = {}; b.weather = None
+        aw_move = _make_move("aurawheel", "ELECTRIC")
+        slot0 = _make_order(aw_move, 1)
+        slot1 = _make_order(_make_move("thunderbolt", "ELECTRIC"), 2)
+        jo = self._make_joint(slot0, slot1)
+        return b, jo
+
+    def _run_slot1_guard(self, **slot_kw):
+        """Call log_turn_decision with caller-chosen dynamic_type_absorb_* kwargs
+        and return the parsed slot_1 dict from the saved JSONL."""
+        from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+        tmp = tempfile.mkdtemp()
+        fp = os.path.join(tmp, "t.jsonl")
+        logger = DoublesDecisionAuditLogger(filepath=fp, reset=True)
+        b, jo = self._make_slot_dict()
+        logger.log_turn_decision(
+            battle_tag="guardbt", turn=1, battle=b,
+            selected_joint_order="/choose move aurawheel|move thunderbolt",
+            selected_score=100, scored_joint_orders=[(jo, 100, 50, 50)],
+            expected_damages=[50, 50], expected_kos=[False, False],
+            target_hps=[1, 1],
+            overkill_triggered=False, focus_fire_triggered=False,
+            ally_hit_penalty_triggered=False,
+            spread_available=[False, False], best_spread_score=[0, 0],
+            best_ko_score=[0, 0],
+            low_hp_opponent_existed=False, low_hp_opponent_targeted=False,
+            slot_actions=["move aurawheel", "move thunderbolt"],
+            slot_action_types=[{}, {}],
+            target_species=["thundurus", ""],
+            declared_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type_source=["static", "static"],
+            dynamic_move_type_applied=[True, False],
+            dynamic_move_type_form=["morpeko", ""],
+            **slot_kw,
+        )
+        logger.save_battle(battle_tag="guardbt", winner="test", battle=b)
+        with open(fp) as f:
+            r = json.loads(f.readline())
+        shutil.rmtree(tmp, ignore_errors=True)
+        return r["audit_turns"][0]["slot_1"]
+
+    def _DT_FIELDS_BOOL(self):
+        return [
+            "dynamic_type_absorb_candidate_blocked",
+            "dynamic_type_absorb_selected",
+            "dynamic_type_absorb_avoided",
+            "dynamic_type_absorb_candidate_available",
+        ]
+
+    def _DT_FIELDS_STR(self):
+        return [
+            "dynamic_type_absorb_reason",
+            "dynamic_type_absorb_target_species",
+            "dynamic_type_absorb_target_ability",
+            "dynamic_type_absorb_blocked_move_id",
+            "dynamic_type_absorb_candidate_move_id",
+            "dynamic_type_absorb_candidate_declared_type",
+            "dynamic_type_absorb_candidate_effective_type",
+            "dynamic_type_absorb_candidate_form",
+            "dynamic_type_absorb_candidate_source",
+        ]
+
+    def _DT_FIELDS_FLOAT(self):
+        return ["dynamic_type_absorb_blocked_candidate_score"]
+
+    def _DT_FIELDS_LIST(self):
+        return ["dynamic_type_absorb_candidate_target_table"]
+
+    def test_slot1_none_inputs_return_defaults(self):
+        s1 = self._run_slot1_guard(
+            dynamic_type_absorb_candidate_blocked=None,
+            dynamic_type_absorb_selected=None,
+            dynamic_type_absorb_avoided=None,
+            dynamic_type_absorb_reason=None,
+            dynamic_type_absorb_target_species=None,
+            dynamic_type_absorb_target_ability=None,
+            dynamic_type_absorb_blocked_move_id=None,
+            dynamic_type_absorb_blocked_candidate_score=None,
+            dynamic_type_absorb_candidate_available=None,
+            dynamic_type_absorb_candidate_move_id=None,
+            dynamic_type_absorb_candidate_declared_type=None,
+            dynamic_type_absorb_candidate_effective_type=None,
+            dynamic_type_absorb_candidate_form=None,
+            dynamic_type_absorb_candidate_source=None,
+            dynamic_type_absorb_candidate_target_table=None,
+        )
+        for f in self._DT_FIELDS_BOOL():
+            self.assertFalse(s1[f], f)
+        for f in self._DT_FIELDS_STR():
+            self.assertEqual(s1[f], "", f)
+        for f in self._DT_FIELDS_FLOAT():
+            self.assertEqual(s1[f], 0.0, f)
+        for f in self._DT_FIELDS_LIST():
+            self.assertEqual(s1[f], [], f)
+
+    def test_slot1_empty_lists_return_defaults(self):
+        s1 = self._run_slot1_guard(
+            dynamic_type_absorb_candidate_blocked=[],
+            dynamic_type_absorb_selected=[],
+            dynamic_type_absorb_avoided=[],
+            dynamic_type_absorb_reason=[],
+            dynamic_type_absorb_target_species=[],
+            dynamic_type_absorb_target_ability=[],
+            dynamic_type_absorb_blocked_move_id=[],
+            dynamic_type_absorb_blocked_candidate_score=[],
+            dynamic_type_absorb_candidate_available=[],
+            dynamic_type_absorb_candidate_move_id=[],
+            dynamic_type_absorb_candidate_declared_type=[],
+            dynamic_type_absorb_candidate_effective_type=[],
+            dynamic_type_absorb_candidate_form=[],
+            dynamic_type_absorb_candidate_source=[],
+            dynamic_type_absorb_candidate_target_table=[],
+        )
+        for f in self._DT_FIELDS_BOOL():
+            self.assertFalse(s1[f], f)
+        for f in self._DT_FIELDS_STR():
+            self.assertEqual(s1[f], "", f)
+        for f in self._DT_FIELDS_FLOAT():
+            self.assertEqual(s1[f], 0.0, f)
+        for f in self._DT_FIELDS_LIST():
+            self.assertEqual(s1[f], [], f)
+
+    def test_slot1_one_element_lists_return_defaults(self):
+        s1 = self._run_slot1_guard(
+            dynamic_type_absorb_candidate_blocked=[True],
+            dynamic_type_absorb_selected=[True],
+            dynamic_type_absorb_avoided=[True],
+            dynamic_type_absorb_reason=["only_slot0"],
+            dynamic_type_absorb_target_species=["thundurus"],
+            dynamic_type_absorb_target_ability=["voltabsorb"],
+            dynamic_type_absorb_blocked_move_id=["aurawheel"],
+            dynamic_type_absorb_blocked_candidate_score=[42.0],
+            dynamic_type_absorb_candidate_available=[True],
+            dynamic_type_absorb_candidate_move_id=["aurawheel"],
+            dynamic_type_absorb_candidate_declared_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_effective_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_form=["morpeko"],
+            dynamic_type_absorb_candidate_source=["static"],
+            dynamic_type_absorb_candidate_target_table=[{"move_id": "aurawheel"}],
+        )
+        for f in self._DT_FIELDS_BOOL():
+            self.assertFalse(s1[f], f)
+        for f in self._DT_FIELDS_STR():
+            self.assertEqual(s1[f], "", f)
+        for f in self._DT_FIELDS_FLOAT():
+            self.assertEqual(s1[f], 0.0, f)
+        for f in self._DT_FIELDS_LIST():
+            self.assertEqual(s1[f], [], f)
+
+    def test_slot1_two_element_lists_use_index_one(self):
+        s1 = self._run_slot1_guard(
+            dynamic_type_absorb_candidate_blocked=[False, True],
+            dynamic_type_absorb_selected=[False, True],
+            dynamic_type_absorb_avoided=[False, True],
+            dynamic_type_absorb_reason=["", "electric_into_voltabsorb"],
+            dynamic_type_absorb_target_species=["", "thundurus"],
+            dynamic_type_absorb_target_ability=["", "voltabsorb"],
+            dynamic_type_absorb_blocked_move_id=["", "aurawheel"],
+            dynamic_type_absorb_blocked_candidate_score=[0.0, 77.5],
+            dynamic_type_absorb_candidate_available=[False, True],
+            dynamic_type_absorb_candidate_move_id=["", "aurawheel"],
+            dynamic_type_absorb_candidate_declared_type=["", "ELECTRIC"],
+            dynamic_type_absorb_candidate_effective_type=["", "ELECTRIC"],
+            dynamic_type_absorb_candidate_form=["", "morpeko"],
+            dynamic_type_absorb_candidate_source=["", "static"],
+            dynamic_type_absorb_candidate_target_table=[[], [{"move_id": "aurawheel", "target_position": 2}]],
+        )
+        for f in self._DT_FIELDS_BOOL():
+            self.assertTrue(s1[f], f)
+        self.assertEqual(s1["dynamic_type_absorb_reason"], "electric_into_voltabsorb")
+        self.assertEqual(s1["dynamic_type_absorb_target_species"], "thundurus")
+        self.assertEqual(s1["dynamic_type_absorb_target_ability"], "voltabsorb")
+        self.assertEqual(s1["dynamic_type_absorb_blocked_move_id"], "aurawheel")
+        self.assertEqual(s1["dynamic_type_absorb_blocked_candidate_score"], 77.5)
+        self.assertEqual(s1["dynamic_type_absorb_candidate_move_id"], "aurawheel")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_declared_type"], "ELECTRIC")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_effective_type"], "ELECTRIC")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_form"], "morpeko")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_source"], "static")
+        self.assertEqual(len(s1["dynamic_type_absorb_candidate_target_table"]), 1)
+        self.assertEqual(s1["dynamic_type_absorb_candidate_target_table"][0]["target_position"], 2)
+
+    def test_slot0_one_element_lists_use_index_zero(self):
+        """Slot 0 must still read [0] from a one-element list."""
+        s1 = self._run_slot1_guard(
+            dynamic_type_absorb_candidate_blocked=[True],
+            dynamic_type_absorb_selected=[True],
+            dynamic_type_absorb_avoided=[True],
+            dynamic_type_absorb_reason=["electric_into_voltabsorb"],
+            dynamic_type_absorb_target_species=["thundurus"],
+            dynamic_type_absorb_target_ability=["voltabsorb"],
+            dynamic_type_absorb_blocked_move_id=["aurawheel"],
+            dynamic_type_absorb_blocked_candidate_score=[99.0],
+            dynamic_type_absorb_candidate_available=[True],
+            dynamic_type_absorb_candidate_move_id=["aurawheel"],
+            dynamic_type_absorb_candidate_declared_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_effective_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_form=["morpeko"],
+            dynamic_type_absorb_candidate_source=["static"],
+            dynamic_type_absorb_candidate_target_table=[[{"move_id": "aurawheel", "target_position": 1}]],
+        )
+        tmp = tempfile.mkdtemp()
+        fp = os.path.join(tmp, "s0.jsonl")
+        from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+        logger = DoublesDecisionAuditLogger(filepath=fp, reset=True)
+        b, jo = self._make_slot_dict()
+        logger.log_turn_decision(
+            battle_tag="s0bt", turn=1, battle=b,
+            selected_joint_order="/choose move aurawheel|move thunderbolt",
+            selected_score=100, scored_joint_orders=[(jo, 100, 50, 50)],
+            expected_damages=[50, 50], expected_kos=[False, False],
+            target_hps=[1, 1],
+            overkill_triggered=False, focus_fire_triggered=False,
+            ally_hit_penalty_triggered=False,
+            spread_available=[False, False], best_spread_score=[0, 0],
+            best_ko_score=[0, 0],
+            low_hp_opponent_existed=False, low_hp_opponent_targeted=False,
+            slot_actions=["move aurawheel", "move thunderbolt"],
+            slot_action_types=[{}, {}],
+            target_species=["thundurus", ""],
+            declared_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type_source=["static", "static"],
+            dynamic_move_type_applied=[True, False],
+            dynamic_move_type_form=["morpeko", ""],
+            dynamic_type_absorb_candidate_blocked=[True],
+            dynamic_type_absorb_selected=[True],
+            dynamic_type_absorb_avoided=[True],
+            dynamic_type_absorb_reason=["electric_into_voltabsorb"],
+            dynamic_type_absorb_target_species=["thundurus"],
+            dynamic_type_absorb_target_ability=["voltabsorb"],
+            dynamic_type_absorb_blocked_move_id=["aurawheel"],
+            dynamic_type_absorb_blocked_candidate_score=[99.0],
+            dynamic_type_absorb_candidate_available=[True],
+            dynamic_type_absorb_candidate_move_id=["aurawheel"],
+            dynamic_type_absorb_candidate_declared_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_effective_type=["ELECTRIC"],
+            dynamic_type_absorb_candidate_form=["morpeko"],
+            dynamic_type_absorb_candidate_source=["static"],
+            dynamic_type_absorb_candidate_target_table=[[{"move_id": "aurawheel", "target_position": 1}]],
+        )
+        logger.save_battle(battle_tag="s0bt", winner="test", battle=b)
+        with open(fp) as f:
+            r = json.loads(f.readline())
+        s0 = r["audit_turns"][0]["slot_0"]
+        shutil.rmtree(tmp, ignore_errors=True)
+        for f in self._DT_FIELDS_BOOL():
+            self.assertTrue(s0[f], f)
+        self.assertEqual(s0["dynamic_type_absorb_reason"], "electric_into_voltabsorb")
+        self.assertEqual(s0["dynamic_type_absorb_target_species"], "thundurus")
+        self.assertEqual(s0["dynamic_type_absorb_target_ability"], "voltabsorb")
+        self.assertEqual(s0["dynamic_type_absorb_blocked_move_id"], "aurawheel")
+        self.assertEqual(s0["dynamic_type_absorb_blocked_candidate_score"], 99.0)
+        self.assertEqual(s0["dynamic_type_absorb_candidate_move_id"], "aurawheel")
+        self.assertEqual(s0["dynamic_type_absorb_candidate_declared_type"], "ELECTRIC")
+        self.assertEqual(s0["dynamic_type_absorb_candidate_effective_type"], "ELECTRIC")
+        self.assertEqual(s0["dynamic_type_absorb_candidate_form"], "morpeko")
+        self.assertEqual(s0["dynamic_type_absorb_candidate_source"], "static")
+        self.assertEqual(len(s0["dynamic_type_absorb_candidate_target_table"]), 1)
+        self.assertEqual(s0["dynamic_type_absorb_candidate_target_table"][0]["target_position"], 1)
+
+    def test_target_table_slot_isolation_with_two_element_lists(self):
+        """Slot 1's target_table must not leak from slot 0; slot 0 must not leak from slot 1."""
+        from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+        tmp = tempfile.mkdtemp()
+        fp = os.path.join(tmp, "iso.jsonl")
+        logger = DoublesDecisionAuditLogger(filepath=fp, reset=True)
+        b, jo = self._make_slot_dict()
+        slot0_row = {"move_id": "aurawheel", "target_position": 1, "form": "morpeko"}
+        slot1_row = {"move_id": "aurawheel", "target_position": 2, "form": "morpekohangry"}
+        logger.log_turn_decision(
+            battle_tag="isobt", turn=1, battle=b,
+            selected_joint_order="/choose move aurawheel|move thunderbolt",
+            selected_score=100, scored_joint_orders=[(jo, 100, 50, 50)],
+            expected_damages=[50, 50], expected_kos=[False, False],
+            target_hps=[1, 1],
+            overkill_triggered=False, focus_fire_triggered=False,
+            ally_hit_penalty_triggered=False,
+            spread_available=[False, False], best_spread_score=[0, 0],
+            best_ko_score=[0, 0],
+            low_hp_opponent_existed=False, low_hp_opponent_targeted=False,
+            slot_actions=["move aurawheel", "move thunderbolt"],
+            slot_action_types=[{}, {}],
+            target_species=["thundurus", ""],
+            declared_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type=["ELECTRIC", "ELECTRIC"],
+            effective_move_type_source=["static", "static"],
+            dynamic_move_type_applied=[True, True],
+            dynamic_move_type_form=["morpeko", "morpekohangry"],
+            dynamic_type_absorb_candidate_blocked=[False, False],
+            dynamic_type_absorb_selected=[False, False],
+            dynamic_type_absorb_avoided=[False, False],
+            dynamic_type_absorb_reason=["", ""],
+            dynamic_type_absorb_target_species=["", ""],
+            dynamic_type_absorb_target_ability=["", ""],
+            dynamic_type_absorb_blocked_move_id=["", ""],
+            dynamic_type_absorb_blocked_candidate_score=[0.0, 0.0],
+            dynamic_type_absorb_candidate_available=[True, True],
+            dynamic_type_absorb_candidate_move_id=["aurawheel", "aurawheel"],
+            dynamic_type_absorb_candidate_declared_type=["ELECTRIC", "ELECTRIC"],
+            dynamic_type_absorb_candidate_effective_type=["ELECTRIC", "DARK"],
+            dynamic_type_absorb_candidate_form=["morpeko", "morpekohangry"],
+            dynamic_type_absorb_candidate_source=["static", "dynamic_form:morpekohangry"],
+            dynamic_type_absorb_candidate_target_table=[[slot0_row], [slot1_row]],
+        )
+        logger.save_battle(battle_tag="isobt", winner="test", battle=b)
+        with open(fp) as f:
+            r = json.loads(f.readline())
+        s0 = r["audit_turns"][0]["slot_0"]
+        s1 = r["audit_turns"][0]["slot_1"]
+        shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(len(s0["dynamic_type_absorb_candidate_target_table"]), 1)
+        self.assertEqual(len(s1["dynamic_type_absorb_candidate_target_table"]), 1)
+        self.assertEqual(s0["dynamic_type_absorb_candidate_target_table"][0]["form"], "morpeko")
+        self.assertEqual(s0["dynamic_type_absorb_candidate_target_table"][0]["target_position"], 1)
+        self.assertEqual(s1["dynamic_type_absorb_candidate_target_table"][0]["form"], "morpekohangry")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_target_table"][0]["target_position"], 2)
+        self.assertEqual(s0["dynamic_type_absorb_candidate_form"], "morpeko")
+        self.assertEqual(s1["dynamic_type_absorb_candidate_form"], "morpekohangry")
+        self.assertNotIn(slot1_row, s0["dynamic_type_absorb_candidate_target_table"])
+        self.assertNotIn(slot0_row, s1["dynamic_type_absorb_candidate_target_table"])
+
     def _setup_arm(self, arm_id, tmp, **slot_kw):
         rec = {
             "battle_tag": f"{arm_id}bt",
