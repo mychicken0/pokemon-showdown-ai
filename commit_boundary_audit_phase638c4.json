@@ -1,0 +1,152 @@
+{
+  "audit_tag": "phase638c4",
+  "supersedes": "phase638c3",
+  "git_head": "2f1be73",
+  "manifest": {
+    "current_qualifier_behavior": "does_not_create_aggregate_manifest",
+    "legacy_path": "logs/support_target_paired_phase638c_v2_audit.jsonl",
+    "legacy_size_bytes": 0,
+    "legacy_classification": "legacy_empty_creation_defect",
+    "legacy_is_hard_failure": false,
+    "reason": "Historical artifacts are immutable and use 400 per-player audit files as their source of truth."
+  },
+  "commit_groups": [
+    {
+      "id": 1,
+      "title": "test: make VGC and doubles regression tests checkout-local",
+      "files": [
+        "analyze_vgc2026_phaseV2e_failures.py",
+        "analyze_vgc2026_phaseV2g_failures.py",
+        "analyze_vgc2026_phaseV2h_feature_stability.py",
+        "analyze_vgc2026_phaseV2i_matchup_evaluator.py",
+        "analyze_vgc2026_preview_policy_failures.py",
+        "bot_vgc2026_team_pool_benchmark.py",
+        "eval_vgc2026_phaseV2e_policies.py",
+        "inspect_vgc2026_phaseV2e_pair.py",
+        "inspect_vgc2026_phaseV2g_pair.py",
+        "inspect_vgc2026_phaseV2h_feature.py",
+        "inspect_vgc2026_phaseV2i_matchup.py",
+        "inspect_vgc2026_preview_pair.py",
+        "test_doubles_dynamic_move_type_safety.py",
+        "test_doubles_dynamic_move_type_targeted_qualification.py",
+        "test_vgc2026_controlled_teampreview.py",
+        "test_vgc2026_phaseV2e.py",
+        "test_vgc2026_phaseV2f.py",
+        "test_vgc2026_phaseV2g.py",
+        "test_vgc2026_phaseV2h.py",
+        "test_vgc2026_phaseV2i.py",
+        "test_vgc2026_preview_policy_diagnostics.py"
+      ],
+      "depends_on": [],
+      "clean_verification": {
+        "tests": 569,
+        "exit": 0,
+        "elapsed_seconds": 54.49,
+        "resource_warnings": 0
+      }
+    },
+    {
+      "id": 2,
+      "title": "feat: unify doubles mechanics, VGC runtime, and support-target audit",
+      "files": [
+        "ability_rules.py",
+        "analyze_doubles_decision_audit.py",
+        "analyze_vgc2026_phaseV2j_lead_matchups.py",
+        "analyze_vgc2026_phaseV2k_lead_matchups.py",
+        "bot_doubles_damage_aware.py",
+        "bot_doubles_support_move_target_safety_smoke.py",
+        "bot_vgc2026_phaseV2c.py",
+        "doubles_decision_audit_logger.py",
+        "doubles_mechanics.py",
+        "inspect_vgc2026_phaseV2j_lead_matchup.py",
+        "inspect_vgc2026_phaseV2k_lead_matchup.py",
+        "inspect_vgc2026_runtime_parity.py",
+        "scripts/v2l1_smoke.py",
+        "team_preview_policy.py",
+        "test_doubles_ability_hard_safety.py",
+        "test_doubles_known_absorb_hard_safety.py",
+        "test_doubles_mechanics_parity.py",
+        "test_doubles_support_move_target_safety.py",
+        "test_v2k1_integration.py",
+        "test_v2k2_regression.py",
+        "test_v2k3_regression.py",
+        "test_v2k4_regression.py",
+        "test_v2k5_regression.py",
+        "test_vgc2026_phaseV2j.py",
+        "test_vgc2026_phaseV2k.py",
+        "test_vgc2026_runtime_engine_parity.py",
+        "vgc2026_common_plan_evaluator.py",
+        "vgc2026_lead_matchup_evaluator_v3.py",
+        "vgc2026_matchup_evaluator_v2.py",
+        "vgc2026_plan_features.py"
+      ],
+      "depends_on": [1],
+      "clean_verification": {
+        "tests": 624,
+        "exit": 0,
+        "elapsed_seconds": 128.87,
+        "resource_warnings": 0
+      }
+    },
+    {
+      "id": 3,
+      "title": "test: add paired support-target qualification and corrected analysis",
+      "files": [
+        "analyze_doubles_support_move_target_safety_paired.py",
+        "bot_doubles_support_move_target_safety_paired_qualification.py",
+        "test_doubles_support_move_target_safety_paired.py"
+      ],
+      "depends_on": [2],
+      "dependency_reason": "The qualifier imports DoublesDamageAwarePlayer and DoublesDecisionAuditLogger; its per-player audit schema and support-target metrics are introduced by group 2.",
+      "clean_verification": {
+        "tests": 93,
+        "exit": 0,
+        "elapsed_seconds": 2.01,
+        "skipped": 0,
+        "resource_warnings": 0
+      }
+    },
+    {
+      "id": 4,
+      "title": "docs: record mechanics, runtime parity, and support-target qualification",
+      "files": [
+        "CURRENT_STATE.md",
+        "walkthrough.md",
+        "commit_boundary_audit_phase638c4.json",
+        "commit_boundary_audit_phase638c4.md"
+      ],
+      "depends_on": [1, 2, 3],
+      "reason": "Both documentation files contain the combined history of all preceding implementation groups and cannot truthfully precede them."
+    }
+  ],
+  "final_clean_checkout": {
+    "method": "git archive HEAD into a new /tmp directory, then copy only each ordered group",
+    "venv": "symlink to the existing dependency environment",
+    "module_path_pollution": false,
+    "ignored_log_fixtures_required": false,
+    "tests": 1837,
+    "exit": 0,
+    "elapsed_seconds": 180.19,
+    "skipped": 0,
+    "resource_warnings": 0
+  },
+  "production_worktree": {
+    "tests": 1837,
+    "exit": 0,
+    "elapsed_seconds": 186.06,
+    "resource_warnings": 0
+  },
+  "generated_artifacts": {
+    "logs_tracked": false,
+    "stage_logs": false,
+    "obsolete_phase638c3_reports_removed": true
+  },
+  "defaults": {
+    "enable_support_move_target_hard_safety": false,
+    "v2j_fingerprint": "a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb",
+    "phase_v3": "BLOCKED"
+  },
+  "worktree_ready_for_ordered_commits": true,
+  "commit_performed": false,
+  "push_performed": false
+}

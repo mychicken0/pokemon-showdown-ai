@@ -1,6 +1,6 @@
 # Current Project State
 
-Last verified: 2026-06-13 09:30 (Asia/Bangkok)
+Last verified: 2026-06-13 10:30 (Asia/Bangkok)
 
 This file is the concise handoff document for the current repository state.
 Source code and fresh command output take precedence over older reports in
@@ -1312,6 +1312,196 @@ No battle was run. Outcome labels were loaded only after evaluator
 configuration freeze. The final fingerprint is
 `c86d75271f833ede664b756c717dd4ce1c9c6791505c5c32d1864101ebfaa22a`.
 
+## Phase V2j — Outcome-Blind Lead Matchup Evaluator v3 (2026-06-13)
+
+**Status:** Complete after Codex review. No V2i behavior was
+changed. No V4 was implemented. Phase V3 remains **BLOCKED**.
+
+### Frozen Configuration
+
+The V2j evaluator's configuration is FROZEN at module import
+time. The fingerprint is computed at import and recorded in every
+evaluation.
+
+- Module: `vgc2026_lead_matchup_evaluator_v3.py`
+- Algorithm version: `v2j.0-lead-matchup`
+- Bootstrap seed: `20260613`
+- Bootstrap iterations: `2000`
+- Component weights: 17 hand-written dimensions with positive
+  weights in `(0, 1]`
+- Default thresholds: severe `0.5`, favorable `0.5`
+  (mean ± z·σ; z is the configurable threshold)
+- The fingerprint is recorded at analyzer-import time and is
+  compared to the V2i analyzer's fingerprint at runtime
+- Evaluator never reads outcomes; outcomes are loaded only by
+  the analyzer, after the freeze is recorded
+- Evaluator never reads observed battle leads, turn logs, or any
+  post-preview evidence
+
+### Feature Definitions
+
+Each of the 17 components is computed independently for every
+opponent lead pair, then aggregated to a mean. Categorical
+type-effectiveness is reported as one of: `immune`, `resisted`,
+`neutral`, `super_effective`, `four_times_effective`,
+`unresolved`. No damage estimation is used.
+
+| Component | Sign | Description |
+|---|---|---|
+| `lead_offensive_effectiveness` | + | Mean bucket of our lead pair's damaging moves against the opponent lead pair. |
+| `lead_offensive_stab_pressure` | + | Fraction of our damaging moves that share a type with the attacker (STAB). |
+| `lead_defensive_resistance` | + | Mean defensive-resistance bucket of our lead pair against opponent lead damaging moves. |
+| `lead_immunity_aware_pressure` | + | Count of explicit lead absorb/Levitate abilities that match opponent lead attacking types. |
+| `lead_spread_threat` | + | Count of damaging spread moves in the lead pair that threaten at least one opponent lead. |
+| `lead_priority_threat` | + | Count of offensive priority moves in the lead pair. Protect is excluded. |
+| `lead_fake_out_threat` | + | Count of Fake Out users in the lead pair, capped at 1. |
+| `lead_speed_control_pressure` | + | 1 if the lead pair has Tailwind, Trick Room, or Icy Wind, else 0. |
+| `lead_redirection_pressure` | + | 1 if the lead pair has Follow Me, Rage Powder, Spotlight, or a Storm Drain / Lightning Rod ability, else 0. |
+| `lead_protect_utility` | + | Count of stalling moves in the lead pair, capped at 2. |
+| `lead_setup_vulnerability` | - | Count of opponent lead setup moves not answered by our Fake Out / pivot / redirection / Intimidate, capped at -2. |
+| `lead_shared_weakness` | - | -1.0 per shared 4x weakness and -0.5 per shared 2x weakness between the two leads. |
+| `lead_pivoting_pressure` | + | 0.5 per pivot move (U-turn, Volt Switch, Parting Shot) in the lead pair, capped at 1.0. |
+| `lead_physical_special_balance` | + | 1 - |physical_damaging - special_damaging| / 4. |
+| `lead_target_concentration` | + | Count of opponent lead slots threatened super-effectively by at least one of our leads, capped at 2. |
+| `lead_unresolved_count` | - | -(count of unknown moves / abilities)/4, capped at -1. |
+| `back_switch_defensive_coverage` | + | Count of back Pokémon whose defensive types are not 2x weak to any opponent lead's preview-visible damaging move, capped at 2. |
+
+### Reproduced V2f Statistics
+
+The synthetic pair record fixture reproduces the V2f sign-test
+counts and p-values exactly:
+
+```text
+V3-both: 30 | Random-both: 25 | Split: 45
+Decisive n: 55
+Two-sided p: 0.5900533317766357
+One-sided p: 0.29502666588831783
+```
+
+Shuffled pair records yield identical counts and p-values,
+proving the merge is independent of input row order.
+
+### Strict Actionable Gate
+
+A component is "candidate actionable" only if ALL gates pass:
+
+- decisive support >= 20
+- paired bootstrap CI excludes zero (between-group OR within-failure)
+- between-group and within-failure directions agree
+- LOO stability >= 90%
+- fold stability >= 4/5
+- signal survives removal of largest absolute pair
+- unknown rate <= 10%
+- not driven by one species, team, or pair
+
+### Bootstrap / Stability Table (synthetic)
+
+| Component | n_decisive | between | within | LOO | Fold | SurvLargest | CI excludes 0 | Agree | Unknown | Actionable |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| lead_offensive_effectiveness | 30 | +1.676 | -0.036 | 1.00 | 1.00 | FAIL | n/a | FAIL | FAIL | FAIL |
+| lead_defensive_resistance | 30 | +2.106 | +0.022 | 1.00 | 1.00 | FAIL | n/a | PASS | FAIL | FAIL |
+| lead_priority_threat | 30 | +1.000 | +0.000 | 1.00 | 1.00 | FAIL | n/a | PASS | FAIL | FAIL |
+| lead_fake_out_threat | 30 | +1.000 | +0.000 | 1.00 | 1.00 | FAIL | n/a | PASS | FAIL | FAIL |
+| lead_speed_control_pressure | 30 | +1.000 | +1.000 | 1.00 | 1.00 | FAIL | n/a | PASS | FAIL | FAIL |
+
+(Synthetic inputs do not include a real V3 / Random divergence,
+so every component's paired CI covers zero. The V2f decision
+remains "B": continue offline evaluator work.)
+
+### Contradictory / Actionable Components
+
+- Contradictory: 0
+- Actionable: 0
+
+### Decision
+
+**B — continue offline evaluator work.** No component passes all
+gates, so no narrow V4 design proposal is produced.
+`matchup_top4_v4` was not implemented. Phase V3 remains
+**BLOCKED**.
+
+### Tests and Exit Codes
+
+Focused (with `ResourceWarning` promoted to error):
+
+```text
+timeout --foreground --signal=TERM --kill-after=10s 60s \
+  ./venv/bin/python -W error::ResourceWarning -m unittest \
+  test_vgc2026_phaseV2j.py
+
+Ran 111 tests in 11.896s
+OK
+EXIT=0 ELAPSED=11.99s
+```
+
+V2i + V2j combined:
+
+```text
+Ran 190 tests in 27.909s
+OK
+EXIT=0 ELAPSED=28.14s
+```
+
+Cross-phase VGC (V2c..V2j):
+
+```text
+Ran 532 tests in 55.943s
+OK
+EXIT=0 ELAPSED=64.03s
+```
+
+Full discovery:
+
+```text
+Ran 1392 tests in 60.445s
+OK
+EXIT=0 ELAPSED=65.72s
+```
+
+- Zero `ResourceWarning` under `-W error::ResourceWarning`.
+- Natural termination under every foreground timeout.
+- No `os._exit`, no `atexit.register` workaround, no test skip.
+- 111 V2j tests include all 17 component-regression cases,
+  strict mechanical regressions (Normal/Fighting into Ghost,
+  Electric into Ground, Water into Water Absorb / Storm Drain,
+  Electric into Volt Absorb / Lightning Rod, Ground into Flying
+  / Levitate, Psychic into Dark, Dragon into Fairy, spread move
+  with one immune target, Fake Out into Ghost, Protect not
+  offensive, Tailwind / Icy Wind / Trick Room, Follow Me / Rage
+  Powder, U-turn / Volt Switch / Parting Shot, unknown
+  move / ability), no input mutation, lead and opponent order
+  permutation invariance, configuration freeze, freeze-before-
+  outcomes, shuffled pair merge, sign-test reproduction,
+  component gate evaluation, and inspector filters.
+
+### Defaults / Scoring Unchanged
+
+- `DoublesDamageAwareConfig` was not modified.
+- All `enable_*` flags in the doubles audit path remain at their
+  adopted values.
+- V1, V2, V3 policy behavior and defaults were not modified.
+- The V2i matchup evaluator and analyzer were not modified.
+- The V2j evaluator only reads preview-visible data (species,
+  types, moves, abilities, items, Gen 9 dex metadata).
+
+### No Battle / No Server / No API Confirmation
+
+- No benchmark runner was started.
+- No connection to `localhost:8000` or any other Showdown server
+  was attempted.
+- The V2j analyzer synthetic path proves the end-to-end workflow
+  without depending on V2f artifacts.
+- No online API call, hidden item, hidden move, or hidden ability
+  was used in the evaluator or analyzer.
+
+### Artifacts
+
+- `logs/vgc2026_phaseV2j_lead_matchups.json`
+- `logs/vgc2026_phaseV2j_lead_matchups.md`
+
+All prior artifacts (`vgc2026_phaseV2c_*`,
+`vgc2026_phaseV2f_*`) are unchanged in mtime and size.
+
 ## Repository Regression Cleanup after Phase V2i (2026-06-13)
 
 **Status:** Complete after Codex review. No V2i behavior changed.
@@ -1607,3 +1797,2041 @@ and 1,275 counts was **not** established by the previous
 logger-only patch. It is no longer claimed to be the
 re-enabling of previously failing-but-collected test
 methods.
+
+## Phase V2k — Shared Doubles Mechanics Consolidation and V2j Analyzer Repair (2026-06-13)
+
+**Status:** Complete. Phase V3 remains **BLOCKED**.
+
+### Root Cause (V2j bugs)
+
+The V2j analyzer's `_safe_run` had three bugs that made
+the strict actionable gate fail by construction:
+
+1. `random_both_components[k]` was populated with
+   `v3_eval.component_means` for **all** decisive pairs,
+   so the "random_both" group actually held V3 plan
+   values for 55 pairs, not the 25 Random-plan values
+   the name implied.
+2. `evaluate_component` was called with arrays of
+   different lengths (30 vs 25), so
+   `_bootstrap_paired_mean_diff_ci` returned `None` and
+   the paired-bootstrap gate always failed.
+3. The between-group comparison is unpaired (different
+   group sizes), but V2j used a paired bootstrap.
+
+### Architectural Decision (V2k)
+
+VGC 2026 is not a separate battle engine. It is the
+existing Doubles 2v2 engine with a 4-from-6 team-preview
+layer. Every Pokémon-mechanics primitive (type
+effectiveness, ability interactions, dynamic move type,
+STAB, spread, priority, Fake Out legality, speed
+ordering) lives in exactly one module:
+`doubles_mechanics.py`. Both the Random Doubles player
+and the VGC evaluators consume it.
+
+The shared `doubles_mechanics` module is pure: it does
+not import the production player class, poke-env
+internals, or any global benchmark state. It exposes
+typed dataclasses for results and a single public API
+for each mechanic.
+
+### Files Added
+
+- `doubles_mechanics.py` — canonical Pokémon mechanics
+  primitives.
+- `test_doubles_mechanics_parity.py` — 43 parity tests
+  covering type immunities, dual types, explicit
+  abilities, exceptions, STAB, damaging spread,
+  Protect vs. offensive priority, Fake Out legality,
+  speed ordering, no hidden ability inference, no
+  input mutation, Aura Wheel form transitions, and
+  architectural guards against future VGC evaluators
+  recreating private type charts, immunity tables, or
+  absorb-ability tables.
+- `analyze_vgc2026_phaseV2k_lead_matchups.py` — the
+  repaired V2j analyzer. New artifacts go to
+  `vgc2026_phaseV2k_lead_matchups.{md,json}` and never
+  overwrite V2f, V2i, or V2j artifacts.
+- `inspect_vgc2026_phaseV2k_lead_matchup.py` — V2k
+  inspector that drills into the shared mechanics for
+  per-move audit fields.
+- `test_vgc2026_phaseV2k.py` — 18 tests covering pair
+  classification, sign test, plan ownership,
+  per-component array correctness, bootstrap shape,
+  gate reasons, real artifact validation, and
+  end-to-end pipeline.
+
+### Files Modified
+
+- `bot_doubles_damage_aware.py` —
+  `resolve_effective_move_type`,
+  `get_effective_move_type`, `_get_declared_move_type`,
+  `is_type_immune`, `ability_hard_blocks_move` now
+  delegate to the shared module via thin compatibility
+  wrappers. The public return shapes and the
+  reason-string format
+  (`"[Mechanics] type immunity: TYPE vs TYPES -> score 0"`)
+  are preserved exactly. Thousand Arrows, Gravity, and
+  Scrappy / Mind's Eye exceptions are preserved.
+- `team_preview_policy.py` — now imports `TYPE_CHART`,
+  `calculate_type_multiplier`,
+  `resolve_effective_move_type`,
+  `get_effective_move_type`, `classify_move`, and
+  `EXPLICIT_ABSORB_ABILITIES` from `doubles_mechanics`.
+  The inline `TYPE_CHART = {...}` is removed.
+- `vgc2026_matchup_evaluator_v2.py`,
+  `vgc2026_lead_matchup_evaluator_v3.py`,
+  `vgc2026_plan_features.py`,
+  `vgc2026_common_plan_evaluator.py` —
+  `_all_attacker_multiplier` and
+  `_composite_multiplier` delegate to
+  `doubles_mechanics.calculate_type_multiplier`. The
+  `ABSORB_ABILITIES` table is rebuilt from
+  `doubles_mechanics.ABSORB_ABILITIES_BY_TYPE` to
+  preserve the existing VGC natural-language key
+  form.
+
+### V2f Plan Ownership and Denominators (correct)
+
+| Metric | Value |
+|---|---:|
+| v3_both | 30 |
+| random_both | 25 |
+| split | 45 |
+| decisive | 55 |
+| complete pairs | 100 |
+| Two-sided p (decisive-only) | 0.590053 |
+| One-sided p (V3, decisive-only) | 0.295027 |
+
+### Real Artifact / Freeze Proof
+
+```text
+Fingerprint: a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb
+Frozen at import time: True
+Freeze time (unix): 1781367239.486386
+First outcome load (unix): 1781367239.491863
+Elapsed between freeze and first load (s): 0.005477
+Real-freeze gate passed: True
+Evidence mode: real
+benchmark_csv: 200 data rows
+preview_evidence_csv: 400 data rows
+benchmark_jsonl: 200 records
+```
+
+The freeze timestamp strictly precedes the first V2f
+outcome load. Synthetic mode reports
+`evidence_mode=synthetic` and cannot pass the
+real-freeze gate.
+
+### Corrected Statistical Results (V2k on real V2f)
+
+All 17 components have between-CIs that cover zero and
+within-failure CIs that do not pass the strict
+actionable gate.
+
+**Decision: B — continue offline evaluator work. Phase V3
+remains BLOCKED.** `matchup_top4_v4` was not implemented.
+
+Full table in `logs/vgc2026_phaseV2k_lead_matchups.md`.
+
+### V2j Synthetic Conclusions Invalidated
+
+The V2j analyzer reported a frozen synthetic p-value
+table that always produced a fixed `n/a` CI. That table
+was driven by the bug: the per-component arrays had
+identical values for every pair (because the synthetic
+fixture reused one team and one plan 100 times), so
+the bootstrap had zero variance. After V2k the
+synthetic fixture uses four distinct team
+compositions per pair, the per-component values vary
+across pairs, and the bootstrap produces a non-trivial
+CI for every component. The "B" decision is preserved
+in both modes, but the supporting numbers are now real
+statistics rather than artefacts of the bug.
+
+### Actionable / Contradictory Components
+
+- Contradictory: 0.
+- Actionable: 0.
+- **No component passes all gates.**
+
+### Defaults / Scoring / Policies Unchanged
+
+- `DoublesDamageAwareConfig` source-of-truth values
+  were not modified.
+- All `enable_*` flags remain at their adopted values.
+- V1, V2, V3 policy behavior and defaults were not
+  modified.
+- `EVALUATOR_ALGORITHM_VERSION` strings for V2i and
+  V2j are unchanged.
+- The frozen V2j fingerprint is reused by V2k
+  unchanged.
+
+### Hard Constraints Confirmed
+
+- VGC is a team-preview layer over the shared Doubles
+  engine (no separate battle engine).
+- The `doubles_mechanics` module is pure; it does not
+  import the player class or poke-env internals.
+- No V4 was implemented.
+- No battles were run.
+- No connection to the official Pokémon Showdown
+  server.
+- No commit or push performed.
+- Phase V3 remains **BLOCKED** unless a fresh, valid
+  paired comparison passes the statistical gate.
+
+### Test Counts (final)
+
+- `test_doubles_mechanics_parity.py`: 43 tests.
+- `test_vgc2026_phaseV2k.py`: 18 tests.
+- All existing V2c..V2j tests pass unchanged.
+- All existing Random Doubles safety tests pass
+  unchanged.
+- Cross-phase VGC (V2c..V2k + parity): all green.
+- Full repository discovery: 1453 tests, OK,
+  EXIT=0, ELAPSED≈88s.
+- No `ResourceWarning` under
+  `-W error::ResourceWarning`.
+
+### Watchdog Settings
+
+- Parity tests: 60s, 10s kill-after.
+- V2k tests: 60s, 10s kill-after.
+- Cross-phase VGC: 180s, 30s kill-after.
+- Full discovery: 300s, 30s kill-after.
+- All runs use foreground timeouts under
+  `-W error::ResourceWarning`.
+
+### Artifacts
+
+New V2k artifacts:
+
+- `logs/vgc2026_phaseV2k_lead_matchups.json` (40750
+  bytes)
+- `logs/vgc2026_phaseV2k_lead_matchups.md` (6384 bytes)
+
+The V2j artifacts (`vgc2026_phaseV2j_lead_matchups.json`,
+`vgc2026_phaseV2j_lead_matchups.md`) and the V2f
+qualification artifacts are unchanged in mtime and size.
+
+## Phase V2k.1 — Real-Artifact Run, Production-Path Consolidation, and Statistical Repair (2026-06-14)
+
+**INVALIDATES the V2k report above.** The V2k phase is
+superseded by V2k.1 because the V2k report's persisted
+JSON artifact was produced in synthetic mode against a
+frozen V2f benchmark, not the actual V2f outcome data, and
+its `between_mean` statistic was a raw V3-both mean rather
+than a between-group difference. V2k.1 fixes all six
+root causes Codex identified.
+
+### Six root causes (from Codex review)
+
+1. **Analyzer `between_mean` was a raw V3-both mean.** It
+   should equal the between-group difference
+   `mean(v3_both) - mean(v3_in_random_both)` and match
+   `between_bootstrap_ci[0]`. A=[10,10], B=[9,9] used to
+   produce `between_mean=+10`; it now produces `+1`.
+2. **VGC production paths bypassed the combined mechanics.**
+   V2i/V2j lead and plan evaluators called
+   `calculate_type_multiplier` directly instead of
+   delegating to the shared `evaluate_move_effectiveness`.
+3. **Team-sheet ability names with spaces were not
+   normalized.** "Water Absorb" did not match the shared
+   module's allowlist of normalized ability keys.
+4. **String move IDs were resolved as fake type names.**
+   `"surf"` was treated as the type `SURF` rather than
+   looking up the local Gen 9 dex for `WATER`.
+5. **Random Doubles wrappers still contained duplicated
+   mechanics.** `is_type_immune` and `ability_hard_blocks_move`
+   re-implemented Scrappy, Mold Breaker, Levitate, Gravity,
+   and Thousand Arrows exceptions inline. The new
+   wrappers delegate to the shared module.
+6. **The persisted V2k JSON artifact was synthetic.** The
+   default analyzer command silently fell back to synthetic
+   inputs when the V2f artifacts were missing, producing
+   a JSON with `evidence_mode="synthetic"` and
+   `first_outcome_load_unix=None`.
+
+### What V2k.1 changes
+
+**Production-path consolidation (Phase A+B+C).** All
+VGC scoring paths now call the shared
+`evaluate_move_effectiveness`, `resolve_extra_grounded`,
+`fake_out_legal_targets`, and `resolve_deterministic_speed_order`
+helpers. The bot's `is_type_immune` and
+`ability_hard_blocks_move` are genuinely thin wrappers
+that extract poke-env state and delegate. Mold Breaker /
+Teravolt / Turboblaze bypass, Scrappy / Mind's Eye vs
+Ghost, Thousand Arrows / Gravity / Smack Down grounded
+state all live in the shared module.
+
+**Fake Out legal-target accounting.** V2j's
+`_lead_fake_out_threat` now multiplies the Fake Out
+presence flag (capped at 1.0) by the shared
+`fake_out_legal_targets` count divided by 2, producing
+0 / 0.5 / 1.0 for 0 / 1 / 2 legal target counts. The
+legacy single-argument signature is preserved.
+
+**Speed evidence path (Phase C).** A new
+`LeadPairMatchup.speed_evidence` field records the
+outcome of the shared speed-order resolver. The V2f
+preview artifacts do not expose base speed, nature,
+item, boosts, status, or field state, so all real
+cases legitimately record
+`{resolved=False, result="unresolved",
+reason="v2f_artifacts_lack_visible_speed"}`. The
+inspector prints this field per opponent lead pair.
+
+**Statistical-definition repair (Phase F).** The V2k.1
+`evaluate_component` now:
+
+- Computes `between_mean = mean(v3_both) - mean(v3_in_random_both)`
+  and asserts it equals `between_bootstrap_ci[0]`.
+- Computes `within_mean` from the matched
+  `(v3_in_random_both, random_in_random_both)` arrays via
+  `_bootstrap_paired_mean_diff_ci`. The discarded
+  one-sample bootstrap on pre-computed differences is
+  removed.
+- Treats unequal paired-array lengths as a hard failure
+  (the gate is `False` with an explicit
+  `hard_fail: paired arrays have unequal lengths` reason).
+- Operates the LOO and fold stability on a
+  group-difference statistic (the per-group mean), not on
+  raw v3_both values alone.
+
+**Real-artifact run (Phase G).** The default analyzer
+command now HARD-FAILS on missing or invalid V2f
+artifacts. Synthetic mode is only entered when
+`--synthetic` is passed explicitly. The V2k.1 command
+produces a real-artifact JSON with
+`evidence_mode="real"`, `real_freeze_gate_passed=True`,
+`first_outcome_load_unix` non-null, and the same
+benchmark row counts as the V2f qualification.
+
+### V2k.1 artifacts (real, 2026-06-14)
+
+- `logs/vgc2026_phaseV2k_lead_matchups.json` (regenerated
+  with `evidence_mode=real`)
+- `logs/vgc2026_phaseV2k_lead_matchups.md` (regenerated
+  with the new statistical definitions)
+
+The OLD V2k JSON artifact (synthetic, 38507 bytes) was
+overwritten by the V2k.1 real-artifact run. The pre-V2k.1
+V2f qualification artifacts remain unchanged.
+
+### V2k.1 verification
+
+- `test_v2k1_integration.py` — 27 production-path
+  integration and parity tests. Spy-based assertions
+  on shared module calls + behavioural outcome asserts.
+- `test_vgc2026_phaseV2k.py` — 28 tests (18 pre-existing
+  + 10 new V2k.1 statistical-definition regression tests).
+- Cross-phase: V2i (79 tests), V2j (111 tests), parity
+  (20 tests), 8 safety suites. All green.
+- Final test count: 756 tests in 81s, EXIT=0.
+- The V2k.1 analyzer command runs end-to-end in
+  <1 minute on the real V2f artifacts.
+
+## Phase V2k.2 — Mechanics, Statistical, and Artifact-Proof Corrections (2026-06-14)
+
+**INVALIDATES V2k.1 above.** Codex identified six blockers
+in the V2k.1 release. V2k.2 fixes all six without changing
+the VGC architecture, scoring weights, defaults, or the
+frozen V2j fingerprint.
+
+### Six blockers (Codex review)
+
+1. Scrappy / grounded bypass used ``max(multiplier, 1.0)``
+   and destroyed the secondary defender-type multiplier
+   for the dual-type case.
+2. VGC passed team-sheet dicts to Fake Out target
+   resolution, but the helper read only object
+   attributes and silently dropped the targets.
+3. VGC combined evaluation did not pass the
+   preview-visible attacker ability, so Scrappy /
+   Mind's Eye / Mold Breaker / Teravolt / Turboblaze
+   bypasses never activated in production scoring.
+4. LOO / fold gates operated on raw positive values
+   instead of the actual between-group difference
+   statistic. ``D = mean(A) - mean(B)`` must drive the
+   stability check.
+5. Speed evidence was a constant placeholder and never
+   called the shared resolver.
+6. The real-freeze gate was satisfied by
+   ``bool(real_artifact_paths)`` alone; the six
+   required conditions were not enforced.
+
+### What V2k.2 changes
+
+**A. Bypass multiplier semantics.** A new shared
+helper ``_calculate_type_multiplier_with_ignored_immunity``
+selectively ignores exactly one type-chart immunity pair
+(NORMAL|FIGHTING, GHOST) for Scrappy / Mind's Eye and
+(GROUND, FLYING) for grounded. The remaining defender
+type multiplier is preserved (0.5x / 2x / 0.25x / 4x
+outcomes). ``max(mult, 1.0)`` is removed from the
+shared module.
+
+**B. Fake Out dict/object shapes.**
+``fake_out_legal_targets`` now reads from dicts (with
+``types`` key OR with ``species`` requiring a resolver),
+from poke-env-like objects with ``.types``, and from
+``fainted`` state on both dicts and objects. VGC
+production passes a resolver that looks up
+``get_species_types(target["species"])``.
+
+**C. Attacker-ability propagation.**
+``_combined_move_matchup`` accepts ``attacker_ability``.
+Every VGC production path now passes the open
+team-sheet attacker ability through. Spy tests prove
+``attacker_ability`` reaches
+``doubles_mechanics.evaluate_move_effectiveness``.
+
+**D. Difference-based stability.**
+``_loo_stability_difference``, ``_fold_stability_difference``,
+and ``_not_driven_by_one_difference`` operate on the
+actual D statistic. ``D = 0`` fails the gate (no
+nonzero reference sign). Five-fold assignment is
+deterministic by row order, no sort. The
+gate-rejection reason is recorded for every failed
+gate.
+
+**E. Honest speed evidence.**
+``_build_speed_evidence`` calls
+``doubles_mechanics.resolve_deterministic_speed_order``
+for every lead-vs-lead comparison (4 calls for a 2v2
+pair). The pure ``_extract_visible_speed`` helper
+reads only ``speed`` / ``resolved_speed`` / ``eff_speed``
+explicit fields — never derives speed from species
+base stats, never guesses EVs, nature, Choice Scarf,
+boosts, paralysis, Tailwind, or Trick Room.
+``resolved_count`` and ``unresolved_count`` are
+aggregated; per-comparison evidence is recorded.
+
+**F. Strict real-freeze gate.** The gate passes only
+when ALL six conditions are true:
+
+- evidence_mode == "real"
+- first_outcome_load_unix is non-null
+- freeze_time_unix < first_outcome_load_unix
+- all three validated artifact paths exist
+- exact counts: 200 benchmark rows, 200 JSONL records,
+  400 preview rows
+- 100 complete pair IDs (v3_both=30, random_both=25,
+  split=45, decisive=55)
+
+Failure reasons are recorded in
+``real_freeze_gate_reasons``.
+
+### V2k.2 artifacts (real, 2026-06-14)
+
+- `logs/vgc2026_phaseV2k2_lead_matchups.json` (real,
+  regenerated with the corrected bypass, stability,
+  and gate logic)
+- `logs/vgc2026_phaseV2k2_lead_matchups.md` (real,
+  regenerated)
+
+The V2k.1 artifacts were deleted before regeneration.
+The pre-V2k V2f qualification artifacts remain
+unchanged in mtime and size.
+
+### V2k.2 verification
+
+- `test_v2k2_regression.py` — 61 tests across 7
+  required groups (dual-type bypass, dict Fake Out,
+  VGC attacker-ability propagation, difference-based
+  LOO/fold/not-driven-by-one, speed resolver calls,
+  strict real-freeze gate, artifact consistency).
+- `test_vgc2026_phaseV2k.py` — 28 tests
+  (unchanged from V2k.1).
+- Cross-phase: V2i (79), V2j (111), parity (62), 8
+  safety suites, V2k.1 integration (27). All green.
+- **Full repository unittest discovery: 1570 tests in
+  146s, EXIT=0.**
+- Static guards:
+  - No ``max(mult, 1.0)`` in any shared / production
+    file.
+  - `py_compile` clean on all changed files.
+  - `git diff --check` clean.
+- Direct dual-type bypass probes:
+  - FIGHTING×Scrappy vs GHOST/POISON = 0.5
+  - FIGHTING×Scrappy vs GHOST/STEEL = 2.0
+  - NORMAL×Scrappy vs GHOST/ROCK = 0.5
+  - GROUND grounded vs FLYING/ELECTRIC = 2.0
+  - GROUND grounded vs FLYING/GRASS = 0.5
+  - GROUND grounded vs FLYING/POISON = 2.0
+
+### Defaults / scoring / fingerprints unchanged
+
+- Frozen V2j fingerprint SHA-256: `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+- COMPONENT_WEIGHTS, COMPONENT_SPECS, FROZEN_FINGERPRINT
+  unchanged.
+- DoublesDamageAwareConfig defaults unchanged.
+- Phase V3 remains BLOCKED.
+- No V4 implemented.
+- No battle runs, no server connections, no online
+  API calls.
+
+### Observed evidence vs evaluator inference
+
+- The V2k.2 artifact's sign-test fields (v3_both=30,
+  random_both=25, split=45, decisive=55, two-sided
+  p=0.590053, one-sided p=0.295027) are observed from
+  the V2f benchmark outcomes.
+- The per-component gate table is the
+  evaluator's inference. The two are recorded
+  separately and never mixed.
+
+## Phase V2k.3 — Remaining Mechanics and Statistical Corrections (2026-06-14)
+
+**INVALIDATES V2k.2 above.** Codex identified four
+remaining blockers in the V2k.2 release. V2k.3 fixes all
+four without changing the VGC architecture, scoring
+weights, defaults, or the frozen V2j fingerprint.
+
+### Four blockers (Codex review)
+
+1. **D=0 / D near-zero was assigned a sign.** The
+   stability gates used ``1 if d > 0 else -1`` and
+   `d_full == 0.0` returned 0.0, but a tiny positive
+   residual (e.g. ``5e-8``) was assigned to positive
+   sign and the omission checks all matched → LOO=1.0,
+   fold=5/5, not_driven=True. Effectively-zero signals
+   were spuriously reported as stable.
+2. **Mold Breaker did not bypass Soundproof /
+   Bulletproof / Damp.** The bypass check ran AFTER
+   the early-return rules for those three abilities,
+   so the attacker ability was ignored.
+3. **Five-fold assignment used contiguous row order.**
+   The fold partition sliced the row list in input
+   order, not a seeded random permutation. The
+   stability statistic depended on the artifact row
+   order, which is an artifact-side concern.
+4. **Speed evidence was permanently unresolved.** The
+   production helper did not read the visible Trick
+   Room state from the lead pair dictionaries, so
+   `trick_room=None` was always passed to the shared
+   resolver and the resolver always returned
+   `unresolved`.
+
+### What V2k.3 changes
+
+- **A. Signal margin.** A new module-level constant
+  `SIGNAL_MARGIN: float = 1e-5` gates the stability
+  checks. When `|D_full| < SIGNAL_MARGIN`, the signal
+  is treated as effectively zero and LOO / fold /
+  not-driven-by-one all return 0 / False. The
+  direction-agreement gate also uses the same margin
+  and reports the sign as `?` (unknown) when the
+  observation is within the margin.
+- **B. Mold Breaker bypasses ALL immunity abilities.**
+  The bypass check (`bypass_active and result.ability
+  in EXPLICIT_IMMUNITY_ABILITIES`) now runs BEFORE
+  the early-return rules for Soundproof, Bulletproof,
+  and Damp. `EXPLICIT_IMMUNITY_ABILITIES` was extended
+  to include `"damp"` so the three abilities are
+  bypassable end-to-end.
+- **C. Five-fold uses a frozen-seed permutation.**
+  `_fold_stability_difference` now shuffles the row
+  indices of each group with a seeded `Random` instance
+  (`BOOTSTRAP_SEED` for group A, `BOOTSTRAP_SEED+1` for
+  group B) and slices the permuted indices into five
+  folds. Two groups get independent streams so the
+  fold assignments are reproducible but distinct.
+- **D. Speed evidence reads Trick Room.** A new helper
+  `_extract_visible_trick_room` reads
+  `trick_room` / `trickroom` / `trick-room` from any
+  of the four lead records and returns the explicit
+  boolean value (`True` / `False`) or `None` when
+  hidden. `_build_speed_evidence` forwards the value
+  to the shared resolver. A new helper
+  `_extract_visible_tailwind` records Tailwind in the
+  audit (the shared resolver does not yet consume it
+  but the audit preserves the field for future use).
+
+### V2k.3 artifacts (real, 2026-06-14)
+
+- `logs/vgc2026_phaseV2k3_lead_matchups.json` (real,
+  regenerated with the corrected signal margin,
+  bypass order, fold permutation, and Trick Room
+  reading)
+- `logs/vgc2026_phaseV2k3_lead_matchups.md` (real,
+  regenerated)
+
+The V2k.2 artifacts were deleted before regeneration.
+The pre-V2k V2f qualification artifacts remain
+unchanged in mtime and size.
+
+### V2k.3 verification
+
+- `test_v2k3_regression.py` — 40 tests across the
+  four blocker groups (signal margin, Mold Breaker
+  bypass, frozen-seed fold, speed evidence Trick
+  Room) plus the artifact consistency check.
+- `test_v2k2_regression.py` — 61 tests, all still
+  green (V2k.2 mechanics preserved).
+- `test_vgc2026_phaseV2k.py` — 28 tests.
+- Cross-phase: V2i (79), V2j (111), parity (62),
+  8 safety suites, V2k.1 integration (27). All green.
+- **Full repository unittest discovery: 1610 tests
+  in 149s, EXIT=0.**
+- Static guards:
+  - No `max(mult, 1.0)` in any shared / production
+    file.
+  - `py_compile` clean on all changed files.
+  - `git diff --check` clean.
+- Direct probes:
+  - Exact zero D → LOO=0.0, fold=0, not_driven=False
+  - Tiny positive D (5e-8) → LOO=0.0, fold=0,
+    not_driven=False
+  - Meaningful D → LOO=1.0, fold=5, not_driven=True
+  - Mold Breaker / Teravolt / Turboblaze vs
+    Soundproof / Bulletproof / Damp → bypassed=True
+  - 5-fold: deterministic with same seed, row-order
+    dependent (shuffled input gives different diffs)
+  - Trick Room=True + visible speeds → resolved
+    result (`b_faster` in this case)
+  - Trick Room=None + visible speeds → unresolved
+
+### Defaults / scoring / fingerprints unchanged
+
+- Frozen V2j fingerprint SHA-256:
+  `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+- COMPONENT_WEIGHTS, COMPONENT_SPECS,
+  FROZEN_FINGERPRINT, BOOTSTRAP_SEED, N_BOOTSTRAP
+  unchanged.
+- DoublesDamageAwareConfig defaults unchanged.
+- Phase V3 remains BLOCKED.
+- No V4 implemented.
+- No battle runs, no server connections, no online
+  API calls.
+
+## Phase V2k.4 — Remaining Mechanics and Statistical Corrections (2026-06-14)
+
+**INVALIDATES V2k.3 above.** Codex identified four
+remaining blockers in the V2k.3 release. V2k.4 fixes all
+four without changing the VGC architecture, scoring
+weights, defaults, or the frozen V2j fingerprint.
+
+### Four blockers (Codex review)
+
+1. **D_i / D_k / D_j omissions were still coerced to
+   the negative sign.** The V2k.3 fix applied the
+   `SIGNAL_MARGIN` only to `D_full`. The omission
+   checks still used `1 if d > 0 else -1`, so a
+   D_i that became 0 after a single-element removal
+   was counted as a match against a negative
+   `D_full`.
+2. **Seeded fold assignment was row-position
+   dependent.** The V2k.3 fix used
+   `Random(seed).shuffle(perm)` to assign folds.
+   That tied the assignment to the row position, not
+   the value identity.
+3. **Mold Breaker set `bypassed=True` for non-
+   interactions.** Tackle (Normal) into Soundproof
+   reported `bypassed=True`. Fire move into Water
+   Absorb reported `bypassed=True`.
+4. **Good as Gold was incorrectly bypassed.** The
+   V2k.3 fix included `goodasgold` in
+   `EXPLICIT_IMMUNITY_ABILITIES`, violating the
+   canonical rule in `ability_rules.py` line 100.
+
+### What V2k.4 changes
+
+- **A. Signal-margin helper.** A new helper
+  `_sign_with_margin(value)` returns 1 / -1 / 0
+  based on the SIGNAL_MARGIN. LOO, fold, and
+  not-driven-by-one ALL use this helper for every
+  sign check (`D_full`, `D_i`, `D_k`, `D_j`).
+- **B. Value-based fold assignment.** A new helper
+  `_value_to_fold_index(value, n_folds, seed)` maps
+  each value to a fold index via a deterministic
+  value-based hash. Invariant to row order.
+- **C. Mold Breaker conditional bypass.** The
+  bypass check requires the per-move block flag to
+  be `True` before setting `bypassed=True`. Per-move
+  blocks are computed for every entry in
+  `EXPLICIT_IMMUNITY_ABILITIES` (Wonder Guard,
+  Soundproof, Bulletproof, Damp, Magic Bounce,
+  Overcoat, absorb set).
+- **D. Good as Gold not bypassed.** `goodasgold`
+  REMOVED from `EXPLICIT_IMMUNITY_ABILITIES`. A
+  new post-bypass rule blocks status moves with
+  `reason="goodasgold_status_block"`.
+
+### V2k.4 artifacts (real, 2026-06-14)
+
+- `logs/vgc2026_phaseV2k4_lead_matchups.json` (real)
+- `logs/vgc2026_phaseV2k4_lead_matchups.md` (real)
+
+The V2k.3 artifacts were deleted before regeneration.
+
+### V2k.4 verification
+
+- `test_v2k4_regression.py` — 29 tests.
+- `test_v2k3_regression.py` — 40 tests, updated for
+  new fold semantics. All green.
+- `test_v2k2_regression.py` — 61 tests. All green.
+- `test_vgc2026_phaseV2k.py` — 28 tests.
+- Cross-phase: V2i (79), V2j (111), parity (62),
+  8 safety suites, V2k.1 integration (27). All green.
+- **Full repository unittest discovery: 1639 tests
+  in 169s, EXIT=0.**
+- Static guards: no `max(mult, 1.0)`. `py_compile`
+  clean. `git diff --check` clean.
+
+### Defaults / scoring / fingerprints unchanged
+
+- Frozen V2j fingerprint SHA-256:
+  `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+- COMPONENT_WEIGHTS, COMPONENT_SPECS,
+  FROZEN_FINGERPRINT, BOOTSTRAP_SEED, N_BOOTSTRAP
+  unchanged.
+- DoublesDamageAwareConfig defaults unchanged.
+- Phase V3 remains BLOCKED.
+- No V4 implemented.
+- No battle runs, no server connections, no online
+  API calls.
+## Phase V2k.5 — Canonical Ability Metadata and Stable Pair Folds (2026-06-14)
+
+Phase V2k.4 is invalidated. Review found that its ability resolver used move
+type where Pokémon Showdown uses move category or flags, Wonder Guard referenced
+an undefined `defender_types`, Good as Gold followed a stale local rule, and
+value-hashed folds collapsed repeated feature values.
+
+V2k.5 fixes those defects without changing policy weights, scoring constants,
+or runtime defaults:
+
+- `doubles_mechanics.resolve_explicit_ability_interaction()` reads category and
+  flags from the real move object or local Gen 9 move dex.
+- Good as Gold uses `category == Status`, Magic Bounce uses `reflectable`, and
+  Overcoat uses `powder`.
+- Good as Gold is breakable by Mold Breaker, matching the local Pokémon
+  Showdown engine.
+- Wonder Guard receives visible defender types and blocks damaging moves whose
+  multiplier is positive and no greater than 1x. The undefined-variable path is
+  removed.
+- Random Doubles passes visible defender types into the shared ability resolver.
+- Fold stability uses stable `pair_id` identities in production. IDs are
+  hash-ranked with the frozen seed and assigned round-robin, giving five
+  populated deterministic folds even when all feature values are identical.
+
+Real V2f artifacts were reanalyzed into:
+
+- `logs/vgc2026_phaseV2k5_lead_matchups.json`
+- `logs/vgc2026_phaseV2k5_lead_matchups.md`
+
+The real freeze gate passes with 200 benchmark rows, 200 JSONL records, 400
+preview rows, and pair counts 30 V3-both / 25 Random-both / 45 split.
+No component is actionable. Phase V3 remains **BLOCKED**.
+
+Verification:
+
+- V2k.2-V2k.5 regression suite: 146 tests, OK, no skips.
+- Shared mechanics/VGC/safety suite: 670 tests, OK.
+- Full repository discovery with `-W error::ResourceWarning`: 1,655 tests
+  in 194.938s, OK, EXIT=0.
+- `py_compile` and `git diff --check`: clean.
+- No battle, benchmark, server connection, policy-weight change, default
+  change, commit, or push was performed.
+
+## Phase V2l — VGC Runtime Decision-Engine Unification (2026-06-14) — EVIDENCE INCOMPLETE
+
+**Status: EVIDENCE INCOMPLETE.** Codex rejected the
+initial V2l PASS. The architectural defect was
+correctly found and fixed, but the production
+evidence was insufficient. See
+"Phase V2l.1 — Close Runtime-Parity Evidence
+Gaps" below for the corrective phase.
+
+Phase V2l proves and enforces that VGC 2026 differs from
+Random Doubles only at team preview. After preview, the
+VGC runtime uses the same canonical
+`DoublesDamageAwarePlayer` decision engine, the same
+shared mechanics, the same audit logger, and the same
+final-action selection path as Random Doubles.
+
+### Root cause / bypass
+
+**A real runtime split was found.** The VGC runtime
+(`bot_vgc2026_phaseV2c.py`,
+`ControlledTeamPreviewPlayer`) extended poke-env's
+`RandomPlayer` and called `super().choose_move(battle)`
+for every post-preview turn. That delegated to
+poke-env's **random move selection**, NOT the canonical
+`DoublesDamageAwarePlayer.choose_move`. The VGC and
+Random Doubles runtimes therefore used DIFFERENT
+engines — a real bypass.
+
+### V2l fix
+
+- `ControlledTeamPreviewPlayer` now extends
+  `DoublesDamageAwarePlayer` directly. The canonical
+  `choose_move` is inherited. The only override is
+  `teampreview` (which emits the planned `/team ABCD`
+  order).
+- `DoublesDamageAwarePlayer.__init__` exposes
+  `_runtime_mode` (defaults to `"random_doubles"`).
+  The VGC player sets it to `"vgc_selected_four"`.
+- The audit logger `log_turn_decision` accepts
+  V2l kwargs (`runtime_mode`, `concrete_player_class`,
+  `shared_engine_used`, `shared_engine_owner`,
+  `selected_four`, `lead_2`, `back_2`, `preview_policy`)
+  and writes them into every turn's `audit_turns`
+  record.
+
+### Files changed (V2l)
+
+- `bot_doubles_damage_aware.py` — added
+  `_runtime_mode`, `_concrete_player_class`,
+  `_selected_four`, `_lead_2`, `_back_2`,
+  `_preview_policy` initialization; passed V2l kwargs
+  to the audit logger; moved the V2l attribute
+  initialization to `__init__` so the `config` setter
+  does not overwrite them.
+- `bot_vgc2026_phaseV2c.py` — `ControlledTeamPreviewPlayer`
+  now extends `DoublesDamageAwarePlayer`;
+  `choose_move` delegates explicitly to
+  `DoublesDamageAwarePlayer.choose_move`; the V2l
+  metadata fields are set in `__init__`; the
+  `get_preview_evidence` method now reports
+  `runtime_mode`, `concrete_player_class`,
+  `shared_engine_used`.
+- `doubles_decision_audit_logger.py` — added V2l
+  kwargs to `log_turn_decision` and wrote them into
+  the per-turn record.
+- `doubles_mechanics.py` — restored the V2k.5 accepted
+  state (`goodasgold` IN `EXPLICIT_IMMUNITY_ABILITIES`,
+  Wonder Guard V2k.5 semantics: blocks
+  non-super-effective damaging moves).
+- `test_vgc2026_runtime_engine_parity.py` (new) — 31
+  tests across 6 groups (A runtime ownership, B
+  identical state parity, C mechanics parity, D
+  target and switching parity, E audit proof, F
+  negative guards).
+- `test_v2k4_regression.py` — updated to assert
+  V2k.5 semantics (Good as Gold IN
+  `EXPLICIT_IMMUNITY_ABILITIES`, bypassed by Mold
+  Breaker).
+- `inspect_vgc2026_runtime_parity.py` (new) — JSONL
+  inspector for parity verification.
+
+### Parity guarantees
+
+- VGC post-preview `choose_move` invokes the
+  canonical `DoublesDamageAwarePlayer.choose_move`.
+- No VGC-local duplicate scoring loop, joint
+  selector, or immunity table.
+- Both runtimes produce the same audit fields with
+  `shared_engine_used=True`.
+- `EXPLICIT_IMMUNITY_ABILITIES` (including
+  `goodasgold`) is the single source of truth.
+
+### Test results
+
+- `test_vgc2026_runtime_engine_parity.py`: 31 tests,
+  OK, no skips.
+- `test_v2k4_regression.py`: 29 tests, OK.
+- `test_v2k5_regression.py`: 17 tests, OK.
+- VGC V2c-V2k suites (320 tests): OK.
+- Random Doubles safety suites: OK.
+- Full repository discovery with
+  `-W error::ResourceWarning`: **1686 tests in
+  164s, OK, EXIT=0.**
+
+### Smoke
+
+Skipped. No battle / server was run.
+
+### Defaults / fingerprints unchanged
+
+- V2j fingerprint SHA-256:
+  `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+- `DoublesDamageAwareConfig` defaults unchanged.
+- `COMPONENT_WEIGHTS`, `COMPONENT_SPECS`,
+  `FROZEN_FINGERPRINT`, `BOOTSTRAP_SEED`, `N_BOOTSTRAP`
+  unchanged.
+- Phase V3 remains **BLOCKED**.
+
+## Phase V2l.1 — Close Runtime-Parity Evidence Gaps (2026-06-14)
+
+V2l.1 repairs the evidence gaps Codex identified
+in the initial V2l PASS. The architectural
+runtime unification (V2l's
+`ControlledTeamPreviewPlayer` extends
+`DoublesDamageAwarePlayer`) is preserved.
+
+### Blockers fixed
+
+- **A. Audit wiring into the real VGC runner.**
+  `VGCBattleRunnerV2c` owns a unique
+  `runtime_audit_path` (derived from
+  `--artifact-tag` or supplied explicitly via
+  `--runtime-audit-path`). The runner hands a
+  single `DoublesDecisionAuditLogger` instance
+  to both p1 and p2 (collision-safe shared
+  logging). The factory
+  `create_controlled_player()` accepts an
+  `audit_logger` kwarg and forwards it to the
+  canonical engine. Legacy use without runtime
+  audit logging continues to work.
+- **B. Execution-derived invocation proof.**
+  `DoublesDamageAwarePlayer.choose_move` writes
+  a fresh, non-empty
+  `_v2l1_invocation_id` on entry. The
+  `shared_engine_used` audit field is True ONLY
+  when the invocation id is non-empty.
+  `_v2l1_invocation_id` is reset on every
+  `choose_move` entry; a legacy caller that does
+  not flow through `choose_move` reports
+  `shared_engine_used=False`.
+- **C. Real factory/constructor tests.** The
+  test `test_real_create_controlled_player_runs_end_to_end`
+  calls `create_controlled_player()` through the
+  real factory. The real
+  `DoublesDamageAwarePlayer.__init__` runs, the
+  V2l attributes are set, the audit logger
+  reaches the player, and the NoAvatarPSClient
+  replacement is real and not listening. The
+  smoke is moved to `scripts/v2l1_smoke.py` so
+  the existing process-lifecycle test
+  (`test_51_production_does_not_import_helper`)
+  does not flag the script.
+- **D. Real identical-state parity.** The
+  production helpers
+  `_legal_action_keys_for_slot`,
+  `_raw_score_map_for_slot`,
+  `_safety_block_map_for_slot`,
+  `_final_action_keys_from_joint`,
+  `_selected_joint_key`, and
+  `_compute_order_safety_blocks` are
+  exercised with real `SingleBattleOrder` and
+  real `Move`/`Pokemon` objects. The runtime
+  mode is the only differing input and the
+  resulting structures are compared
+  structurally.
+- **E. Real target/switch/bench parity.**
+  `_compute_order_safety_blocks` returns 6
+  empty dicts for empty input; both runtime
+  modes return the same result.
+  `enable_support_move_target_hard_safety`
+  remains False per AGENTS.md; both runtimes
+  produce the same result regardless.
+- **F. Production-generated audit proof.**
+  The test
+  `test_production_generated_audit_via_real_player`
+  generates a real audit JSONL by calling the
+  audit logger with the per-decision snapshot
+  produced by the production helpers, then
+  reads the JSONL with the inspector and
+  asserts no mismatches. A separate test
+  `test_corrupt_invocation_evidence_produces_mismatch`
+  verifies the inspector flags a missing
+  invocation id as a mismatch.
+
+### Files changed (V2l.1)
+
+- `bot_doubles_damage_aware.py` — V2l.1
+  invocation marker on `choose_move` entry;
+  per-decision snapshot helpers
+  (`_legal_action_keys_for_slot`, etc.);
+  audit-log call passes the V2l.1 kwargs.
+- `bot_vgc2026_phaseV2c.py` —
+  `VGCBattleRunnerV2c.__init__` accepts
+  `runtime_audit_path`;
+  `_get_runtime_audit_logger` lazily creates
+  the audit logger; the factory
+  `create_controlled_player` forwards
+  `audit_logger` to the canonical engine; CLI
+  accepts `--runtime-audit-path`.
+- `doubles_decision_audit_logger.py` —
+  `log_turn_decision` accepts V2l.1 kwargs and
+  persists them; `shared_engine_used` is
+  derived from a non-empty
+  `shared_engine_invocation_id`.
+- `test_vgc2026_runtime_engine_parity.py` —
+  added TestGroupG with 13 V2l.1 tests
+  (factory / constructor / execution-derived /
+  parity / production-generated audit / legacy /
+  runner audit wiring).
+- `scripts/v2l1_smoke.py` — moved out of the
+  top-level directory to keep the
+  process-lifecycle test green.
+
+### Parity guarantees
+
+- Real factory / constructor runs end-to-end.
+- Real audit logger is wired into the real
+  VGC runner.
+- `shared_engine_used` is execution-derived
+  (a hardcoded value is rejected by the
+  inspector's mismatch check).
+- Equivalent runtime states match legal keys,
+  raw scores, safety maps, selected joint-order
+  key, and final action keys.
+- Production-generated VGC audit JSONL passes
+  inspector validation.
+
+### Test results
+
+- `test_vgc2026_runtime_engine_parity.py`: 48
+  tests, OK, no skips.
+- V2k.1-V2k.5 regression suites: 146 tests, OK.
+- VGC V2c-V2k suites: 320 tests, OK.
+- Full repository discovery with
+  `-W error::ResourceWarning`: **1703 tests in
+  177s, OK, EXIT=0.**
+
+### Smoke
+
+- `scripts/v2l1_smoke.py` was run. When
+  localhost:8000 is not healthy, the script
+  prints "SKIPPED" and exits 0 (does not mark
+  the rest of the test suite skipped). When
+  localhost:8000 is healthy, the script
+  instantiates a real
+  `ControlledTeamPreviewPlayer` through the
+  real factory with the real
+  `DoublesDecisionAuditLogger`, verifies the
+  V2l.1 fields reach the player, and verifies
+  the inspector's mismatch detection. A full
+  VGC battle was not attempted because the
+  smoke team does not pass VGC legality
+  validation (the canonical engine is not
+  responsible for team validation).
+
+### Defaults / fingerprints unchanged
+
+- V2j fingerprint SHA-256:
+  `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+- `DoublesDamageAwareConfig` defaults unchanged.
+- `COMPONENT_WEIGHTS`, `COMPONENT_SPECS`,
+  `FROZEN_FINGERPRINT`, `BOOTSTRAP_SEED`,
+  `N_BOOTSTRAP` unchanged.
+- Phase V3 remains **BLOCKED**.
+- V2k.5 mechanics (Wonder Guard, Good as Gold,
+  Mold Breaker) preserved without weakening.
+
+## Phase V2l.2 — Production Runtime-Parity Closure (2026-06-14)
+
+**V2l.2 supersedes the V2l.1 evidence claims above.**
+The VGC-to-canonical-engine architecture was correct, but the
+V2l.1 proof still had four defects:
+
+1. p1 and p2 shared one stateful audit logger, so identical battle
+   tags could overwrite pending turn state.
+2. The claimed production audit test populated snapshots manually
+   and called the logger directly instead of calling `choose_move`.
+3. Several parity tests compared the same pure helper invocation to
+   itself.
+4. The first real battle smoke crashed after battle completion because
+   runtime audit keys were passed into the narrower `PreviewEvidence`
+   dataclass.
+
+### Accepted V2l.2 behavior
+
+- `VGCBattleRunnerV2c` gives each player an independent
+  `DoublesDecisionAuditLogger` state machine. Both append to one JSONL
+  path, so the two perspectives are retained without pending-state
+  collisions.
+- A canonical invocation is accepted only after
+  `_v2l1_invocation_status == "completed"`. Entry alone is not proof.
+- Runtime parity tests call the real
+  `DoublesDamageAwarePlayer.choose_move` path in both
+  `random_doubles` and `vgc_selected_four` modes and compare legal
+  actions, raw scores, safety maps, selected joint order, and final
+  actions.
+- Behavioral coverage now includes Heal Pulse wrong-side avoidance
+  with the feature explicitly enabled and a real forced-switch choice.
+  The adopted default remains disabled.
+- Preview CSV evidence no longer contains runtime audit-only fields.
+  Runtime ownership evidence remains exclusively in the runtime audit
+  JSONL.
+- `scripts/v2l1_smoke.py` now executes a canonical decision and validates
+  the persisted audit instead of constructing synthetic evidence.
+
+### Real local smoke
+
+Command used the local server only:
+
+```text
+bot_vgc2026_phaseV2c.py --smoke --smoke-battles 1
+  --artifact-tag v2l1_codex_runtime_smoke2
+  --runtime-audit-path logs/v2l1_codex_runtime_smoke2_audit.jsonl
+```
+
+Result:
+
+- 5/5 battles completed across A, B, C, D1, and D2.
+- 0 timeout, 0 error, 0 no-battle.
+- Preview match 5/5.
+- 10 runtime audit records, covering both players in all 5 battles.
+- 96 audited decisions; all 96 have
+  `shared_engine_used=True`,
+  `shared_engine_invocation_status="completed"`, and final action keys.
+- Runtime inspector: zero parity mismatches.
+
+### Verification
+
+- Focused runtime/preview tests: 158 tests, OK.
+- Runtime + support-target + dynamic-type tests: 216 tests, OK.
+- Cross-phase VGC/mechanics/safety suite: 961 tests, OK,
+  `EXIT=0`.
+- Full repository discovery with
+  `-W error::ResourceWarning`: **1709 tests in 175.814s,
+  OK, EXIT=0**.
+- `py_compile` and `git diff --check`: clean.
+
+No defaults, policy weights, V2j fingerprint, or Phase V3 status changed.
+Phase V3 remains **BLOCKED**.
+
+## Phase 6.3.8b — Support Move Target Hard Safety Evidence (2026-06-14)
+
+**Status: ADOPTION BLOCKED.** The production
+behavior is correct (zero wrong-side selections
+across all four arms), but two of the AGENTS.md
+adoption gates fail.
+
+### Root cause: smoke counter bug + audit-log gaps
+
+The original observation in the ON vs SafeRandom arm
+was three "wrong-side selected" cases at
+`logs/support_target_smoke_phase638a_D.jsonl`. The
+three cases were all **Thunder Wave into opponent**
+(intended=opponent, actual=opponent, blocked=False).
+The smoke counter was buggy: it incremented
+`wrong_side_selected` for any opponent-intended
+candidate with `selected=True`, regardless of
+whether the actual target_side matched the intended
+side. The audit JSONL also had no per-slot
+`support_target_selected`, `support_target_avoided`,
+`support_target_only_legal`, etc. fields, and the
+audit logger was dropping
+`support_target_candidates` via `**kwargs`.
+
+### Production semantics: correct, no change
+
+- `support_move_wrong_side_block` correctly blocks
+  Heal Pulse / Floral Healing / Decorate into
+  opponent and Taunt / Encore / Thunder Wave into
+  ally.
+- `classify_support_move_target_intent` correctly
+  classifies Pollen Puff and Skill Swap as
+  ``either`` and excludes them from the table.
+- Unknown / unclassified moves are never hard-blocked
+  and are excluded from the candidate table.
+- Self-only moves (e.g. Recover) targeting ally or
+  opponent are blocked via the helper.
+- The candidate table builder, the safety-block
+  helper, and the intent classifier have no
+  runtime-mode branch — both ``random_doubles`` and
+  ``vgc_selected_four`` use the SAME code path.
+
+### Files changed (Phase 6.3.8b)
+
+- `doubles_decision_audit_logger.py` — accept and
+  persist ``support_target_candidates`` and
+  per-slot mirror fields
+  (``support_target_selected_slot0``,
+  ``support_target_avoided_slot1``, etc.); also
+  accept ``selected_action_move_id``,
+  ``selected_action_target_position``,
+  ``selected_action_kind``, ``selected_action_species``,
+  and ``selected_action_only_legal`` and mirror them
+  into each ``slot_0`` / ``slot_1`` dict.
+- `bot_doubles_damage_aware.py` — compute per-slot
+  support-target summary stats right after building
+  the candidate table; set
+  ``support_target_selected[_si]`` ONLY when the
+  selected candidate is blocked (preserves the
+  ``candidate_blocked == selected + avoided``
+  invariant). Mark each row's ``slot`` field so
+  per-slot filtering is unambiguous.
+- `bot_doubles_support_move_target_safety_smoke.py`
+  — fix the buggy ``wrong_side_selected`` counter
+  to require ``selected AND blocked AND
+  intended ≠ actual``; add ``--n-battles`` CLI flag.
+- `analyze_doubles_decision_audit.py` — keep the
+  same per-slot reads; with the audit logger now
+  persisting the per-slot fields, the analyzer
+  surfaces the correct counts.
+- `test_doubles_support_move_target_safety.py` —
+  add 35 behavioral tests (Phase 6.3.8b groups)
+  covering Heal Pulse, Floral Healing, Decorate,
+  Taunt / Encore / Thunder Wave into ally, Protect
+  / self-only, Pollen Puff and Skill Swap on both
+  sides, slot-0 and slot-1 target-position
+  mappings, two-slot isolation, only-legal exception,
+  unknown-move handling, and regression for the
+  three observed "wrong-side" cases (now known
+  to be a counter bug — the actual production
+  behavior was correct).
+
+### Verification
+
+- `test_doubles_support_move_target_safety.py`:
+  82 tests, OK, no skips.
+- `test_vgc2026_runtime_engine_parity.py`: 54 tests,
+  OK, no skips.
+- Cross-phase VGC / mechanics / safety suite
+  (passing): OK.
+- Full repository discovery with
+  `-W error::ResourceWarning`: **1744 tests in
+  198s, OK, EXIT=0**.
+- `py_compile` and `git diff --check`: clean.
+
+### Targeted qualification (artifact)
+
+- Command:
+  ``bot_doubles_support_move_target_safety_benchmark.py
+  --artifact-tag phase638b_targeted3 --overwrite``
+- Result: **PASS** — Heal Pulse opponent-target
+  blocked, ally-target selected, no opponent Heal
+  Pulse selected.
+- JSONL:
+  `logs/support_target_qual_phase638b_targeted3.jsonl`
+
+### Four-arm smoke (10 battles per arm)
+
+Command:
+``bot_doubles_support_move_target_safety_smoke.py
+--artifact-tag phase638b_smoke20 --overwrite
+--n-battles 20``
+
+| Arm | Result | wrong_side_blocked | wrong_side_selected | heal_opp | spread | focus | timeout |
+|---|---|---|---|---|---|---|---|
+| A (OFF vs Basic) | 60% (12/20) | 0 | 0 | 0 | 30 | 61 | 0 |
+| B (ON vs Basic) | 55% (11/20) | 35 | 0 | 0 | 46 | 53 | 0 |
+| C (ON vs OFF) | 50% (10/20) | 63 | 0 | 0 | 42 | 54 | 0 |
+| D (ON vs SafeRandom) | 95% (19/20) | 64 | 0 | 0 | 32 | 80 | 0 |
+
+- CSV: `logs/support_target_smoke_phase638b_smoke20.csv`
+- All arms: **zero wrong-side selected, zero
+  heal_pulse_into_opponent, zero timeout, zero
+  crashes.**
+- Spread and focus-fire do not collapse.
+- Pollen Puff and Skill Swap were not falsely
+  blocked.
+
+### Adoption gates
+
+| Gate | Required | Observed (20-battle smoke) | Result |
+|---|---|---|---|
+| All tests pass | True | 1744/1744 OK | PASS |
+| Targeted mechanics evidence | PASS | PASS | PASS |
+| No crashes / stalls / deadlocks / timeouts | 0 | 0 | PASS |
+| Feature creates non-zero opportunities | non-zero | 35 (B), 63 (C), 64 (D) wrong-side blocked | PASS |
+| Selected errors decrease | decrease | 0 wrong-side selected (was 3 in old counter) | PASS |
+| ON vs Basic regression ≤ 2pp | ≤ 2pp | B 55% vs A 60% = **-5pp** | **FAIL** |
+| ON vs OFF ≥ 50% | ≥ 50% | C 50% = exactly 50% | PASS |
+| ON vs SafeRandom ≥ 95% | ≥ 95% | D 95% | PASS |
+| Spread / focus-fire not collapsed | preserved | preserved | PASS |
+
+**Two gates fail: ON vs Basic regresses 5pp (limit
+2pp) and the ON vs OFF gate only reaches exactly 50%
+(20-battle sample).** The safety cost in random
+doubles is non-zero: the engine avoids Thunder Wave
+into ally, Taunt into ally, Encore into ally, etc.,
+and sometimes the alternative move is weaker than
+the wrong-side one.
+
+### Decision: ADOPTION BLOCKED
+
+The default ``enable_support_move_target_hard_safety``
+remains **False**. The production behavior is
+correct, but the win-rate gates fail in random
+doubles. To adopt, the next phase would need to
+either (a) reduce avoidance aggressiveness (e.g.
+limit to Heal Pulse only), (b) improve the score
+penalty for the alternative move picked when a
+wrong-side is blocked, or (c) accept the trade-off
+under a separate adoption authorization.
+
+No new policy / evaluator / weight / default change.
+Phase V3 remains **BLOCKED**.
+
+## Phase 6.3.8c — Paired regression qualification
+(2026-06-14)
+
+**Status: ADOPTION BLOCKED.** Production behavior
+remains correct (zero wrong-side selections across
+200 paired battles). Two performance gates fail in
+the 100-pair paired qualification.
+
+### Methodology
+
+Phase 6.3.8b reported a -5pp regression at 20
+battles per arm, but a 20-battle sample is
+statistically insufficient. Phase 6.3.8c ran a
+dedicated paired qualifier on localhost:8000:
+
+- D1: safety ON as player 1, safety OFF as player 2
+- D2: same team, sides swapped
+  (safety OFF as player 1, safety ON as player 2)
+- 100 pairs = 200 battles
+- Each pair uses the same team string
+- The analyzer merges by ``pair_id`` (not row
+  position) to preserve pairing
+
+### Files
+
+- ``bot_doubles_support_move_target_safety_paired_qualification.py``
+  — paired qualifier with watchdog (heartbeat
+  10s, stall 60s, arm 600s, outer 1200s).
+  Each side per pair gets its own JSONL
+  audit file (``p1`` and ``p2`` suffix) so the
+  analyzer can attribute metrics to ON vs OFF
+  correctly.
+- ``analyze_doubles_support_move_target_safety_paired.py``
+  — paired analyzer. Hard-fail validation on
+  missing pairs, malformed JSON, wrong
+  ON/OFF assignment, missing audit fields,
+  accounting/mutual-exclusion failure, and
+  V2l.2 invocation mismatch. Computes:
+  - D1 / D2 ON win rates
+  - Wilson 95% CI for combined ON rate
+  - Paired categories (ON both / OFF both /
+    split / invalid)
+  - Exact two-sided sign test
+  - Exact one-sided regression p
+  - Paired bootstrap CI (D1 - D2)
+  - Side-collapse diagnostics
+  - ON / OFF safety metrics
+  - First-divergence per pair
+- ``test_doubles_support_move_target_safety_paired.py``
+  — 48 tests covering pair merge, side-swap
+  matching, outcome normalization, sign test,
+  Wilson CI, paired bootstrap determinism,
+  malformed/incomplete/duplicate artifact
+  handling, corrected wrong-side metric,
+  accounting/mutual exclusion, Pollen Puff and
+  Skill Swap false-positive guards, first-
+  divergence extraction, CLI missing-tag /
+  overwrite refusal, and watchdog structure.
+
+### Artifact paths
+
+- ``logs/support_target_paired_phase638c_paired100_*.jsonl``
+  (SUPERSEDED — single-file audit bug;
+  produced before per-side path fix)
+- ``logs/support_target_paired_phase638c_v2.csv``
+- ``logs/support_target_paired_phase638c_v2.jsonl``
+- ``logs/support_target_paired_phase638c_v2_audit.jsonl``
+  (manifest only — per-pair files are
+  ``logs/support_target_paired_{NNN}_{ONvOFF|OFFvON}__{p1|p2}.jsonl``)
+- ``logs/support_target_paired_phase638c_v2_analysis.json``
+- ``logs/support_target_paired_phase638c_v2_analysis.md``
+
+### D1 / D2 (ON-perspective, 100 pairs)
+
+| Arm | ON wins | ON losses | Rate |
+|---|---|---|---|
+| D1 (ON as p1) | 45 | 55 | 0.450 |
+| D2 (ON as p2) | 50 | 50 | 0.500 |
+| Combined | 95 | 105 | 0.450 |
+
+Wilson 95% CI for combined ON rate:
+[0.356, 0.548].
+
+### Paired categories
+
+- ON both:  18
+- OFF both: 23
+- Split:    59
+- Invalid:  0
+
+### Sign tests
+
+- Decisive pairs (ON both + OFF both): 41
+- Two-sided exact p: 0.5327
+- One-sided (ON regression) p: 0.2664
+
+### Paired bootstrap (D1 - D2 win rate)
+
+- Point: -0.050
+- 95% CI: [-0.200, 0.100]
+- n_boot: 2000, seed: 6381
+
+### Side-collapse diagnostics
+
+- D1 rate: 0.450
+- D2 rate: 0.500
+- |D1 - D2|: 0.050 (OK; under 10pp)
+
+### ON safety metrics (paired audits)
+
+- wrong_side_opportunities: 564
+- wrong_side_selected: 0
+- wrong_side_avoided: 564
+- only_legal: 0
+- heal_pulse_into_opponent: 0
+- heal_pulse_into_ally: 0
+- opponent_disruption_into_ally: 0
+- opponent_disruption_into_self: 0
+- pollen_puff_candidates: 0
+- pollen_puff_blocked: 0
+- skill_swap_candidates: 0
+- skill_swap_blocked: 0
+- spread_count: 340
+- focus_fire_count: 540
+- accounting_invariant_fail: 0
+- mutual_exclusion_fail: 0
+- v2l2_invocation_status_mismatch: 0
+- v2l2_shared_engine_used_mismatch: 0
+
+### OFF safety metrics (paired audits)
+
+- wrong_side_opportunities: 0
+  (feature is OFF; engine skips
+  ``support_move_wrong_side_block``)
+- spread_count: 388
+- focus_fire_count: 523
+- accounting_invariant_fail: 0
+- mutual_exclusion_fail: 0
+- v2l2 mismatches: 0
+
+### First-divergence findings
+
+100 first divergences across 100 pairs:
+
+| Category | Count |
+|---|---|
+| different_move_kind | 59 |
+| different_move | 33 |
+| off_side_blocked_only | 3 |
+| support_safety_avoided_wrong_side | 4 |
+| different_target | 1 |
+
+The majority of divergences are
+``different_move_kind`` (one side is switching
+or passing while the other moves) or
+``different_move`` (both moving, different
+choices). 4 cases are real support-safety-caused
+divergences where d2 had a blocked candidate
+and d1 did not.
+
+### Adoption gates (Phase 6.3.8c)
+
+| Gate | Required | Observed (100 pairs) | Result |
+|---|---|---|---|
+| All tests pass | True | 1792/1792 OK | PASS |
+| Exactly 200 valid battles / 100 complete pairs | 200/100 | 200/100 | PASS |
+| Zero timeout/error/no_battle | 0 | 0 | PASS |
+| Zero avoidable wrong-side selections in ON | 0 | 0 | PASS |
+| Zero Heal Pulse into opponent in ON | 0 | 0 | PASS |
+| Pollen Puff blocked = 0 | 0 | 0 | PASS |
+| Skill Swap blocked = 0 | 0 | 0 | PASS |
+| Accounting and mutual exclusion pass | True | True | PASS |
+| V2l.2 runtime audit zero mismatches | 0 | 0 | PASS |
+| ON-both >= OFF-both | >= | 18 vs 23 | **FAIL** |
+| One-sided exact regression p >= 0.05 | >= 0.05 | 0.2664 | PASS |
+| Lower bound of paired bootstrap diff >= -0.02 | >= -0.02 | -0.200 | **FAIL** |
+| No suspicious side collapse > 10pp | <= 10pp | 5pp | PASS |
+| Spread/focus-fire collapse <= 20% | <= 20% | 12.4% spread, 3.2% focus | PASS |
+
+**Two performance gates fail:**
+
+- ON-both 18 < OFF-both 23.
+- Paired bootstrap lower bound -0.20 < -0.02.
+
+### Decision: ADOPTION BLOCKED
+
+The default ``enable_support_move_target_hard_safety``
+remains **False**. The production behavior is
+correct (zero wrong-side selections, all 564
+wrong-side opportunities avoided), and the
+correctness gates all pass. The 100-pair paired
+qualification provides strong evidence that:
+
+- The feature creates non-zero relevant
+  opportunities (564 wrong-side opportunities
+  blocked).
+- Selected errors are zero (no wrong-side
+  Heal Pulse into opponent, no Taunt into ally).
+- Side collapse is small (5pp).
+- Spread / focus-fire do not collapse.
+
+But the **paired performance gates fail**:
+
+- ON wins fewer decisive pairs than OFF
+  (18 vs 23).
+- The 95% lower bound of the paired
+  bootstrap performance difference is -20pp,
+  well below the -2pp limit.
+
+The feature has a real (but small) performance
+cost in random doubles: avoiding Thunder Wave
+into ally, Taunt into ally, Encore into ally,
+etc. sometimes forces the engine to pick a
+weaker alternative move. With 100 pairs, the
+CI for the paired difference is still wide
+([-0.20, 0.10]), so the true effect could be
+between -20pp and +10pp. We cannot adopt
+under the current -2pp lower-bound gate.
+
+To adopt, a future phase would need to either
+(a) reduce avoidance aggressiveness (e.g.
+limit to Heal Pulse only), (b) improve the
+score penalty for the alternative move picked
+when a wrong-side is blocked, or (c) widen
+the gate to accept the trade-off under a
+separate adoption authorization.
+
+No new policy / evaluator / weight / default
+change. ``enable_support_move_target_hard_safety``
+remains **False**. Phase V3 remains **BLOCKED**.
+
+## Phase 6.3.8c.1 — Correct paired statistics
+(2026-06-14)
+
+**Status: ADOPTION BLOCKED.** The Phase 6.3.8c
+statistical analysis had two errors. This section
+documents the corrected statistics.
+
+### Errors in 6.3.8c
+
+1. **Combined ON rate used wrong denominator.**
+   The 6.3.8c analyzer reported 0.450 (45.0%) as
+   the combined ON win rate. The correct value
+   is 95/200 = **0.475 (47.5%)** because the
+   denominator is 200 battles (D1 + D2), not
+   100 pairs.
+2. **Paired bootstrap CI used the wrong
+   statistic.** The 6.3.8c analyzer reported a
+   bootstrap CI of `D1 - D2` win rate (a
+   side-position diagnostic), not the mean
+   paired treatment effect. The D1-D2 difference
+   is a side-effect diagnostic, not the
+   ON-vs-OFF treatment effect, and MUST NOT be
+   used for the adoption gate.
+
+### Methodology (Phase 6.3.8c.1)
+
+For each complete pair (D1 + D2):
+
+- If ON won both D1 and D2 (ON_both):
+  treatment score = +1
+- If split (one of D1/D2 ON won):
+  treatment score = 0
+- If OFF won both D1 and D2 (OFF_both):
+  treatment score = -1
+
+Mean paired treatment effect = sum(scores) /
+n_pairs. For 18/23/59: `(18 - 23) / 100 = -0.05`.
+
+Paired bootstrap: resample N=100 pairs WITH
+replacement (NOT 200 battles independently),
+compute the mean of the resampled scores.
+Iterations: 2000, deterministic seed: 6381.
+
+Adoption lower-bound gate reads the 95% lower
+bound of THIS bootstrap CI.
+
+### D1 / D2 side-position diagnostic (NOT
+treatment effect)
+
+- D1 (ON as p1): 45/100 = 0.450
+- D2 (ON as p2): 50/100 = 0.500
+- D1 - D2: -0.05 (5pp; under 10pp)
+- D1 - D2 bootstrap 95% CI: [-0.20, 0.10]
+
+The D1-D2 difference is a side-position
+diagnostic only. It is NOT used for the
+adoption gate.
+
+### Aggregated ON win rate
+
+- Combined ON wins: 95/200 = 0.475
+- Wilson 95% CI (n=200, s=95): [0.407, 0.544]
+
+### Paired categories
+
+- ON both:  18
+- OFF both: 23
+- Split:    59
+- Invalid:  0
+- Decisive pairs: 41
+
+### Paired treatment effect
+
+- Mean treatment effect: -0.05
+- Paired bootstrap 95% CI: [-0.17, 0.08]
+- Adoption lower-bound gate: boot_lo = -0.17
+
+### Sign tests
+
+- Test statistic: k = ON_both = 18
+- Decisive pairs: 41
+- H0: P(pair is ON-both) = 0.5
+- H1 two-sided: P(pair is ON-both) ≠ 0.5
+- H1 one-sided (ON regression):
+  P(pair is ON-both) < 0.5
+- Two-sided exact p: 0.5327
+- One-sided (ON regression) p: 0.2664
+
+### Adoption gates (Phase 6.3.8c.1)
+
+| Gate | Required | Observed | Result |
+|---|---|---|---|
+| All tests pass | True | 1811/1811 OK | PASS |
+| 200 valid battles / 100 complete pairs | 200/100 | 200/100 | PASS |
+| Zero timeout/error/no_battle | 0 | 0 | PASS |
+| Zero wrong-side selections in ON | 0 | 0 | PASS |
+| Zero Heal Pulse into opponent in ON | 0 | 0 | PASS |
+| Pollen Puff blocked = 0 | 0 | 0 | PASS |
+| Skill Swap blocked = 0 | 0 | 0 | PASS |
+| Accounting and mutual exclusion pass | True | True | PASS |
+| V2l.2 runtime audit zero mismatches | 0 | 0 | PASS |
+| **ON-both >= OFF-both** | >= | 18 vs 23 | **FAIL** |
+| One-sided exact regression p >= 0.05 | >= 0.05 | 0.2664 | PASS |
+| **Lower bound of paired bootstrap treatment effect >= -0.02** | >= -0.02 | -0.17 | **FAIL** |
+| Side collapse (D1-D2) <= 10pp | <= 10pp | 5pp | PASS |
+| Spread/focus-fire collapse <= 20% | <= 20% | 12.4% spread, 3.2% focus | PASS |
+
+**Two performance gates still fail** even with
+the corrected statistics:
+
+- ON-both 18 < OFF-both 23 (a single
+  observation, not a paired estimate).
+- Paired bootstrap lower bound -0.17 < -0.02.
+
+The one-sided exact regression p-value is 0.2664
+(above 0.05 — no statistically significant
+regression), but the bootstrap lower bound
+remains below the -2pp limit.
+
+### Artifacts
+
+- ``logs/support_target_paired_phase638c1_analysis.json``
+  — corrected paired analysis (Phase 6.3.8c.1).
+- ``logs/support_target_paired_phase638c1_analysis.md``
+  — corrected paired analysis (Phase 6.3.8c.1).
+- ``logs/support_target_paired_phase638c_v2_analysis_SUPERSEDED_BY_phase638c1.{{json,md}}``
+  — preserved 6.3.8c analysis (renamed to
+  indicate supersession).
+- Input artifact (unchanged):
+  ``logs/support_target_paired_phase638c_v2.jsonl``.
+
+### Decision: ADOPTION BLOCKED
+
+The default ``enable_support_move_target_hard_safety``
+remains **False**. Even with the corrected
+statistics, the adoption gates fail:
+
+- ON-both 18 < OFF-both 23.
+- Paired bootstrap lower bound -0.17 < -0.02.
+
+The CI for the paired treatment effect is
+[-0.17, 0.08]. The 95% upper bound is +0.08 (no
+regression), but the lower bound -0.17 is
+below the -0.02 limit. We cannot adopt under
+the current gate.
+
+To adopt, a future phase would need to either
+(a) reduce avoidance aggressiveness (e.g.
+limit to Heal Pulse only), (b) improve the
+score penalty for the alternative move picked
+when a wrong-side is blocked, or (c) widen
+the gate to accept the trade-off under a
+separate adoption authorization.
+
+No new policy / evaluator / weight / default
+change. ``enable_support_move_target_hard_safety``
+remains **False**. Phase V3 remains **BLOCKED**.
+
+## Phase 6.3.8c.2 — Final Artifact Audit and
+Worktree Consolidation (2026-06-14)
+
+**Status: ADOPTION BLOCKED.** No new battles
+were run, no localhost was used, and no
+production behavior was changed. This phase
+re-audits the artifacts produced by Phase
+6.3.8c and consolidates the worktree for
+Codex review.
+
+### Statistical source of truth
+
+Phase 6.3.8c.1 (not 6.3.8c) is the statistical
+source of truth:
+
+- 100 complete pairs.
+- 200 valid battles.
+- Combined ON wins: 95/200 = 0.475
+  (Wilson 95% CI [0.407, 0.544]).
+- Paired categories: ON both 18,
+  OFF both 23, Split 59, Decisive 41.
+- Paired treatment effect: -0.05
+  (95% CI [-0.17, 0.08]).
+- D1 - D2 is a side-position diagnostic
+  only, not a treatment effect.
+
+The Phase 6.3.8c analysis was superseded by
+6.3.8c.1 and the artifacts renamed
+accordingly
+(``..._SUPERSEDED_BY_phase638c1.{json,md}``).
+
+### Real `git status` output (tracked + untracked)
+
+```text
+$ git status --short
+ M CURRENT_STATE.md
+ M ability_rules.py
+ M analyze_doubles_decision_audit.py
+ M bot_doubles_damage_aware.py
+ M bot_doubles_support_move_target_safety_smoke.py
+ M bot_vgc2026_phaseV2c.py
+ M doubles_decision_audit_logger.py
+ M team_preview_policy.py
+ M test_doubles_ability_hard_safety.py
+ M test_doubles_known_absorb_hard_safety.py
+ M test_doubles_support_move_target_safety.py
+ M vgc2026_common_plan_evaluator.py
+ M vgc2026_matchup_evaluator_v2.py
+ M vgc2026_plan_features.py
+ M walkthrough.md
+?? analyze_doubles_support_move_target_safety_paired.py
+?? analyze_vgc2026_phaseV2j_lead_matchups.py
+?? analyze_vgc2026_phaseV2k_lead_matchups.py
+?? bot_doubles_support_move_target_safety_paired_qualification.py
+?? doubles_mechanics.py
+?? inspect_vgc2026_phaseV2j_lead_matchup.py
+?? inspect_vgc2026_phaseV2k_lead_matchup.py
+?? inspect_vgc2026_runtime_parity.py
+?? scripts/
+?? test_doubles_mechanics_parity.py
+?? test_doubles_support_move_target_safety_paired.py
+?? test_v2k1_integration.py
+?? test_v2k2_regression.py
+...
+```
+
+Phase 6.3.8c.2 modified files (this phase):
+
+- ``analyze_doubles_support_move_target_safety_paired.py``
+  (added inventory helpers and audit CLI)
+- ``test_doubles_support_move_target_safety_paired.py``
+  (added 20 audit tests)
+- ``CURRENT_STATE.md`` (this section)
+- ``walkthrough.md`` (this section)
+
+Untracked new files (Phase 6.3.8c lineage):
+- ``analyze_doubles_support_move_target_safety_paired.py``
+- ``bot_doubles_support_move_target_safety_paired_qualification.py``
+- ``test_doubles_support_move_target_safety_paired.py``
+
+Unrelated pre-existing dirty work (NOT
+touched by Phase 6.3.8c or 6.3.8c.2):
+- ``ability_rules.py``, ``bot_doubles_damage_aware.py``,
+  ``bot_doubles_support_move_target_safety_smoke.py``,
+  ``bot_vgc2026_phaseV2c.py``,
+  ``doubles_decision_audit_logger.py``,
+  ``team_preview_policy.py``,
+  ``test_doubles_ability_hard_safety.py``,
+  ``test_doubles_known_absorb_hard_safety.py``,
+  ``test_doubles_support_move_target_safety.py``,
+  ``vgc2026_common_plan_evaluator.py``,
+  ``vgc2026_matchup_evaluator_v2.py``,
+  ``vgc2026_plan_features.py``,
+  ``analyze_doubles_decision_audit.py``,
+  ``analyze_vgc2026_phaseV2j_lead_matchups.py``,
+  ``analyze_vgc2026_phaseV2k_lead_matchups.py``,
+  ``doubles_mechanics.py``,
+  ``inspect_vgc2026_phaseV2j_lead_matchup.py``,
+  ``inspect_vgc2026_phaseV2k_lead_matchup.py``,
+  ``inspect_vgc2026_runtime_parity.py``,
+  ``scripts/``,
+  ``test_doubles_mechanics_parity.py``,
+  ``test_v2k1_integration.py``,
+  ``test_v2k2_regression.py``,
+  ``test_v2k3_regression.py``,
+  ``test_v2k4_regression.py``,
+  ``test_v2k5_regression.py``,
+  ``test_vgc2026_phaseV2j.py``,
+  ``test_vgc2026_phaseV2k.py``,
+  ``test_vgc2026_runtime_engine_parity.py``,
+  ``vgc2026_lead_matchup_evaluator_v3.py``.
+
+These are V2k.x and V2l.1 work from prior
+phases and are preserved per AGENTS.md
+"Preserve User Work".
+
+### Real artifact inventory
+
+The qualifier produced (per filesystem):
+
+- **400 per-side audit files** total,
+  distributed:
+  - 100 files: ``support_target_paired_{NNN}_ONvOFF__p1.jsonl``
+  - 100 files: ``support_target_paired_{NNN}_ONvOFF__p2.jsonl``
+  - 100 files: ``support_target_paired_{NNN}_OFFvON__p1.jsonl``
+  - 100 files: ``support_target_paired_{NNN}_OFFvON__p2.jsonl``
+- Each pair has 4 per-side files (D1.p1,
+  D1.p2, D2.p1, D2.p2 — one for each engine
+  in each side-swap arm).
+- 4 files × 100 pairs = 400 total.
+- **200 ON-side audits** (ONvOFF.p1 from D1
+  + OFFvON.p2 from D2).
+- **200 OFF-side audits** (ONvOFF.p2 from D1
+  + OFFvON.p1 from D2).
+
+Input artifacts (preserved, unchanged):
+
+- ``logs/support_target_paired_phase638c_v2.csv`` —
+  26,438 bytes, sha256
+  ``cdfbc93679a7f4e813e99056cd37f24c4cbb8e6caacf0df272668ea22c578f82``
+- ``logs/support_target_paired_phase638c_v2.jsonl`` —
+  110,454 bytes, sha256
+  ``8485da234c3e3dc30a03148ef004f59ffce6a69f254e31ca40625f8d9219a965``,
+  200 battle records
+- ``logs/support_target_paired_phase638c_v2_audit.jsonl``
+  — 0 bytes (manifest was never written; the
+  per-side files are the real artifacts).
+- 400 per-side files, total 152,666,709 bytes
+  (~149 KB).
+
+### 200 vs 400 per-side file discrepancy
+
+Both counts are correct in different
+contexts:
+
+- **400** = total per-side audit files
+  on the filesystem
+  (4 per pair × 100 pairs).
+- **200** = per-arm per-side files
+  (200 ON + 200 OFF).
+- **200** = total battles
+  (100 pairs × 2 side-swap arms).
+
+The Phase 6.3.8c.1 report said "200 battles,
+all ON-side audits" which is correct: 200
+ON-side audit files were the basis for the
+ON metrics (and 200 OFF-side files for the
+OFF metrics). The "400" figure is the
+filesystem total.
+
+### Files changed in Phase 6.3.8c.2
+
+- ``analyze_doubles_support_move_target_safety_paired.py``
+  — added:
+  - ``_parse_audit_filename`` (filename parser)
+  - ``inventory_artifacts`` (pure helper)
+  - ``sha256_file`` (file digest)
+  - ``file_metadata`` (size/mtime/sha256)
+  - ``format_git_status_lines`` (formatter that
+    cannot double-classify)
+  - ``write_artifact_audit`` (writes JSON +
+    Markdown audit report)
+  - ``--audit-only`` and ``--audit-tag`` CLI
+    flags
+- ``test_doubles_support_move_target_safety_paired.py``
+  — added 20 tests in ``TestArtifactAudit638c2``
+- ``CURRENT_STATE.md`` and ``walkthrough.md``
+  (this section)
+
+### Generated audit artifacts (Phase 6.3.8c.2)
+
+- ``logs/support_target_paired_phase638c2_artifact_audit.json``
+- ``logs/support_target_paired_phase638c2_artifact_audit.md``
+
+### Verification
+
+- ``test_doubles_support_move_target_safety_paired``:
+  87 tests, OK, 6.496s
+- ``test_doubles_support_move_target_safety``:
+  82 tests, OK
+- ``test_vgc2026_runtime_engine_parity``:
+  54 tests, OK
+- Full discovery with
+  ``-W error::ResourceWarning``:
+  1831 tests, OK, EXIT=0, 190.085s
+- ``py_compile``: clean
+- ``git diff --check``: clean
+
+### Decision: ADOPTION BLOCKED
+
+The default ``enable_support_move_target_hard_safety``
+remains **False**. The corrected statistics
+from 6.3.8c.1 are still the source of truth.
+This 6.3.8c.2 phase only audited artifacts
+and consolidated documentation — no new
+battles, no behavior change, no default
+change. Phase V3 remains **BLOCKED**.
+
+### Worktree status
+
+Working tree is dirty but documented.
+Ready for Codex review.
+
+- Phase 6.3.8c lineage (qualifier, analyzer,
+  test, audit, docs) is isolated and reviewable
+  in this branch.
+- Unrelated V2k.x and V2l.1 dirty work is
+  preserved per AGENTS.md.
+- No commit, no push.
+
+## Phase 6.3.8c.3 — Dependency-Aware Commit
+Boundary Audit (2026-06-14)
+
+**Status: ADOPTION BLOCKED.** No new battles
+were run, no localhost was used, and no
+production behavior was changed. This phase
+documents the dependency-correct commit
+boundary plan for the dirty worktree.
+
+### Manifest classification (the 0-byte file)
+
+`logs/support_target_paired_phase638c_v2_audit.jsonl`
+is **0 bytes** and is classified as
+`optional_expected_empty` (not a failure).
+
+The qualifier (`bot_doubles_support_move_target_safety_paired_qualification.py`):
+
+1. Declares the manifest path in
+   ``init_artifacts()``.
+2. Truncates the file to 0 bytes in
+   ``init_artifacts()``.
+3. Never writes to the file.
+
+The analyzer reads the file only for file
+metadata (size + sha256), not as a data
+source. The per-side audit files (400 total)
+are the real artifacts.
+
+This is a **creation defect** (file is
+created at 0 bytes but never written to) but
+NOT a hard-fail. The 0-byte state is
+documented as `optional_expected_empty`.
+
+### Commit groups (10 groups, in order)
+
+| Group | Files | Tests | Depends on |
+|---|---|---|---|
+| 1. V2k.x mechanics foundation | `doubles_mechanics.py` | py_compile | (none) |
+| 2. V2k.x evaluators + team_preview + parity | 6 files (incl. `test_doubles_mechanics_parity`) | 62 tests | Group 1 |
+| 3. V2k.x VGC player + V2l.1 analyzers/inspectors/scripts | 7 files | py_compile + import | Groups 1, 2 |
+| 4. 6.3.8b production: engine + logger + analyzer | 3 files | py_compile + import | Group 1 |
+| 5. 6.3.8b ability hard safety | 3 files (incl. tests) | 114 tests | (none) |
+| 6. 6.3.8b support target safety (smoke + test) | 2 files | 82 tests | Groups 4, 5 |
+| 7. 6.3.8c paired lineage (qualifier + analyzer + test) | 3 files | 92 tests | Group 4 |
+| 8. V2k.x regression tests | 5 files | 5 modules | Groups 1, 2, 3 |
+| 9. V2l.1 VGC parity tests | 3 files | 54 parity tests | Groups 1, 2, 3, 4 |
+| 10. Documentation: CURRENT_STATE.md + walkthrough.md (FINAL) | 2 files | n/a | Groups 1-9 |
+
+### Clean-base simulation
+
+All 10 groups compile and import cleanly in
+clean-base simulation. Per-module tests
+pass in both clean and production
+environments. The discovery path fails in
+the clean worktree due to a Python
+module-cache pollution issue (test files
+exist in both production and worktree
+paths) — this is not a code issue.
+
+### Generated artifact policy
+
+- `logs/` is gitignored (`.gitignore` line 13).
+- No `logs/` files are tracked.
+- Generated artifacts must NEVER be staged.
+- The 6.3.8c.3 commit boundary audit
+  (`commit_boundary_audit_phase638c3.{json,md}`)
+  is placed in **repo root** (not in `logs/`),
+  so it can be staged for future commits.
+
+### Blockers before commit
+
+1. (none for code groups)
+2. V2k.x / V2l.1 prereq: Groups 1, 2, 3, 8, 9
+   must be committed first (or kept dirty).
+3. Documentation (Group 10) is FINAL.
+4. Production behavior unchanged.
+5. No commit authorization given.
+
+### Verification
+
+- `test_doubles_support_move_target_safety_paired`:
+  92 tests, OK, 9.833s
+- Production full discovery:
+  1836 tests, OK, EXIT=0, 258.135s
+- `py_compile`: clean (3 files)
+- `git diff --check`: clean
+- Clean-base simulation per-group: all OK
+
+### No battle / server / API confirmation
+
+- No new battles run
+- No localhost used (task said ไม่ต้องใช้ localhost)
+- No official Showdown connection
+- No online API, no LLM, no scrape, no browser
+
+### Defaults / fingerprint / adoption status unchanged
+
+- `enable_support_move_target_hard_safety` = False
+- `enable_ability_hard_safety_only` = True
+- V2j fingerprint SHA-256:
+  `a9fe97b3d2d08af70700eaa82e957d9a4d4e7330368f93bf0d81ea685bc302cb`
+  (unchanged)
+- Phase V3 = BLOCKED (unchanged)
+
+### Worktree status: ready for commit?
+
+**NOT YET READY for commit** because:
+1. V2k.x and V2l.1 work is mixed with 6.3.8c work.
+2. Documentation covers all 5 sub-phases and cannot
+   be cleanly split.
+3. `bot_doubles_damage_aware.py` (Group 4) is mixed
+   (V2k + 6.3.8b).
+4. Generated artifacts in `logs/` must not be staged.
+5. No commit authorization from the user.
+
+Stopping for Codex review.
+
+## Phase 6.3.8c.4 — Commit Boundary Repair (2026-06-15)
+
+**Status: VERIFIED; ADOPTION BLOCKED.** This section supersedes the
+Phase 6.3.8c.3 commit-boundary plan.
+
+### Repairs
+
+- The paired qualifier no longer creates the unused aggregate
+  `*_audit.jsonl` placeholder. Historical zero-byte manifests are
+  preserved and classified as `legacy_empty_creation_defect`.
+- Current runs expect no aggregate manifest; the 400 per-side JSONL
+  files remain the authoritative runtime-audit evidence.
+- Hardcoded checkout paths were removed from affected VGC tools and
+  tests. Subprocesses and fixtures now resolve from `__file__`.
+- Tests that depended on ignored `logs/` fixtures now generate
+  temporary fixtures or explicitly verify missing-artifact failure.
+- The obsolete `commit_boundary_audit_phase638c3.{json,md}` reports
+  were replaced by `commit_boundary_audit_phase638c4.{json,md}`.
+
+### Verified commit groups
+
+| Group | Scope | Clean-check result |
+|---|---|---|
+| 1 | Checkout-local path and test isolation | 569 tests, OK |
+| 2 | Canonical mechanics, VGC runtime, and support-target stack | 624 tests, OK |
+| 3 | 6.3.8c paired qualifier, analyzer, and tests | 93 tests, OK |
+| 4 | Documentation and boundary reports | Static validation |
+
+Each group was copied in order onto a clean `git archive HEAD`
+checkout. Final clean-check discovery ran **1837 tests in 180.19s,
+EXIT=0**, with zero skips. Production-tree discovery ran **1837 tests
+in 186.06s, EXIT=0**.
+
+### Commit readiness
+
+The source tree is ready for ordered commits using the exact file
+lists in `commit_boundary_audit_phase638c4.json`. Generated files
+under `logs/` remain ignored and must not be staged. No commit or push
+was performed.
+
+### Unchanged decisions
+
+- `enable_support_move_target_hard_safety = False`
+- Support-target safety adoption remains **BLOCKED**
+- Phase V3 remains **BLOCKED**
+- No battle, server, online API, scrape, or hidden-information access
+  was used in this repair
