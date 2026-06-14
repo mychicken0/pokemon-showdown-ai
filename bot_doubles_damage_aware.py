@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from poke_env import AccountConfiguration
 from poke_env.battle.abstract_battle import AbstractBattle
@@ -20,6 +20,7 @@ from poke_env.player.battle_order import (
 )
 
 import ability_rules
+import doubles_mechanics as _dm
 import meta_model
 import random_set_model
 from doubles_battle_logger import DoublesBattleLogger
@@ -586,6 +587,7 @@ def build_support_target_candidate_table(
             {
                 "move_id": move_id,
                 "attacker_species": attacker_species,
+                "slot": slot_idx,
                 "target_position": target_pos,
                 "target_side": target_info.get("side", "unknown"),
                 "target_species": target_info.get("target_species", ""),
@@ -1620,78 +1622,58 @@ def resolve_effective_move_type(move, attacker=None, battle=None) -> dict:
     """Resolve the effective move type accounting for dynamic form changes.
 
     Returns dict with: declared_type, effective_type, source, dynamic_applied,
-    observed_form. Uses attacker observable species - never turn parity.
+    observed_form, information_explicitly_visible. Uses the
+    ``doubles_mechanics`` shared layer; the production form
+    tracker (``get_observed_form``) and the attacker's
+    species string are forwarded to the shared module so the
+    Aura Wheel / Morpeko logic is identical between battle
+    callers and preview callers.
     """
-    result = {
-        "declared_type": "",
-        "effective_type": "",
-        "source": "static",
-        "dynamic_applied": False,
-        "observed_form": "",
-    }
-
-    declared = _get_declared_move_type(move)
-    result["declared_type"] = declared
-
-    if not declared:
-        return result
-
-    move_id = ""
+    observed = None
+    species_form = None
     if move is not None:
+        move_id = ""
         if hasattr(move, "id") and move.id:
-            move_id = move.id.lower().replace(" ", "").replace("-", "").replace("_", "")
+            move_id = _dm.normalize_id(move.id)
         elif isinstance(move, str):
-            move_id = move.lower().replace(" ", "").replace("-", "").replace("_", "")
-
-    if move_id in DYNAMIC_TYPE_MOVES and attacker:
-        config = DYNAMIC_TYPE_MOVES[move_id]
-        attacker_base = config["attacker_base_species"]
-        form_map = config["form_map"]
-
-        # Priority 1: Protocol-observed form from form tracker
-        observed = get_observed_form(battle, attacker)
-        if observed and observed in form_map:
-            result["effective_type"] = form_map[observed]
-            result["source"] = f"protocol_formechange:{observed}"
-            result["dynamic_applied"] = True
-            result["observed_form"] = observed
-            return result
-
-        # Priority 2: Attacker species (set by next request after forme_change)
-        attacker_species = getattr(attacker, "species", "")
-        if attacker_species and attacker_base in attacker_species.lower().replace(
-            "-", ""
-        ).replace("_", ""):
-            form_key = (
-                attacker_species.lower().replace("-", "").replace("_", "").strip()
-            )
-            if form_key in form_map:
-                result["effective_type"] = form_map[form_key]
-                result["source"] = f"species:{form_key}"
-                result["dynamic_applied"] = True
-                result["observed_form"] = attacker_species
-                return result
-
-    result["effective_type"] = declared
-    return result
+            move_id = _dm.normalize_id(move)
+        if move_id in _dm.DYNAMIC_TYPE_MOVES and attacker:
+            observed = get_observed_form(battle, attacker)
+            species_form = getattr(attacker, "species", "") or None
+    shared = _dm.resolve_effective_move_type(
+        move, attacker,
+        observed_form=observed,
+        species_form=species_form,
+    )
+    return {
+        "declared_type": shared.declared_type,
+        "effective_type": shared.effective_type,
+        "source": shared.source,
+        "dynamic_applied": shared.dynamic_applied,
+        "observed_form": shared.observed_form,
+        "information_explicitly_visible": (
+            shared.information_explicitly_visible
+        ),
+    }
 
 
 def _get_declared_move_type(move) -> str:
-    """Extract declared move.type as uppercase string."""
-    if move is None:
-        return ""
-    move_type = getattr(move, "type", None)
-    if move_type is not None:
-        if hasattr(move_type, "name"):
-            return move_type.name.upper()
-        return str(move_type).upper()
-    if isinstance(move, str):
-        return move.upper()
-    return ""
+    """Extract declared move.type as uppercase string.
+
+    Delegates to ``doubles_mechanics`` to keep the canonical
+    declared-type extraction in one place.
+    """
+    return _dm._get_declared_move_type(move)
 
 
 def get_effective_move_type(move, attacker=None, battle=None) -> str:
-    """Compatibility wrapper: return effective type string."""
+    """Compatibility wrapper: return effective type string.
+
+    Delegates to the shared module. The production
+    ``resolve_effective_move_type`` is the authoritative
+    implementation; this thin façade exists only because many
+    call sites already import the string-returning variant.
+    """
     return resolve_effective_move_type(move, attacker, battle)["effective_type"]
 
 
@@ -1798,7 +1780,8 @@ def ability_hard_blocks_move(
     if not target or not move:
         return False, ""
     try:
-        # Use resolve_known_ability to get ability (supports singleton deduction)
+        # Use resolve_known_ability to get ability (supports
+        # singleton deduction).
         resolution = resolve_known_ability(target, battle, config)
         t_ability = resolution["ability"]
         if not t_ability:
@@ -1807,105 +1790,31 @@ def ability_hard_blocks_move(
         if attacker_ignores_target_ability(attacker, battle):
             return False, ""
 
-        move_id = getattr(move, "id", "").lower()
+        move_id = _extract_move_id(move)
         m_type = get_effective_move_type(move, attacker, battle)
 
-        flags = getattr(move, "flags", {})
+        attacker_ability = _extract_ability(attacker)
 
-        # 1. Levitate:
-        if t_ability == "levitate" and m_type == "GROUND":
-            is_grounded = False
-            if is_gravity_active(battle):
-                is_grounded = True
-            elif move_id == "thousandarrows":
-                is_grounded = True
-            else:
-                # Check Smack Down in battle fields (for unit tests)
-                if battle:
-                    for field in getattr(battle, "fields", {}) or {}:
-                        field_name = getattr(field, "name", str(field))
-                        if _normalize_ability_name(field_name) == "smackdown":
-                            is_grounded = True
-                            break
-                # Also check volatile status on target
-                if not is_grounded and target:
-                    for attr in ("effects", "status", "volatiles"):
-                        val = getattr(target, attr, None)
-                        if val:
-                            if isinstance(val, dict):
-                                if any(
-                                    "smackdown" in str(k).lower() for k in val.keys()
-                                ):
-                                    is_grounded = True
-                                    break
-                            elif isinstance(val, (list, tuple, set)):
-                                if any(
-                                    "smackdown" in str(item).lower() for item in val
-                                ):
-                                    is_grounded = True
-                                    break
-                            elif "smackdown" in str(val).lower():
-                                is_grounded = True
-                                break
-            if is_grounded:
-                return False, ""
-            return True, "ground_into_levitate"
+        # Grounded state is owned by the shared module so
+        # the bot wrapper does not duplicate the rules for
+        # Thousand Arrows, Gravity, Smack Down, and Ingrain.
+        grounded = _dm.resolve_extra_grounded(
+            move, target, battle=battle, move_id=move_id,
+        )
 
-        # 2. Earth Eater: Ground immunity
-        if t_ability == "eartheater" and m_type == "GROUND":
-            return True, "ground_into_eartheater"
-
-        # 3. Water Absorb: Water immunity
-        if t_ability == "waterabsorb" and m_type == "WATER":
-            return True, "water_into_waterabsorb"
-
-        # 4. Storm Drain: Water immunity
-        if t_ability == "stormdrain" and m_type == "WATER":
-            return True, "water_into_stormdrain"
-
-        # 5. Dry Skin: Water immunity
-        if t_ability == "dryskin" and m_type == "WATER":
-            return True, "water_into_dryskin"
-
-        # 6. Volt Absorb: Electric immunity
-        if t_ability == "voltabsorb" and m_type == "ELECTRIC":
-            return True, "electric_into_voltabsorb"
-
-        # 7. Motor Drive: Electric immunity
-        if t_ability == "motordrive" and m_type == "ELECTRIC":
-            return True, "electric_into_motordrive"
-
-        # 8. Lightning Rod: Electric immunity
-        if t_ability == "lightningrod" and m_type == "ELECTRIC":
-            return True, "electric_into_lightningrod"
-
-        # 9. Flash Fire: Fire immunity
-        if t_ability == "flashfire" and m_type == "FIRE":
-            return True, "fire_into_flashfire"
-
-        # 10. Well-Baked Body: Fire immunity
-        if t_ability == "wellbakedbody" and m_type == "FIRE":
-            return True, "fire_into_wellbakedbody"
-
-        # 11. Sap Sipper: Grass immunity
-        if t_ability == "sapsipper" and m_type == "GRASS":
-            return True, "grass_into_sapsipper"
-
-        # Optional blocks
-        if t_ability == "soundproof" and "sound" in flags:
-            return True, "sound_into_soundproof"
-        if t_ability == "bulletproof" and "bullet" in flags:
-            return True, "bullet_into_bulletproof"
-        if t_ability == "damp" and move_id in (
-            "explosion",
-            "selfdestruct",
-            "mindblown",
-            "mistyexplosion",
-        ):
-            return True, "explosion_into_damp"
-
+        result = _dm.resolve_explicit_ability_interaction(
+            move, attacker, target,
+            target_ability=t_ability,
+            attacker_ability=attacker_ability,
+            move_id=move_id,
+            move_type=m_type,
+            extra_grounded=grounded,
+            defender_types=_extract_target_types(target),
+        )
+        if result.is_immune and not result.bypassed:
+            return True, result.reason
     except Exception:
-        pass
+        return False, ""
     return False, ""
 
 
@@ -2062,6 +1971,103 @@ def _order_action_key(order) -> tuple:
         elif hasattr(inner, "species"):
             return ("switch", inner.species, 0)
     return ("unknown", str(order) if order is not None else "", 0)
+
+
+def _legal_action_keys_for_slot(
+    valid_orders, slot_idx: int
+) -> list:
+    """V2l.1 — return a list of ``_order_action_key``
+    tuples for one slot of ``valid_orders``.
+
+    This is a tiny pure helper. The canonical
+    ``choose_move`` calls it so the audit logger
+    records the legal action keys for parity tests.
+    """
+    if not valid_orders or slot_idx >= len(valid_orders):
+        return []
+    out = []
+    for order in valid_orders[slot_idx] or []:
+        try:
+            out.append(_order_action_key(order))
+        except Exception:
+            continue
+    return out
+
+
+def _raw_score_map_for_slot(
+    slot_scores: dict, valid_orders, slot_idx: int
+) -> dict:
+    """V2l.1 — return a JSON-serializable raw score
+    map for one slot. Keys are action-key tuples
+    (canonical) and values are raw float scores
+    produced by ``score_action`` BEFORE any
+    runtime-specific metadata.
+    """
+    if not valid_orders or slot_idx >= len(valid_orders):
+        return {}
+    out = {}
+    for order in valid_orders[slot_idx] or []:
+        try:
+            key = _order_action_key(order)
+            out[key] = float(
+                slot_scores.get(id(order), 0.0) or 0.0
+            )
+        except Exception:
+            continue
+    return out
+
+
+def _safety_block_map_for_slot(
+    safety_blocked: dict, valid_orders, slot_idx: int
+) -> dict:
+    """V2l.1 — return a JSON-serializable safety block
+    map for one slot. Keys are action-key tuples and
+    values are bool. Built from the id-keyed
+    ``safety_blocked`` dict produced by
+    ``_compute_order_safety_blocks``.
+    """
+    if not valid_orders or slot_idx >= len(valid_orders):
+        return {}
+    out = {}
+    for order in valid_orders[slot_idx] or []:
+        try:
+            key = _order_action_key(order)
+            out[key] = bool(safety_blocked.get(id(order), False))
+        except Exception:
+            continue
+    return out
+
+
+def _final_action_keys_from_joint(
+    joint_order, slot_0_action: int = 0, slot_1_action: int = 1
+) -> list:
+    """V2l.1 — return the two final per-slot action
+    keys for a joint order. The list is index-aligned
+    with the slot order: [slot_0_key, slot_1_key].
+    """
+    if joint_order is None:
+        return [("none", "", 0), ("none", "", 0)]
+    first = getattr(joint_order, "first_order", None)
+    second = getattr(joint_order, "second_order", None)
+    return [
+        _order_action_key(first),
+        _order_action_key(second),
+    ]
+
+
+def _selected_joint_key(joint_order) -> tuple:
+    """V2l.1 — return a stable, JSON-serializable key
+    for the selected joint order. The key is the pair
+    of per-slot action keys.
+    """
+    if joint_order is None:
+        return (("none", "", 0), ("none", "", 0))
+    first = getattr(joint_order, "first_order", None)
+    second = getattr(joint_order, "second_order", None)
+    return (
+        _order_action_key(first),
+        _order_action_key(second),
+    )
 
 
 def classify_only_legal(
@@ -2520,151 +2526,146 @@ def is_alternative_safe_damaging(
 
 
 def is_type_immune(move, attacker, target, battle=None) -> tuple[bool, str]:
+    """Return ``(is_immune, reason)`` for a move against a target.
+
+    Behaviour-preserving wrapper over the shared
+    ``doubles_mechanics.resolve_type_immunity`` helper.
+    The reason string format
+    ``"[Mechanics] type immunity: <type> vs <defender types> -> score 0"``
+    is kept identical so the existing audit-field consumers
+    and tests do not need to change.
+
+    The wrapper:
+
+    1. Extracts the target type list and attacker ability
+       from the poke-env objects.
+    2. Lets the shared module resolve the effective move
+       type, the type-chart lookup, the typed-ability block,
+       and the Scrappy / Mind's Eye / Mold Breaker /
+       Thousand Arrows / Gravity / Smack Down exceptions.
+
+    The wrapper does NOT contain any immunity table or
+    exception formula.
+    """
     try:
-        # 1. Normalize move type -- use effective type for dynamic moves like Aura Wheel
         m_type = get_effective_move_type(move, attacker, battle)
         if not m_type:
             return False, ""
 
-        # 2. Normalize target types
-        t_types = []
-        if target is not None:
-            if hasattr(target, "types") and target.types:
-                for t in target.types:
-                    if t:
-                        if hasattr(t, "name"):
-                            t_types.append(t.name.upper().strip())
-                        elif isinstance(t, str):
-                            t_types.append(t.upper().strip())
-                        else:
-                            t_types.append(str(t).upper().strip())
-            else:
-                if hasattr(target, "type_1") and target.type_1:
-                    t_1 = target.type_1
-                    t_1_str = t_1.name if hasattr(t_1, "name") else str(t_1)
-                    t_types.append(t_1_str.upper().strip())
-                if hasattr(target, "type_2") and target.type_2:
-                    t_2 = target.type_2
-                    t_2_str = t_2.name if hasattr(t_2, "name") else str(t_2)
-                    t_types.append(t_2_str.upper().strip())
-
+        t_types = _extract_target_types(target)
         if not t_types:
             return False, ""
 
-        # 3. Normalize attacker ability
-        a_ability = None
-        if attacker is not None:
-            if hasattr(attacker, "ability") and attacker.ability:
-                a_ability = attacker.ability
-                if hasattr(a_ability, "name"):
-                    a_ability = a_ability.name
-            elif isinstance(attacker, str):
-                a_ability = attacker
+        a_ability_norm = _extract_ability(attacker)
+        t_ability_norm = _extract_ability(target)
 
-            if isinstance(a_ability, str):
-                a_ability = (
-                    a_ability.lower()
-                    .replace(" ", "")
-                    .replace("-", "")
-                    .replace("_", "")
-                    .strip()
-                )
+        move_id = _extract_move_id(move)
 
-        # 4. Check exceptions
-        # Move ID exceptions
-        move_id = ""
-        if move is not None:
-            if hasattr(move, "id") and move.id:
-                move_id = (
-                    move.id.lower()
-                    .replace(" ", "")
-                    .replace("-", "")
-                    .replace("_", "")
-                    .strip()
-                )
-            elif isinstance(move, str):
-                move_id = (
-                    move.lower()
-                    .replace(" ", "")
-                    .replace("-", "")
-                    .replace("_", "")
-                    .strip()
-                )
+        # Grounded state (Thousand Arrows / Gravity / Smack
+        # Down / Ingrain) is owned by the shared module.
+        grounded = _dm.resolve_extra_grounded(
+            move, target, battle=battle, move_id=move_id,
+        )
+        # Mind's Eye / Scrappy bypass is also owned by the
+        # shared module.
 
-        # Exception 1: Thousand Arrows can hit Flying targets.
-        if move_id == "thousandarrows" and m_type == "GROUND" and "FLYING" in t_types:
+        # Call the shared helper. The helper's reason
+        # string is the canonical type-immunity reason.
+        is_immune, shared_reason = _dm.resolve_type_immunity(
+            move=move,
+            attacker=attacker,
+            target=target,
+            attacker_ability=a_ability_norm,
+            target_ability=t_ability_norm,
+            target_grounded=grounded,
+            move_type=m_type,
+            move_id=move_id,
+        )
+        if not is_immune:
             return False, ""
-
-        # Exception 2: Scrappy / Mind's Eye allow Normal and Fighting to hit Ghost.
-        if (
-            a_ability in ("scrappy", "mindseye")
-            and m_type in ("NORMAL", "FIGHTING")
-            and "GHOST" in t_types
-        ):
-            return False, ""
-
-        # Exception 3: Gravity allows Ground moves to hit Flying targets.
-        if battle and hasattr(battle, "fields") and battle.fields:
-            has_gravity = False
-            for f in battle.fields:
-                f_str = f.name.lower() if hasattr(f, "name") else str(f).lower()
-                if "gravity" in f_str:
-                    has_gravity = True
-                    break
-            if has_gravity and m_type == "GROUND" and "FLYING" in t_types:
-                return False, ""
-
-        # 5. Method 1: Use poke-env / target type effectiveness method if available and reliable
-        if hasattr(target, "damage_multiplier"):
-            try:
-                mult = None
-                if hasattr(move, "type"):
-                    mult = target.damage_multiplier(move)
-                else:
-                    from poke_env.battle.pokemon_type import PokemonType
-
-                    try:
-                        p_type = PokemonType[m_type]
-                        mult = target.damage_multiplier(p_type)
-                    except Exception:
-                        pass
-
-                if mult is not None:
-                    if mult == 0.0:
-                        return (
-                            True,
-                            f"[Mechanics] type immunity: {m_type} vs {', '.join(t_types)} -> score 0",
-                        )
-                    else:
-                        return False, ""
-            except Exception:
-                pass
-
-        # 6. Fallback Method: Hard-coded fallback table
-        IMMUNITY_TABLE = {
-            "NORMAL": {"GHOST"},
-            "FIGHTING": {"GHOST"},
-            "GHOST": {"NORMAL"},
-            "GROUND": {"FLYING"},
-            "ELECTRIC": {"GROUND"},
-            "PSYCHIC": {"DARK"},
-            "POISON": {"STEEL"},
-            "DRAGON": {"FAIRY"},
-        }
-
-        if m_type in IMMUNITY_TABLE:
-            immune_targets = IMMUNITY_TABLE[m_type]
-            for t_type in t_types:
-                if t_type in immune_targets:
-                    return (
-                        True,
-                        f"[Mechanics] type immunity: {m_type} vs {t_type} -> score 0",
-                    )
-
-        return False, ""
-
+        # Preserve the legacy reason string format.
+        if shared_reason and shared_reason.startswith("type_immunity:"):
+            # Re-format for legacy audit compatibility.
+            types_str = ", ".join(t_types)
+            return (
+                True,
+                f"[Mechanics] type immunity: {m_type} vs "
+                f"{types_str} -> score 0",
+            )
+        if shared_reason:
+            return True, shared_reason
+        return (
+            True,
+            f"[Mechanics] type immunity: {m_type} vs "
+            f"{', '.join(t_types)} -> score 0",
+        )
     except Exception:
         return False, ""
+
+
+def _extract_target_types(target: Any) -> List[str]:
+    """Extract upper-case defender type list from a poke-env
+    target object. Shared with the V2k.1 bot wrappers; the
+    shared ``doubles_mechanics`` module owns a parallel
+    helper but the bot's poke-env adapter stays here to
+    avoid an import cycle.
+    """
+    if target is None:
+        return []
+    out: List[str] = []
+    types_attr = getattr(target, "types", None)
+    if types_attr:
+        for t in types_attr:
+            if t is None:
+                continue
+            if hasattr(t, "name"):
+                out.append(str(t.name).upper().strip())
+            elif isinstance(t, str):
+                out.append(t.upper().strip())
+            else:
+                out.append(str(t).upper().strip())
+        if out:
+            return out
+    for attr in ("type_1", "type_2"):
+        v = getattr(target, attr, None)
+        if v is None:
+            continue
+        v_str = v.name if hasattr(v, "name") else str(v)
+        if v_str:
+            out.append(v_str.upper().strip())
+    return out
+
+
+def _extract_ability(pokemon: Any) -> Optional[str]:
+    """Extract a normalized ability string from a poke-env
+    object. ``None`` if the ability is unknown or empty.
+    """
+    if pokemon is None:
+        return None
+    raw = getattr(pokemon, "ability", None)
+    if raw is None:
+        return None
+    if hasattr(raw, "name"):
+        raw = raw.name
+    if not isinstance(raw, str):
+        return None
+    if not raw.strip():
+        return None
+    return raw.strip()
+
+
+def _extract_move_id(move: Any) -> str:
+    """Extract a normalized move id from a poke-env move or
+    string. Empty string if the move is unknown.
+    """
+    if move is None:
+        return ""
+    raw_id = getattr(move, "id", "")
+    if isinstance(raw_id, str) and raw_id:
+        return _dm.normalize_id(raw_id)
+    if isinstance(move, str):
+        return _dm.normalize_id(move)
+    return ""
 
 
 def get_self_stat_drop_penalty(
@@ -4510,6 +4511,44 @@ class DoublesDamageAwarePlayer(Player):
         self.verbose = verbose
         self.custom_logger = logger
         self.audit_logger = audit_logger
+        # V2l — runtime mode boundary. The canonical
+        # engine defaults to ``"random_doubles"``.
+        # Subclasses (e.g. the VGC runtime) override
+        # this in their ``__init__`` via
+        # ``self._runtime_mode = "vgc_selected_four"``.
+        # The audit logger reads this for every turn's
+        # record so the parity inspector can prove
+        # which runtime mode was active. The base
+        # class sets the boundary in ``__init__``
+        # BEFORE the ``config`` setter is invoked, so
+        # the setter does not overwrite the runtime
+        # mode after the subclass sets it.
+        self._runtime_mode = "random_doubles"
+        self._concrete_player_class = type(self).__name__
+        self._selected_four = None
+        self._lead_2 = None
+        self._back_2 = None
+        self._preview_policy = None
+        # V2l.1 — execution-derived invocation marker.
+        # Each call to ``choose_move`` writes a fresh
+        # invocation id and clears the per-turn scoring
+        # snapshot. The audit logger reads these fields
+        # so ``shared_engine_used`` is a real
+        # execution-derived bit, NOT a hardcoded value.
+        self._v2l1_invocation_id = None
+        self._v2l1_invocation_count = 0
+        self._v2l1_invocation_status = "idle"
+        self._v2l1_legal_keys_slot0 = []
+        self._v2l1_legal_keys_slot1 = []
+        self._v2l1_raw_scores_slot0 = {}
+        self._v2l1_raw_scores_slot1 = {}
+        self._v2l1_safety_blocks_slot0 = {}
+        self._v2l1_safety_blocks_slot1 = {}
+        self._v2l1_selected_joint_key = None
+        self._v2l1_final_keys = []
+        # ``self.config = ...`` MUST come after the
+        # V2l attribute initialization, otherwise the
+        # config setter would overwrite them.
         self.config = config or DoublesDamageAwareConfig()
         self._active_config_override = None
 
@@ -8855,6 +8894,32 @@ class DoublesDamageAwarePlayer(Player):
         if not isinstance(battle, DoubleBattle):
             return self.choose_random_move(battle)
 
+        # V2l.1 — execution-derived invocation marker.
+        # The canonical engine writes a fresh, non-empty
+        # invocation id on entry. The id is preserved
+        # through every turn's audit record so the
+        # inspector can prove that ``shared_engine_used``
+        # came from a real ``choose_move`` execution and
+        # not from a hardcoded test fixture.
+        # ``__new__``-based test fixtures may not have
+        # these attributes; use ``getattr`` defaults so
+        # the canonical engine never breaks existing
+        # test fixtures.
+        _v2l1_count = getattr(self, "_v2l1_invocation_count", 0)
+        self._v2l1_invocation_id = f"v2l1-{id(self)}-{_v2l1_count}"
+        self._v2l1_invocation_count = _v2l1_count + 1
+        self._v2l1_invocation_status = "started"
+        # Clear the per-turn snapshot on entry so a
+        # failed choose_move does not leak prior state.
+        self._v2l1_legal_keys_slot0 = []
+        self._v2l1_legal_keys_slot1 = []
+        self._v2l1_raw_scores_slot0 = {}
+        self._v2l1_raw_scores_slot1 = {}
+        self._v2l1_safety_blocks_slot0 = {}
+        self._v2l1_safety_blocks_slot1 = {}
+        self._v2l1_selected_joint_key = None
+        self._v2l1_final_keys = []
+
         # Phase 6.3.7f: Scan replay for form change events before scoring
         _scan_replay_for_form_changes(battle)
 
@@ -9071,6 +9136,28 @@ class DoublesDamageAwarePlayer(Player):
 
         self._current_valid_orders = battle.valid_orders
         valid_orders = self._current_valid_orders
+        # V2l.1 — capture per-slot legal action keys.
+        # The canonical engine uses ``_order_action_key``
+        # (id-keyed tuple) for canonical comparison. We
+        # materialize the legal action keys per slot so
+        # the audit logger can prove which actions were
+        # considered without storing non-serializable
+        # ``BattleOrder`` objects.
+        try:
+            from poke_env.player.battle_order import (
+                DoubleBattleOrder,
+            )
+            self._v2l1_legal_keys_slot0 = (
+                _legal_action_keys_for_slot(valid_orders, 0)
+            )
+            self._v2l1_legal_keys_slot1 = (
+                _legal_action_keys_for_slot(valid_orders, 1)
+            )
+        except Exception:
+            # Defensive: legal-keys capture must never
+            # break the canonical engine.
+            self._v2l1_legal_keys_slot0 = []
+            self._v2l1_legal_keys_slot1 = []
         if _timing_enabled:
             _t_valid_order = (time.time() - _t_start) * 1000
         if not valid_orders or (not valid_orders[0] and not valid_orders[1]):
@@ -11256,6 +11343,11 @@ class DoublesDamageAwarePlayer(Player):
                 second_score=best_score_2,
             )
 
+        # A completed marker is written only after the
+        # canonical engine has selected a final joint
+        # order. Entry alone is not sufficient proof.
+        self._v2l1_invocation_status = "completed"
+
         # Collect decision audit data if audit_logger is present
         if self.audit_logger:
             # 1. overkill penalty triggered
@@ -12840,7 +12932,8 @@ class DoublesDamageAwarePlayer(Player):
             )
             self._stale_target_reason[battle_tag] = stale_target_reason
 
-            # Phase 6.3.8a: Build support target candidate table from valid orders
+            # Phase 6.3.8b — Build support target candidate
+            # table from valid orders
             _support_target_candidates = []
             for si in (0, 1):
                 orders_slot = (
@@ -12868,6 +12961,181 @@ class DoublesDamageAwarePlayer(Player):
                     ):
                         row["selected"] = True
                 _support_target_candidates.extend(slot_candidates)
+
+            # Phase 6.3.8b — Compute per-slot support
+            # target audit summary. The full candidate
+            # table is written to the audit log; these
+            # mirrored per-slot fields let the inspector
+            # and per-slot counters read them without
+            # iterating the list.
+            _sup_blocked = [False, False]
+            _sup_selected = [False, False]
+            _sup_avoided = [False, False]
+            _sup_only_legal = [False, False]
+            _sup_move_id = [None, None]
+            _sup_intended_side = [None, None]
+            _sup_actual_side = [None, None]
+            _sup_target_position = [None, None]
+            _sup_target_species = [None, None]
+            _sup_block_reason = [None, None]
+            _sup_classification_source = [None, None]
+            _sup_blocked_candidate_score = [None, None]
+            _sup_safe_alt_kind = [None, None]
+            _sup_safe_alt_move_id = [None, None]
+            _sup_safe_alt_target_position = [None, None]
+            _sup_wrong_side_selected = [False, False]
+            for _si in (0, 1):
+                _si_candidates = [
+                    c for c in _support_target_candidates
+                    if c.get("slot") == _si
+                ]
+                if _si_candidates:
+                    _sup_blocked[_si] = any(
+                        c.get("blocked")
+                        for c in _si_candidates
+                    )
+                    _sup_avoided[_si] = (
+                        _sup_blocked[_si]
+                        and not any(
+                            c.get("selected") and c.get("blocked")
+                            for c in _si_candidates
+                        )
+                    )
+                    _sup_only_legal[_si] = (
+                        _sup_blocked[_si]
+                        and all(
+                            c.get("blocked")
+                            for c in _si_candidates
+                            if c.get("intended_side")
+                            in ("ally", "opponent")
+                        )
+                    )
+                    _sel_row = next(
+                        (c for c in _si_candidates if c.get("selected")),
+                        None,
+                    )
+                    if _sel_row:
+                        # ``support_target_selected`` means
+                        # "wrong-side selected" (the
+                        # selected support candidate was
+                        # blocked). This is the
+                        # ``candidate_blocked == selected +
+                        # avoided`` invariant. A correct
+                        # support selection (intended
+                        # matches actual, not blocked)
+                        # is NOT counted as
+                        # ``support_target_selected``.
+                        if _sel_row.get("blocked"):
+                            _sup_selected[_si] = True
+                            _sup_move_id[_si] = _sel_row.get("move_id")
+                            _sup_intended_side[_si] = _sel_row.get(
+                                "intended_side"
+                            )
+                            _sup_actual_side[_si] = _sel_row.get(
+                                "target_side"
+                            )
+                            _sup_target_position[_si] = _sel_row.get(
+                                "target_position"
+                            )
+                            _sup_target_species[_si] = _sel_row.get(
+                                "target_species"
+                            )
+                            _sup_block_reason[_si] = _sel_row.get(
+                                "block_reason"
+                            )
+                            _sup_classification_source[_si] = _sel_row.get(
+                                "classification_source"
+                            )
+                            if (
+                                _sel_row.get("intended_side")
+                                in ("ally", "opponent")
+                            ):
+                                _sup_blocked_candidate_score[_si] = (
+                                    float(
+                                        self.config
+                                        .support_move_wrong_side_block_score
+                                    )
+                                )
+                        else:
+                            # The selected support
+                            # candidate is a CORRECT
+                            # selection (not blocked).
+                            # We still record the move
+                            # metadata for the audit
+                            # but mark _sup_selected as
+                            # False to preserve the
+                            # invariant.
+                            _sup_move_id[_si] = _sel_row.get("move_id")
+                            _sup_intended_side[_si] = _sel_row.get(
+                                "intended_side"
+                            )
+                            _sup_actual_side[_si] = _sel_row.get(
+                                "target_side"
+                            )
+                            _sup_target_position[_si] = _sel_row.get(
+                                "target_position"
+                            )
+                            _sup_target_species[_si] = _sel_row.get(
+                                "target_species"
+                            )
+                            _sup_classification_source[_si] = _sel_row.get(
+                                "classification_source"
+                            )
+                        # Wrong-side: selected AND blocked
+                        # AND the actual side does not match
+                        # the intended side. The
+                        # ``_sup_selected`` flag was already
+                        # set above; we additionally mark
+                        # ``_sup_wrong_side_selected`` to
+                        # distinguish the actual wrong-side
+                        # case (the auditor cares about
+                        # wrong-side specifically).
+                        if _sel_row.get("blocked") and (
+                            (
+                                _sel_row.get("intended_side")
+                                == "opponent"
+                                and _sel_row.get("target_side")
+                                in ("ally", "self")
+                            )
+                            or (
+                                _sel_row.get("intended_side")
+                                == "ally"
+                                and _sel_row.get("target_side")
+                                in ("opponent", "self")
+                            )
+                            or (
+                                _sel_row.get("intended_side")
+                                == "self"
+                                and _sel_row.get("target_side")
+                                != "self"
+                            )
+                        ):
+                            _sup_wrong_side_selected[_si] = True
+                    # Safe alternative: if a blocked
+                    # candidate was selected (only-legal),
+                    # record the best safe alternative.
+                    if _sup_only_legal[_si]:
+                        # Find an unblocked candidate in
+                        # the slot. Prefer the first
+                        # unblocked candidate with the same
+                        # move_id (or any unblocked).
+                        _alt = next(
+                            (
+                                c for c in _si_candidates
+                                if not c.get("blocked")
+                            ),
+                            None,
+                        )
+                        if _alt:
+                            _sup_safe_alt_kind[_si] = (
+                                "alternative_in_same_slot"
+                            )
+                            _sup_safe_alt_move_id[_si] = (
+                                _alt.get("move_id")
+                            )
+                            _sup_safe_alt_target_position[_si] = (
+                                _alt.get("target_position")
+                            )
 
             # Phase 6.4.9: Compute authoritative VSW outcome fields
             _vsw_unnecessary = [False, False]
@@ -12954,6 +13222,43 @@ class DoublesDamageAwarePlayer(Player):
                         ):
                             _vsw_healthy[_si] = True
                             break
+
+            # V2l.1 — capture the per-decision
+            # execution-derived snapshot for parity
+            # proof. These reads come from the live
+            # in-progress variables in this
+            # ``choose_move`` invocation, so the audit
+            # logger can prove the legal keys, raw
+            # scores, safety block maps, selected
+            # joint-order key, and final per-slot
+            # action keys were produced by THIS
+            # ``choose_move`` call.
+            self._v2l1_raw_scores_slot0 = (
+                _raw_score_map_for_slot(
+                    slot_0_scores, valid_orders, 0
+                )
+            )
+            self._v2l1_raw_scores_slot1 = (
+                _raw_score_map_for_slot(
+                    slot_1_scores, valid_orders, 1
+                )
+            )
+            self._v2l1_safety_blocks_slot0 = (
+                _safety_block_map_for_slot(
+                    _safety_blocked, valid_orders, 0
+                )
+            )
+            self._v2l1_safety_blocks_slot1 = (
+                _safety_block_map_for_slot(
+                    _safety_blocked, valid_orders, 1
+                )
+            )
+            self._v2l1_selected_joint_key = (
+                _selected_joint_key(best_joint)
+            )
+            self._v2l1_final_keys = (
+                _final_action_keys_from_joint(best_joint)
+            )
 
             self.audit_logger.log_turn_decision(
                 battle_tag=battle_tag,
@@ -13677,6 +13982,38 @@ class DoublesDamageAwarePlayer(Player):
                 stale_target_fallback_target=stale_target_fallback_target,
                 stale_target_reason=stale_target_reason,
                 support_target_candidates=_support_target_candidates,
+                support_target_candidate_blocked_slot0=_sup_blocked[0],
+                support_target_candidate_blocked_slot1=_sup_blocked[1],
+                support_target_selected_slot0=_sup_selected[0],
+                support_target_selected_slot1=_sup_selected[1],
+                support_target_avoided_slot0=_sup_avoided[0],
+                support_target_avoided_slot1=_sup_avoided[1],
+                support_target_only_legal_slot0=_sup_only_legal[0],
+                support_target_only_legal_slot1=_sup_only_legal[1],
+                support_target_move_id_slot0=_sup_move_id[0],
+                support_target_move_id_slot1=_sup_move_id[1],
+                support_target_intended_side_slot0=_sup_intended_side[0],
+                support_target_intended_side_slot1=_sup_intended_side[1],
+                support_target_actual_side_slot0=_sup_actual_side[0],
+                support_target_actual_side_slot1=_sup_actual_side[1],
+                support_target_target_position_slot0=_sup_target_position[0],
+                support_target_target_position_slot1=_sup_target_position[1],
+                support_target_target_species_slot0=_sup_target_species[0],
+                support_target_target_species_slot1=_sup_target_species[1],
+                support_target_block_reason_slot0=_sup_block_reason[0],
+                support_target_block_reason_slot1=_sup_block_reason[1],
+                support_target_classification_source_slot0=_sup_classification_source[0],
+                support_target_classification_source_slot1=_sup_classification_source[1],
+                support_target_blocked_candidate_score_slot0=_sup_blocked_candidate_score[0],
+                support_target_blocked_candidate_score_slot1=_sup_blocked_candidate_score[1],
+                support_target_safe_alternative_kind_slot0=_sup_safe_alt_kind[0],
+                support_target_safe_alternative_kind_slot1=_sup_safe_alt_kind[1],
+                support_target_safe_alternative_move_id_slot0=_sup_safe_alt_move_id[0],
+                support_target_safe_alternative_move_id_slot1=_sup_safe_alt_move_id[1],
+                support_target_safe_alternative_target_position_slot0=_sup_safe_alt_target_position[0],
+                support_target_safe_alternative_target_position_slot1=_sup_safe_alt_target_position[1],
+                support_target_wrong_side_selected_slot0=_sup_wrong_side_selected[0],
+                support_target_wrong_side_selected_slot1=_sup_wrong_side_selected[1],
                 # Phase 6.4.9: Voluntary switch quality fields
                 voluntary_switch_decision_eligible=[
                     bool(_voluntary_switch_candidate_tables.get(0, [])),
@@ -13732,9 +14069,157 @@ class DoublesDamageAwarePlayer(Player):
                 voluntary_switch_selected_risk_reduction=_vsw_sel_risk_red,
                 voluntary_switch_selected_score_adjustment=_vsw_sel_score_adj,
                 voluntary_switch_reason_codes=_vsw_reason_codes,
+                # V2l.1 — ``shared_engine_used`` is
+                # execution-derived. It is True only if
+                # this ``choose_move`` invocation set
+                # a fresh, non-empty invocation id. A
+                # legacy caller that does not flow
+                # through ``choose_move`` will not have
+                # an id and will report
+                # ``shared_engine_used=False``. This
+                # is the proof bit the parity inspector
+                # checks.
+                runtime_mode=getattr(
+                    self, "_runtime_mode", "random_doubles"
+                ),
+                concrete_player_class=getattr(
+                    self, "_concrete_player_class",
+                    type(self).__name__
+                ),
+                shared_engine_used=bool(
+                    getattr(
+                        self, "_v2l1_invocation_id", None
+                    )
+                    and getattr(
+                        self, "_v2l1_invocation_status", None
+                    ) == "completed"
+                ),
+                shared_engine_owner=(
+                    "bot_doubles_damage_aware.DoublesDamageAwarePlayer"
+                ),
+                shared_engine_invocation_id=getattr(
+                    self, "_v2l1_invocation_id", None
+                ),
+                shared_engine_invocation_status=getattr(
+                    self, "_v2l1_invocation_status", None
+                ),
+                # V2l.1 — per-decision execution-derived
+                # parity fields. These are read from the
+                # live player attributes that the
+                # ``choose_move`` body writes right
+                # before this call.
+                v2l1_legal_action_keys_slot0=list(
+                    getattr(
+                        self, "_v2l1_legal_keys_slot0", []
+                    )
+                ),
+                v2l1_legal_action_keys_slot1=list(
+                    getattr(
+                        self, "_v2l1_legal_keys_slot1", []
+                    )
+                ),
+                v2l1_raw_scores_slot0=dict(
+                    self._v2l1_action_key_to_str_map(
+                        getattr(
+                            self,
+                            "_v2l1_raw_scores_slot0",
+                            {},
+                        )
+                    )
+                ),
+                v2l1_raw_scores_slot1=dict(
+                    self._v2l1_action_key_to_str_map(
+                        getattr(
+                            self,
+                            "_v2l1_raw_scores_slot1",
+                            {},
+                        )
+                    )
+                ),
+                v2l1_safety_blocks_slot0=dict(
+                    self._v2l1_action_key_to_str_map(
+                        getattr(
+                            self,
+                            "_v2l1_safety_blocks_slot0",
+                            {},
+                        )
+                    )
+                ),
+                v2l1_safety_blocks_slot1=dict(
+                    self._v2l1_action_key_to_str_map(
+                        getattr(
+                            self,
+                            "_v2l1_safety_blocks_slot1",
+                            {},
+                        )
+                    )
+                ),
+                v2l1_selected_joint_key=(
+                    self._v2l1_joint_key_to_str(
+                        getattr(
+                            self,
+                            "_v2l1_selected_joint_key",
+                            None,
+                        )
+                    )
+                ),
+                v2l1_final_action_keys=[
+                    self._v2l1_action_key_to_str(k)
+                    for k in getattr(
+                        self, "_v2l1_final_keys", []
+                    )
+                ],
+                selected_four=getattr(self, "_selected_four", None),
+                lead_2=getattr(self, "_lead_2", None),
+                back_2=getattr(self, "_back_2", None),
+                preview_policy=getattr(
+                    self, "_preview_policy", None
+                ),
             )
 
         return best_joint
+
+    @staticmethod
+    def _v2l1_action_key_to_str(action_key) -> str:
+        """V2l.1 — convert a ``_order_action_key``
+        tuple into a JSON-serializable string. Used so
+        the audit logger can persist action keys
+        without storing non-serializable
+        ``BattleOrder`` objects.
+        """
+        if not isinstance(action_key, tuple) or not action_key:
+            return str(action_key)
+        return "|".join(str(x) for x in action_key)
+
+    @classmethod
+    def _v2l1_action_key_to_str_map(cls, d: dict) -> dict:
+        """V2l.1 — map every key in ``d`` to a string
+        for JSON serialization.
+        """
+        out = {}
+        for k, v in (d or {}).items():
+            try:
+                out[cls._v2l1_action_key_to_str(k)] = v
+            except Exception:
+                continue
+        return out
+
+    @classmethod
+    def _v2l1_joint_key_to_str(cls, joint_key) -> Optional[str]:
+        """V2l.1 — convert a joint key tuple pair into
+        a single string for JSON serialization.
+        """
+        if not joint_key:
+            return None
+        if not isinstance(joint_key, tuple):
+            return str(joint_key)
+        if len(joint_key) != 2:
+            return str(joint_key)
+        return (
+            cls._v2l1_action_key_to_str(joint_key[0])
+            + ";"
+            + cls._v2l1_action_key_to_str(joint_key[1])
+        )
 
     def _battle_finished_callback(self, battle: AbstractBattle):
         clear_observed_form_state(getattr(battle, "battle_tag", ""))

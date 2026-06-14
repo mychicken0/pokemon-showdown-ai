@@ -96,9 +96,7 @@ def ability_blocks_move(target, move, attacker=None, battle=None) -> tuple[bool,
         if attacker:
             attacker_ability = get_known_ability(attacker)
             if attacker_ability in ("moldbreaker", "teravolt", "turboblaze"):
-                # Good as Gold is NOT bypassed by Mold Breaker. Wonder Guard is also bypassed.
-                if target_ability != "goodasgold":
-                    return False, f"target's {target_ability} bypassed by attacker's {attacker_ability}"
+                return False, f"target's {target_ability} bypassed by attacker's {attacker_ability}"
 
         move_type = get_move_type(move)
         flags = getattr(move, "flags", set())

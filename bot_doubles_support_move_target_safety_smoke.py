@@ -223,13 +223,40 @@ def _count_support_metrics(log_path):
                             move_id = cand.get("move_id", "")
                             selected = cand.get("selected", False)
                             blocked = cand.get("blocked", False)
-                            if intended == "opponent":
+                            actual = cand.get("target_side", "")
+                            # A "wrong-side" selection is
+                            # when the move was classified
+                            # as ally/opponent/self but the
+                            # actual target_side does not
+                            # match the intended side. We
+                            # count only ACTUAL wrong-side,
+                            # not just intended=opponent.
+                            is_wrong_side = (
+                                selected
+                                and blocked
+                                and (
+                                    (
+                                        intended == "opponent"
+                                        and actual in ("ally", "self")
+                                    )
+                                    or (
+                                        intended == "ally"
+                                        and actual
+                                        in ("opponent", "self")
+                                    )
+                                    or (
+                                        intended == "self"
+                                        and actual != "self"
+                                    )
+                                )
+                            )
+                            if intended in ("opponent",):
                                 m["wrong_side_candidates"] += 1
                                 if blocked:
                                     m["wrong_side_blocked"] += 1
-                                if selected:
+                                if is_wrong_side:
                                     m["wrong_side_selected"] += 1
-                            if move_id == "healpulse" and intended == "opponent" and selected:
+                            if move_id == "healpulse" and intended == "opponent" and is_wrong_side:
                                 m["heal_pulse_into_opponent"] += 1
                             if move_id == "healpulse" and intended == "ally" and selected:
                                 m["heal_pulse_into_ally"] += 1
@@ -267,6 +294,10 @@ async def main():
     p = argparse.ArgumentParser(description="Support Move Target Hard Safety Smoke Benchmark")
     p.add_argument("--artifact-tag", type=str, required=True)
     p.add_argument("--overwrite", action="store_true")
+    p.add_argument(
+        "--n-battles", type=int, default=10,
+        help="Battles per arm (default: 10).",
+    )
     args = p.parse_args()
     tag = args.artifact_tag
     csv_path = f"logs/support_target_smoke_{tag}.csv"
@@ -286,11 +317,12 @@ async def main():
     config_on.support_move_wrong_side_block_score = 0.0
     config_on.support_move_allow_only_legal_wrong_side = True
 
+    n_battles = args.n_battles
     arms = [
-        ("A", "safety OFF vs Basic", "basic", 10, config_off, None),
-        ("B", "safety ON vs Basic", "basic", 10, config_on, None),
-        ("C", "safety ON vs safety OFF", "damage_aware", 10, config_on, config_off),
-        ("D", "safety ON vs SafeRandom", "safe_random", 10, config_on, None),
+        ("A", "safety OFF vs Basic", "basic", n_battles, config_off, None),
+        ("B", "safety ON vs Basic", "basic", n_battles, config_on, None),
+        ("C", "safety ON vs safety OFF", "damage_aware", n_battles, config_on, config_off),
+        ("D", "safety ON vs SafeRandom", "safe_random", n_battles, config_on, None),
     ]
     results = []
     for arm_id, name, opp_key, n_battles, config, opp_config in arms:

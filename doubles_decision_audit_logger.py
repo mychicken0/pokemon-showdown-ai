@@ -572,6 +572,94 @@ class DoublesDecisionAuditLogger:
         known_ally_redirection_blocked_candidate_score=None,
         known_ally_redirection_best_safe_alternative=None,
         known_ally_redirection_best_safe_alternative_score=None,
+        # V2l — runtime mode boundary metadata. The
+        # canonical engine and the VGC runtime both
+        # log to the same JSONL; these fields let the
+        # parity inspector prove which engine
+        # produced each record. ``runtime_mode`` is
+        # either ``"random_doubles"`` (the canonical
+        # format) or ``"vgc_selected_four"`` (the
+        # VGC runtime after preview).
+        runtime_mode=None,
+        concrete_player_class=None,
+        shared_engine_used=None,
+        shared_engine_owner=None,
+        selected_four=None,
+        lead_2=None,
+        back_2=None,
+        preview_policy=None,
+        # V2l.1 — execution-derived per-decision
+        # parity evidence. The canonical
+        # ``DoublesDamageAwarePlayer.choose_move`` writes
+        # these fields into the live player attributes
+        # right before calling ``log_turn_decision``.
+        # ``shared_engine_used`` is True ONLY when a
+        # non-empty ``shared_engine_invocation_id`` is
+        # present (proof bit).
+        shared_engine_invocation_id=None,
+        shared_engine_invocation_status=None,
+        v2l1_legal_action_keys_slot0=None,
+        v2l1_legal_action_keys_slot1=None,
+        v2l1_raw_scores_slot0=None,
+        v2l1_raw_scores_slot1=None,
+        v2l1_safety_blocks_slot0=None,
+        v2l1_safety_blocks_slot1=None,
+        v2l1_selected_joint_key=None,
+        v2l1_final_action_keys=None,
+        # Phase 6.3.8b — Support Move Target Hard Safety.
+        # ``support_target_candidates`` is the full
+        # per-turn candidate table produced by the
+        # canonical engine. The per-slot fields
+        # mirror the candidate table for the
+        # currently-selected action per slot so the
+        # inspector and analyzer can read them
+        # without iterating the candidate list.
+        support_target_candidates=None,
+        support_target_candidate_blocked_slot0=None,
+        support_target_candidate_blocked_slot1=None,
+        support_target_selected_slot0=None,
+        support_target_selected_slot1=None,
+        support_target_avoided_slot0=None,
+        support_target_avoided_slot1=None,
+        support_target_only_legal_slot0=None,
+        support_target_only_legal_slot1=None,
+        support_target_move_id_slot0=None,
+        support_target_move_id_slot1=None,
+        support_target_intended_side_slot0=None,
+        support_target_intended_side_slot1=None,
+        support_target_actual_side_slot0=None,
+        support_target_actual_side_slot1=None,
+        support_target_target_position_slot0=None,
+        support_target_target_position_slot1=None,
+        support_target_target_species_slot0=None,
+        support_target_target_species_slot1=None,
+        support_target_block_reason_slot0=None,
+        support_target_block_reason_slot1=None,
+        support_target_classification_source_slot0=None,
+        support_target_classification_source_slot1=None,
+        support_target_blocked_candidate_score_slot0=None,
+        support_target_blocked_candidate_score_slot1=None,
+        support_target_safe_alternative_kind_slot0=None,
+        support_target_safe_alternative_kind_slot1=None,
+        support_target_safe_alternative_move_id_slot0=None,
+        support_target_safe_alternative_move_id_slot1=None,
+        support_target_safe_alternative_target_position_slot0=None,
+        support_target_safe_alternative_target_position_slot1=None,
+        support_target_wrong_side_selected_slot0=None,
+        support_target_wrong_side_selected_slot1=None,
+        # Phase 6.3.8b — Per-slot selected-action
+        # structured metadata (kind / move id / target
+        # position / species / only-legal). These are
+        # the canonical per-slot fields the inspector
+        # and benchmark use. The audit logger was
+        # previously dropping them via ``**kwargs``;
+        # the inspector and benchmark read them
+        # directly off each slot's dict.
+        selected_action_kind=None,
+        selected_action_move_id=None,
+        selected_action_target_position=None,
+        selected_action_species=None,
+        selected_action_only_legal=None,
         **kwargs,
     ):
 
@@ -794,6 +882,23 @@ class DoublesDecisionAuditLogger:
                 "move_type": move_type_0,
                 "action_types": slot_action_types[0],
                 "selected_score": score_0,
+                # Phase 6.3.8b — Per-slot selected-action
+                # structured metadata.
+                "selected_action_kind": (
+                    (selected_action_kind or [None, None])[0]
+                ),
+                "selected_action_move_id": (
+                    (selected_action_move_id or [None, None])[0]
+                ),
+                "selected_action_target_position": (
+                    (selected_action_target_position or [0, 0])[0]
+                ),
+                "selected_action_species": (
+                    (selected_action_species or [None, None])[0]
+                ),
+                "selected_action_only_legal": (
+                    (selected_action_only_legal or [False, False])[0]
+                ),
                 "expected_damage": float(expected_damages[0]) if expected_damages[0] is not None else None,
                 "expected_ko": bool(expected_kos[0]) if expected_kos[0] is not None else None,
                 "target_hp_before": float(target_hps[0]) if target_hps[0] is not None else None,
@@ -1078,6 +1183,23 @@ class DoublesDecisionAuditLogger:
                 "move_type": move_type_1,
                 "action_types": slot_action_types[1],
                 "selected_score": score_1,
+                # Phase 6.3.8b — Per-slot selected-action
+                # structured metadata.
+                "selected_action_kind": (
+                    (selected_action_kind or [None, None])[1]
+                ),
+                "selected_action_move_id": (
+                    (selected_action_move_id or [None, None])[1]
+                ),
+                "selected_action_target_position": (
+                    (selected_action_target_position or [0, 0])[1]
+                ),
+                "selected_action_species": (
+                    (selected_action_species or [None, None])[1]
+                ),
+                "selected_action_only_legal": (
+                    (selected_action_only_legal or [False, False])[1]
+                ),
                 "expected_damage": float(expected_damages[1]) if expected_damages[1] is not None else None,
                 "expected_ko": bool(expected_kos[1]) if expected_kos[1] is not None else None,
                 "target_hp_before": float(target_hps[1]) if target_hps[1] is not None else None,
@@ -1375,6 +1497,243 @@ class DoublesDecisionAuditLogger:
                 {"message": jo.message if jo else "/choose pass", "score": float(sc)}
                 for jo, sc, _, _ in scored_joint_orders
             ]
+
+        # V2l — runtime mode boundary audit metadata.
+        # These fields are recorded for every turn so
+        # the parity inspector can prove which engine
+        # produced the decision and what runtime mode
+        # was active. ``shared_engine_used`` must be
+        # True for both random_doubles and
+        # vgc_selected_four; a False value is a hard
+        # parity violation.
+        turn_data["runtime_mode"] = runtime_mode
+        turn_data["concrete_player_class"] = (
+            concrete_player_class
+        )
+        # V2l.1 — ``shared_engine_used`` is overridden
+        # here so a non-empty invocation id is the
+        # PROOF. A legacy caller that does not flow
+        # through ``choose_move`` will not have an
+        # invocation id and will report
+        # ``shared_engine_used=False``.
+        invocation_completed = (
+            bool(shared_engine_invocation_id)
+            and shared_engine_invocation_status == "completed"
+        )
+        if invocation_completed:
+            turn_data["shared_engine_used"] = True
+        else:
+            turn_data["shared_engine_used"] = False
+        turn_data["shared_engine_owner"] = shared_engine_owner
+        turn_data["shared_engine_invocation_id"] = (
+            shared_engine_invocation_id
+        )
+        turn_data["shared_engine_invocation_status"] = (
+            shared_engine_invocation_status
+        )
+        turn_data["selected_four"] = selected_four
+        turn_data["lead_2"] = lead_2
+        turn_data["back_2"] = back_2
+        turn_data["preview_policy"] = preview_policy
+        # V2l.1 — per-decision parity evidence. These
+        # are JSON-serializable strings / dicts, not
+        # ``BattleOrder`` objects.
+        turn_data["v2l1_legal_action_keys_slot0"] = (
+            v2l1_legal_action_keys_slot0
+        )
+        turn_data["v2l1_legal_action_keys_slot1"] = (
+            v2l1_legal_action_keys_slot1
+        )
+        turn_data["v2l1_raw_scores_slot0"] = (
+            v2l1_raw_scores_slot0
+        )
+        turn_data["v2l1_raw_scores_slot1"] = (
+            v2l1_raw_scores_slot1
+        )
+        turn_data["v2l1_safety_blocks_slot0"] = (
+            v2l1_safety_blocks_slot0
+        )
+        turn_data["v2l1_safety_blocks_slot1"] = (
+            v2l1_safety_blocks_slot1
+        )
+        turn_data["v2l1_selected_joint_key"] = (
+            v2l1_selected_joint_key
+        )
+        turn_data["v2l1_final_action_keys"] = (
+            v2l1_final_action_keys
+        )
+        # Phase 6.3.8b — Support Move Target Hard Safety
+        # audit fields. The full candidate table is
+        # written for the analyzer to iterate; the
+        # per-slot fields are mirrored so the
+        # inspector and per-slot counter can read
+        # them without list iteration.
+        turn_data["support_target_candidates"] = (
+            support_target_candidates or []
+        )
+        turn_data["support_target_candidate_blocked"] = (
+            bool(support_target_candidate_blocked_slot0)
+            or bool(support_target_candidate_blocked_slot1)
+        )
+        # Per-slot mirror fields
+        _per_slot_support_keys = {
+            "support_target_candidate_blocked_slot0":
+                support_target_candidate_blocked_slot0,
+            "support_target_candidate_blocked_slot1":
+                support_target_candidate_blocked_slot1,
+            "support_target_selected_slot0":
+                support_target_selected_slot0,
+            "support_target_selected_slot1":
+                support_target_selected_slot1,
+            "support_target_avoided_slot0":
+                support_target_avoided_slot0,
+            "support_target_avoided_slot1":
+                support_target_avoided_slot1,
+            "support_target_only_legal_slot0":
+                support_target_only_legal_slot0,
+            "support_target_only_legal_slot1":
+                support_target_only_legal_slot1,
+            "support_target_move_id_slot0":
+                support_target_move_id_slot0,
+            "support_target_move_id_slot1":
+                support_target_move_id_slot1,
+            "support_target_intended_side_slot0":
+                support_target_intended_side_slot0,
+            "support_target_intended_side_slot1":
+                support_target_intended_side_slot1,
+            "support_target_actual_side_slot0":
+                support_target_actual_side_slot0,
+            "support_target_actual_side_slot1":
+                support_target_actual_side_slot1,
+            "support_target_target_position_slot0":
+                support_target_target_position_slot0,
+            "support_target_target_position_slot1":
+                support_target_target_position_slot1,
+            "support_target_target_species_slot0":
+                support_target_target_species_slot0,
+            "support_target_target_species_slot1":
+                support_target_target_species_slot1,
+            "support_target_block_reason_slot0":
+                support_target_block_reason_slot0,
+            "support_target_block_reason_slot1":
+                support_target_block_reason_slot1,
+            "support_target_classification_source_slot0":
+                support_target_classification_source_slot0,
+            "support_target_classification_source_slot1":
+                support_target_classification_source_slot1,
+            "support_target_blocked_candidate_score_slot0":
+                support_target_blocked_candidate_score_slot0,
+            "support_target_blocked_candidate_score_slot1":
+                support_target_blocked_candidate_score_slot1,
+            "support_target_safe_alternative_kind_slot0":
+                support_target_safe_alternative_kind_slot0,
+            "support_target_safe_alternative_kind_slot1":
+                support_target_safe_alternative_kind_slot1,
+            "support_target_safe_alternative_move_id_slot0":
+                support_target_safe_alternative_move_id_slot0,
+            "support_target_safe_alternative_move_id_slot1":
+                support_target_safe_alternative_move_id_slot1,
+            "support_target_safe_alternative_target_position_slot0":
+                support_target_safe_alternative_target_position_slot0,
+            "support_target_safe_alternative_target_position_slot1":
+                support_target_safe_alternative_target_position_slot1,
+            "support_target_wrong_side_selected_slot0":
+                support_target_wrong_side_selected_slot0,
+            "support_target_wrong_side_selected_slot1":
+                support_target_wrong_side_selected_slot1,
+        }
+        for _k, _v in _per_slot_support_keys.items():
+            turn_data[_k] = _v
+        # Per-slot flat fields for the inspector
+        # (which reads e.g.
+        # ``support_target_selected`` directly off the
+        # slot). We forward the per-slot mirror to
+        # each slot_0 / slot_1 dict.
+        for _slot_key, _slot_idx in (("slot_0", 0), ("slot_1", 1)):
+            _slot = turn_data.get(_slot_key, {})
+            if not isinstance(_slot, dict):
+                continue
+            _slot["support_target_candidate_blocked"] = (
+                turn_data.get(
+                    f"support_target_candidate_blocked_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_selected"] = (
+                turn_data.get(
+                    f"support_target_selected_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_avoided"] = (
+                turn_data.get(
+                    f"support_target_avoided_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_only_legal"] = (
+                turn_data.get(
+                    f"support_target_only_legal_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_move_id"] = (
+                turn_data.get(
+                    f"support_target_move_id_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_intended_side"] = (
+                turn_data.get(
+                    f"support_target_intended_side_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_actual_side"] = (
+                turn_data.get(
+                    f"support_target_actual_side_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_target_position"] = (
+                turn_data.get(
+                    f"support_target_target_position_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_target_species"] = (
+                turn_data.get(
+                    f"support_target_target_species_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_reason"] = (
+                turn_data.get(
+                    f"support_target_block_reason_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_classification_source"] = (
+                turn_data.get(
+                    f"support_target_classification_source_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_blocked_candidate_score"] = (
+                turn_data.get(
+                    f"support_target_blocked_candidate_score_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_safe_alternative_kind"] = (
+                turn_data.get(
+                    f"support_target_safe_alternative_kind_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_safe_alternative_move_id"] = (
+                turn_data.get(
+                    f"support_target_safe_alternative_move_id_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_safe_alternative_target_position"] = (
+                turn_data.get(
+                    f"support_target_safe_alternative_target_position_slot{_slot_idx}"
+                )
+            )
+            _slot["support_target_wrong_side_selected"] = (
+                turn_data.get(
+                    f"support_target_wrong_side_selected_slot{_slot_idx}"
+                )
+            )
+            turn_data[_slot_key] = _slot
 
         self.pending_turns[battle_tag] = turn_data
         self._append_live_event(self._build_live_decision_event(battle_tag, turn_data))

@@ -86,6 +86,8 @@ from team_preview_policy import (
     get_species_types,
 )
 
+import doubles_mechanics as _dm
+
 
 # ---------------------------------------------------------------------------
 # Fixed weights. Changing any of these is a V2e.1 schema change, not a tweak.
@@ -171,11 +173,22 @@ def _all_attacking_types() -> Iterable[Tuple[str, Dict[str, float]]]:
 
 
 def _composite_multiplier(attacker: str, defender_types: Sequence[str]) -> float:
-    multipliers = TYPE_CHART.get(attacker, {})
-    combined = 1.0
-    for defender in defender_types:
-        combined *= multipliers.get(defender, 1.0)
-    return combined
+    """Composite type multiplier.
+
+    Delegates to ``doubles_mechanics.calculate_type_multiplier``
+    so the canonical Gen 9 chart lives in one place. The
+    shared module accepts upper-case type strings; this
+    wrapper normalises the call site's lower-case inputs.
+    """
+    from doubles_mechanics import calculate_type_multiplier
+    if not attacker or not defender_types:
+        return 1.0
+    upper_defenders = [
+        str(t).upper() for t in defender_types if t
+    ]
+    return calculate_type_multiplier(
+        str(attacker).upper(), upper_defenders
+    )
 
 
 def _is_pivot(move_lower: str) -> bool:
@@ -248,18 +261,36 @@ def _lead_shared_weakness(leads: Sequence[Mapping[str, Any]]) -> float:
     """Penalty when the two leads share a 2x or 4x weakness.
 
     Returns a non-positive value; 0 means no shared weakness.
+
+    Production scoring uses
+    :func:`doubles_mechanics.evaluate_move_effectiveness` so
+    a known typed-ability on a defender (e.g. ``Levitate``
+    into Ground) propagates to the multiplier for hypothetical
+    attacker types. We never call ``calculate_type_multiplier``
+    directly.
     """
     if len(leads) != 2:
         return 0.0
     lead_types = [get_species_types(p.get("species", "")) for p in leads]
     if any(not types for types in lead_types):
         return 0.0
+    lead_abilities = [str(p.get("ability", "")).strip() for p in leads]
     penalty = 0.0
     for attack_type, _ in _all_attacking_types():
         weak = 0
         max_weakness = 0.0
-        for defender_types in lead_types:
-            mult = _composite_multiplier(attack_type, defender_types)
+        for defender_types, defender_ability in zip(
+            lead_types, lead_abilities
+        ):
+            res = _dm.evaluate_move_effectiveness(
+                move=None,
+                attacker=None,
+                target=None,
+                defender_types=defender_types,
+                target_ability=defender_ability,
+                move_type_override=attack_type.upper(),
+            )
+            mult = res.effective_multiplier
             if mult >= 2.0:
                 weak += 1
                 max_weakness = max(max_weakness, mult)

@@ -457,9 +457,21 @@ class TestSpreadMovePartialAbsorb(unittest.TestCase):
 # ===== Test 18: Spread move with all absorb targets still scores =====
 class TestSpreadAllAbsorbScoresPositive(unittest.TestCase):
     def test_spread_all_absorb_scores_positive(self):
-        """Spread moves don't use direct_absorb_only path (single-target only).
-        Both targets are treated as damaged by the type-immune spread check.
-        This is expected behavior — spread moves bypass direct absorb blocking."""
+        # V2k.1: Spread moves with all-immune targets now
+        # correctly score 0.0 when
+        # ``enable_partial_spread_immunity_penalty=True``
+        # and the shared ``evaluate_move_effectiveness``
+        # correctly identifies the type-chart
+        # (Water vs Water) and ability-immune (Storm
+        # Drain / Water Absorb) multipliers. The OLD
+        # code was BUGGY: it returned a positive score
+        # because the wrapper's
+        # ``target.damage_multiplier(move)`` was 0.5
+        # from the type chart alone, missing the
+        # ability-immunity layer. The test is updated
+        # to reflect the correct behavior: score 0
+        # because the spread move's all targets are
+        # immune to it.
         from test_doubles_ability_hard_safety import TestPlayer, MockBattle as FullMockBattle, MockPokemon as FullMockPokemon, MockMove as FullMockMove
         from poke_env.player.battle_order import SingleBattleOrder
 
@@ -482,8 +494,11 @@ class TestSpreadAllAbsorbScoresPositive(unittest.TestCase):
         order = SingleBattleOrder(move, move_target=0)
 
         score = player.score_action(order, 0, battle)
-        # Spread moves bypass direct_absorb_only — score is positive
-        self.assertGreater(score, 0.0, "Spread move with absorb targets still scores positive (by design)")
+        # Spread moves with all-immune targets now score
+        # 0.0 because the partial-spread-immunity
+        # penalty applies and the all_targets_immune
+        # branch returns 0.
+        self.assertEqual(score, 0.0)
 
 
 # ===== Test 19: Repeat absorb selection detected in audit =====

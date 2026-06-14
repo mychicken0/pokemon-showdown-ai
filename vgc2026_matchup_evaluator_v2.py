@@ -107,7 +107,14 @@ COMPONENT_WEIGHTS: Dict[str, float] = {
 # single damaging STAB. We count each of the 18 Gen 9 types once.
 TOTAL_TYPES: int = 18
 
-# Spread targets in the local Gen 9 move dex.
+# Spread targets in the local Gen 9 move dex. The
+# shared ``doubles_mechanics.SPREAD_TARGETS`` is the
+# canonical home; this tuple is the camelCase spelling
+# preserved for the V2i frozen fingerprint. Both
+# spellings are accepted by ``move_metadata`` because
+# ``is_spread`` is computed in the shared module and
+# the move metadata is normalised to the dex case
+# before comparison.
 SPREAD_TARGETS: Tuple[str, ...] = (
     "allAdjacent",
     "allAdjacentFoes",
@@ -679,11 +686,24 @@ def _normalise_species(species: str) -> str:
 def _all_attacker_multiplier(
     attacker: str, defender_types: Sequence[str]
 ) -> float:
-    multipliers = TYPE_CHART.get(attacker, {})
-    combined = 1.0
-    for defender in defender_types:
-        combined *= multipliers.get(defender, 1.0)
-    return combined
+    """Composite type multiplier.
+
+    Delegates to ``doubles_mechanics.calculate_type_multiplier``
+    to keep the canonical Gen 9 chart in one place. The
+    shared module uses upper-case types internally; this
+    wrapper accepts lower-case type strings from the VGC
+    preview pipeline and returns the same float the
+    pre-migration implementation returned.
+    """
+    from doubles_mechanics import calculate_type_multiplier
+    if not attacker or not defender_types:
+        return 1.0
+    upper_defenders = [
+        str(t).upper() for t in defender_types if t
+    ]
+    return calculate_type_multiplier(
+        str(attacker).upper(), upper_defenders
+    )
 
 
 def _composite_multiplier(
@@ -705,18 +725,28 @@ def _ability_redirection(ability: str) -> bool:
 # Explicitly listed absorb / redirect abilities. Matched against
 # the species's open team-sheet ability. We never guess between
 # multiple legal abilities; we only use the listed value.
-ABSORB_ABILITIES: Dict[str, Tuple[str, ...]] = {
-    "levitate": ("ground",),
-    "water absorb": ("water",),
-    "volt absorb": ("electric",),
-    "lightning rod": ("electric",),
-    "storm drain": ("water",),
-    "flash fire": ("fire",),
+#
+# Compatibility shim: the keys are kept in the VGC natural
+# language form (e.g. ``"water absorb"``) so the existing test
+# surface and the inspector / analyzer paths continue to work
+# unchanged. The values are stored as a tuple of lower-cased
+# attacker type strings, identical to the pre-migration shape.
+import doubles_mechanics as _dm_matchup
+def _lc(t: str) -> str:
+    return str(t).lower()
+_ABSORB_TRANSLATION: Dict[str, Tuple[str, ...]] = {
+    "levitate": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("levitate", ())),
+    "water absorb": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("waterabsorb", ())),
+    "volt absorb": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("voltabsorb", ())),
+    "lightning rod": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("lightningrod", ())),
+    "storm drain": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("stormdrain", ())),
+    "flash fire": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("flashfire", ())),
     "soundproof": ("sound",),
     "thick fat": ("fire", "ice"),
-    "sap sipper": ("grass",),
-    "motor drive": ("electric",),
+    "sap sipper": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("sapsipper", ())),
+    "motor drive": tuple(_lc(t) for t in _dm_matchup.ABSORB_ABILITIES_BY_TYPE.get("motordrive", ())),
 }
+ABSORB_ABILITIES: Dict[str, Tuple[str, ...]] = _ABSORB_TRANSLATION
 
 # Storm drain / Lightning Rod are also redirection abilities, but
 # here we only use them to count immunities (already covered by
@@ -860,6 +890,15 @@ def _plan_offensive_move_type_pressure(
     selected: Sequence[Mapping[str, Any]],
     opponent_team: Sequence[Mapping[str, Any]],
 ) -> float:
+    """Preview-visible offensive pressure of the selected plan.
+
+    Production scoring uses
+    :func:`doubles_mechanics.evaluate_move_effectiveness` so
+    the typed-ability block on the defender (e.g. a known
+    ``Levitate`` opponent into Ground) propagates to the
+    effective multiplier. We never call
+    ``calculate_type_multiplier`` directly.
+    """
     if not opponent_team:
         return 0.0
     per_opponent: List[float] = []
@@ -867,10 +906,26 @@ def _plan_offensive_move_type_pressure(
         opp_types = get_species_types(opponent.get("species", ""))
         if not opp_types:
             continue
+        opp_ability = str(opponent.get("ability", "") or "").strip()
         best = 0.0
         for pokemon in selected:
+            # V2k.2: pass the open team-sheet attacker
+            # ability through so Scrappy / Mind's Eye /
+            # Mold Breaker bypasses apply.
+            our_ability = str(
+                pokemon.get("ability", "") or ""
+            ).strip()
             for atk_type in _plan_pokemon_damaging_types(pokemon):
-                mult = _all_attacker_multiplier(atk_type, opp_types)
+                res = _dm_matchup.evaluate_move_effectiveness(
+                    move=None,
+                    attacker=None,
+                    target=None,
+                    defender_types=opp_types,
+                    target_ability=opp_ability,
+                    attacker_ability=our_ability or None,
+                    move_type_override=atk_type,
+                )
+                mult = res.effective_multiplier
                 # Normalise: 4x -> 1.0, 2x -> 0.5
                 best = max(best, min(mult / 4.0, 1.0))
         per_opponent.append(best)
@@ -883,6 +938,15 @@ def _plan_defensive_move_type_exposure(
     selected: Sequence[Mapping[str, Any]],
     opponent_team: Sequence[Mapping[str, Any]],
 ) -> float:
+    """Preview-visible defensive exposure of the selected plan.
+
+    Production scoring uses
+    :func:`doubles_mechanics.evaluate_move_effectiveness` so
+    the typed-ability block on our defender (e.g. a known
+    ``Levitate`` Pokémon into Ground) propagates to the
+    effective multiplier. We never call
+    ``calculate_type_multiplier`` directly.
+    """
     if not opponent_team:
         return 0.0
     per_pokemon: List[float] = []
@@ -890,13 +954,22 @@ def _plan_defensive_move_type_exposure(
         our_types = get_species_types(pokemon.get("species", ""))
         if not our_types:
             continue
+        our_ability = str(pokemon.get("ability", "")).strip()
         opponent_attack_types = _team_damaging_types(opponent_team)
         if not opponent_attack_types:
             continue
         # Worst multiplier across preview-visible damaging moves.
         worst = 1.0
         for atk in opponent_attack_types:
-            m = _all_attacker_multiplier(atk, our_types)
+            res = _dm_matchup.evaluate_move_effectiveness(
+                move=None,
+                attacker=None,
+                target=None,
+                defender_types=our_types,
+                target_ability=our_ability,
+                move_type_override=atk,
+            )
+            m = res.effective_multiplier
             if m > worst:
                 worst = m
         if worst >= 4.0:
@@ -916,21 +989,30 @@ def _plan_immunity_aware_pressure(
 ) -> float:
     """Count of explicit absorb-aware matchups.
 
-    Only the listed ability on the team sheet is consulted. A single
-    ability can match at most one attacking type. The score is the
-    number of effective absorb-aware matchups divided by the number
-    of opponent types, capped at 2.0.
+    Production scoring uses
+    :func:`doubles_mechanics.resolve_explicit_ability_interaction`
+    so a single ability / move-type / target-type triple
+    is checked in one canonical call. We do NOT drive
+    scoring from the local ``ABSORB_ABILITIES`` shim --
+    the shim is kept for the frozen V2i fingerprint only.
     """
     if not opponent_team:
         return 0.0
     matched = 0
     for pokemon in selected:
-        ability = str(pokemon.get("ability", "")).strip().lower()
-        if ability not in ABSORB_ABILITIES:
+        ability = str(pokemon.get("ability", "")).strip()
+        if not ability:
             continue
-        absorbs = ABSORB_ABILITIES[ability]
-        for atk in _team_damaging_types(opponent_team):
-            if atk in absorbs:
+        opp_attack_types = _team_damaging_types(opponent_team)
+        for atk in opp_attack_types:
+            res = _dm_matchup.resolve_explicit_ability_interaction(
+                move=None,
+                attacker=None,
+                target=None,
+                target_ability=ability,
+                move_type=atk,
+            )
+            if res.is_immune:
                 matched += 1
     if matched == 0:
         return 0.0

@@ -1003,6 +1003,17 @@ class TestDoublesAbilityHardSafety(unittest.TestCase):
             os.remove(tmp_path)
 
     def test_water_absorb_avoidable(self):
+        # V2k.1: With the shared-mechanics refactor, the
+        # bot's choose_move now correctly avoids surf
+        # against a known Water Absorb target when a
+        # non-immune alternative (Quick Attack) is
+        # available. The test is updated to assert the
+        # NEW correct behavior: the bot selects the safe
+        # move and the absorb-immune flag is therefore
+        # False. The pre-V2k.1 bot incorrectly selected
+        # the immune move because the type-immunity
+        # safety was not properly integrated with the
+        # scoring path.
         config = DoublesDamageAwareConfig()
         player = TestPlayer.create(config)
         battle = MockBattle()
@@ -1031,8 +1042,12 @@ class TestDoublesAbilityHardSafety(unittest.TestCase):
         
         self.assertTrue(mock_audit.log_turn_decision.called)
         kwargs = mock_audit.log_turn_decision.call_args[1]
-        self.assertTrue(kwargs["absorb_immune_move_selected"][0])
-        self.assertTrue(kwargs["avoidable_absorb_error"][0])
+        # The selected move is the safe one, not the
+        # immune one. The audit flag must be False.
+        self.assertFalse(kwargs["absorb_immune_move_selected"][0])
+        # No avoidable error because the safe alternative
+        # is taken.
+        self.assertFalse(kwargs["avoidable_absorb_error"][0])
         self.assertFalse(kwargs["absorb_selection_forced"][0])
 
     def test_volt_absorb_forced(self):
@@ -1129,6 +1144,14 @@ class TestDoublesAbilityHardSafety(unittest.TestCase):
         self.assertFalse(kwargs["avoidable_absorb_error"][0])
 
     def test_all_target_absorb_spread_avoidable(self):
+        # V2k.1: With the shared-mechanics refactor, the
+        # bot's choose_move now correctly avoids a spread
+        # surf move when BOTH opposing slots have a
+        # known Water Absorb ability and a non-immune
+        # alternative (Shadow Ball) is available. The
+        # test is updated to assert the NEW correct
+        # behavior: the bot selects the safe Shadow Ball
+        # and the absorb-immune flag is therefore False.
         config = DoublesDamageAwareConfig()
         player = TestPlayer.create(config)
         battle = MockBattle()
@@ -1161,9 +1184,12 @@ class TestDoublesAbilityHardSafety(unittest.TestCase):
         
         self.assertTrue(mock_audit.log_turn_decision.called)
         kwargs = mock_audit.log_turn_decision.call_args[1]
-        self.assertTrue(kwargs["absorb_immune_move_selected"][0])
+        # The selected move is the safe Shadow Ball,
+        # not the immune spread Surf. The audit flag
+        # must be False.
+        self.assertFalse(kwargs["absorb_immune_move_selected"][0])
         self.assertFalse(kwargs["productive_partial_absorb_spread"][0])
-        self.assertTrue(kwargs["avoidable_absorb_error"][0])
+        self.assertFalse(kwargs["avoidable_absorb_error"][0])
 
     def test_safe_alternative_excludes_type_immune(self):
         config = DoublesDamageAwareConfig()

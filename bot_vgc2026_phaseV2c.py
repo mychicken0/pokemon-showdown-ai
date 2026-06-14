@@ -29,7 +29,7 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
 
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from vgc_team_pool import VGCTeamPool, load_vgc_pool
 from team_preview_policy import choose_four_from_six, PreviewResult, validate_preview
@@ -44,6 +44,12 @@ from poke_env.concurrency import POKE_LOOP, create_in_poke_loop
 from poke_env.battle.battle import Battle
 from poke_env.battle.pokemon import Pokemon
 import asyncio
+
+# V2l — canonical shared engine for the VGC runtime.
+# ``DoublesDamageAwarePlayer`` is the Random-Doubles
+# decision engine and is reused as-is by VGC after
+# preview.
+from bot_doubles_damage_aware import DoublesDamageAwarePlayer
 
 # ===== Constants =====
 
@@ -75,25 +81,73 @@ class NoAvatarPSClient(PSClient):
 
 # ===== Controlled Team Preview Player =====
 
-class ControlledTeamPreviewPlayer(RandomPlayer):
+class ControlledTeamPreviewPlayer(DoublesDamageAwarePlayer):
     """
-    Player that uses a pre-planned team preview selection.
+    Player that uses a pre-planned team preview selection
+    and runs the canonical
+    :class:`DoublesDamageAwarePlayer` decision engine
+    for every post-preview turn.
 
-    Overrides teampreview() to emit the exact /team order based on
-    the PreviewResult provided at construction.
+    V2l — runtime decision-engine unification.
+
+    The pre-V2l implementation extended poke-env's
+    :class:`RandomPlayer` and called
+    ``super().choose_move(battle)`` which delegated to
+    poke-env's random move selection. The VGC runtime
+    therefore used a DIFFERENT engine than Random
+    Doubles, which violates the spec invariant that VGC
+    2026 after preview must use the same canonical
+    decision engine as Random Doubles.
+
+    The V2l fix makes this class extend
+    :class:`DoublesDamageAwarePlayer` directly. The
+    inherited ``choose_move`` is the canonical engine;
+    only ``teampreview`` is overridden to emit the
+    pre-planned order.
+
+    Runtime mode boundary:
+
+    - ``"random_doubles"``: the format is
+      ``gen9randomdoublesbattle``. No team preview
+      selection occurs; the six Pokémon are
+      battle-ready from turn 1.
+    - ``"vgc_selected_four"``: the format is
+      ``gen9championsvgc2026regma`` (or a sibling
+      VGC format). After preview, exactly four
+      Pokémon are in the active team and the other
+      two are on the bench.
+
+    The mode only affects format-specific legality and
+    team-preview behavior. It does NOT create a
+    separate scoring / mechanics / joint-selection
+    implementation — the canonical
+    :class:`DoublesDamageAwarePlayer` engine is used in
+    both modes.
     """
+
+    RUNTIME_MODE = "vgc_selected_four"
 
     def __init__(
         self,
         *args,
-        preview_result: PreviewResult = None,
+        preview_result=None,
         battle_tag: str = "",
         pair_id: int = 0,
         side: str = "p1",
+        audit_logger=None,
         **kwargs
     ):
+        # VGC format uses gen9championsvgc2026regma by
+        # default. The canonical engine accepts any
+        # ``battle_format`` so the runner can pass it
+        # explicitly.
         kwargs['avatar'] = None
         kwargs['start_listening'] = False
+        # The canonical ``DoublesDamageAwarePlayer``
+        # constructor sets up the per-turn tracking
+        # dicts. We forward ``audit_logger`` so the
+        # canonical engine records its decisions.
+        kwargs.setdefault('audit_logger', audit_logger)
         super().__init__(*args, **kwargs)
 
         self.ps_client = NoAvatarPSClient(
@@ -120,6 +174,39 @@ class ControlledTeamPreviewPlayer(RandomPlayer):
         self._actual_lead_on_turn1 = []       # Derived legacy field (from planned)
         self._observed_actual_lead_on_turn1 = []  # NEW: Observed from protocol
         self._selected_species = []
+        # V2l — runtime mode boundary. The canonical
+        # engine's ``audit_logger`` records this so the
+        # parity inspector can prove which mode was
+        # active for every turn. The base class
+        # defaults to ``"random_doubles"``; the VGC
+        # player overrides it here. The
+        # ``shared_engine_used`` flag is the proof
+        # bit the parity inspector checks.
+        self._runtime_mode = self.RUNTIME_MODE
+        self._concrete_player_class = type(self).__name__
+        self._shared_engine_used = True
+        # Selected four from preview. The engine
+        # passes these into the audit log so the
+        # inspector can prove the VGC runtime picked
+        # exactly four Pokémon.
+        if self._preview_result is not None:
+            self._selected_four = list(
+                self._preview_result.chosen_4
+            )
+            self._lead_2 = list(
+                self._preview_result.lead_2
+            )
+            self._back_2 = list(
+                self._preview_result.back_2
+            )
+            self._preview_policy = (
+                self._preview_result.policy
+            )
+        else:
+            self._selected_four = None
+            self._lead_2 = None
+            self._back_2 = None
+            self._preview_policy = None
 
     def teampreview(self, battle: Battle) -> str:
         """
@@ -183,7 +270,14 @@ class ControlledTeamPreviewPlayer(RandomPlayer):
         return teampreview_order
 
     def choose_move(self, battle: Battle):
-        """Capture observed lead species on first non-empty active Pokémon state."""
+        """V2l — choose_move delegates to the canonical
+        :class:`DoublesDamageAwarePlayer.choose_move` so
+        VGC post-preview turns use the SAME engine as
+        Random Doubles.
+
+        Behavior is otherwise unchanged: capture the
+        observed lead on first non-empty active state.
+        """
         # Capture the first non-empty active Pokémon state exactly once
         if not self._observed_actual_lead_on_turn1:
             # Normalize active_pokemon: could be dict, list, or tuple
@@ -202,13 +296,17 @@ class ControlledTeamPreviewPlayer(RandomPlayer):
                             observed.append(p.species)
                 if len(observed) >= 2:
                     self._observed_actual_lead_on_turn1 = observed[:2]
-        return super().choose_move(battle)
+        # Delegate to the canonical engine. The
+        # ``DoublesDamageAwarePlayer.choose_move`` returns
+        # the canonical ``DoubleBattleOrder`` for the
+        # shared runtime.
+        return DoublesDamageAwarePlayer.choose_move(self, battle)
 
     def get_preview_evidence(self) -> Dict[str, Any]:
         """
         Return preview evidence for logging.
 
-        Note: actual_lead_on_turn1 is derived from planned lead_2 (legacy).
+        Note: actual_lead_on_turn1 is derived from planned lead_2 (legacía).
         observed_actual_lead_on_turn1 is captured from protocol state.
         """
         return {
@@ -236,9 +334,20 @@ def create_controlled_player(
     battle_tag: str,
     pair_id: int,
     side: str,
-    format_name: str = "gen9championsvgc2026regma"
+    format_name: str = "gen9championsvgc2026regma",
+    audit_logger: Optional["DoublesDecisionAuditLogger"] = None,
 ) -> ControlledTeamPreviewPlayer:
-    """Create a ControlledTeamPreviewPlayer with the given preview result."""
+    """Create a ``ControlledTeamPreviewPlayer`` with the
+    given preview result.
+
+    V2l.1 — ``audit_logger`` is forwarded to the
+    canonical engine so every post-preview
+    ``DoublesDamageAwarePlayer.choose_move`` call
+    is recorded in the runtime-parity JSONL. Pass
+    ``None`` for legacy use without audit logging
+    (the canonical engine still runs; only audit
+    recording is disabled).
+    """
     player = ControlledTeamPreviewPlayer(
         account_configuration=account,
         server_configuration=LOCAL_SERVER_CONFIG,
@@ -248,6 +357,7 @@ def create_controlled_player(
         battle_tag=battle_tag,
         pair_id=pair_id,
         side=side,
+        audit_logger=audit_logger,
     )
     return player
 
@@ -506,7 +616,23 @@ def init_artifacts_atomic(
 # ===== Battle Runner =====
 
 class VGCBattleRunnerV2c:
-    """VGC 2026 Battle Runner with Controlled Team Preview — Phase V2c.2."""
+    """VGC 2026 Battle Runner with Controlled Team Preview — Phase V2c.2.
+
+    V2l.1 — runtime audit logging.
+
+    The runner owns a unique runtime-parity JSONL
+    path. Both players (p1 and p2) get separate
+    audit loggers so the post-preview
+    ``DoublesDamageAwarePlayer.choose_move`` flows
+    from BOTH sides land in a single shared
+    runtime-parity JSONL. The path defaults to
+    ``logs/<artifact_tag>_runtime_audit.jsonl`` and
+    can be supplied explicitly via
+    ``runtime_audit_path``. Legacy use without
+    runtime audit logging continues to work — pass
+    ``runtime_audit_path=None`` (default behavior
+    when the user does not request parity proof).
+    """
 
     def __init__(
         self,
@@ -520,6 +646,7 @@ class VGCBattleRunnerV2c:
         overwrite: bool = False,
         smoke: bool = False,
         smoke_battles: int = 2,  # per arm
+        runtime_audit_path: Optional[str] = None,
     ):
         self.format_name = format_name
         self.max_rank = max_rank
@@ -571,7 +698,68 @@ class VGCBattleRunnerV2c:
         # Atomic initialization
         init_artifacts_atomic(self.csv_path, self.jsonl_path, self.preview_csv_path, overwrite=self.overwrite)
 
+        # V2l.1 — runtime-parity audit JSONL.
+        # If the caller did not supply a path, we
+        # derive one from the artifact tag. The JSONL
+        # is collision-safe for both players (p1 and
+        # p2 share the same file). Legacy callers that
+        # do not request runtime audit logging should
+        # pass ``runtime_audit_path=None`` and we will
+        # leave ``runtime_audit_logger`` unset, which
+        # causes ``ControlledTeamPreviewPlayer`` to
+        # use the canonical engine without audit
+        # recording.
+        if runtime_audit_path is not None:
+            self.runtime_audit_path = Path(runtime_audit_path)
+        elif self.artifact_tag:
+            self.runtime_audit_path = (
+                self.log_dir
+                / f"{self.artifact_tag}_runtime_audit.jsonl"
+            )
+        else:
+            self.runtime_audit_path = None
+        # Audit state must be isolated per player. The
+        # logger stores pending turns by battle tag, so
+        # sharing one logger object between p1 and p2
+        # would let the two perspectives overwrite each
+        # other. Separate logger objects append to the
+        # same JSONL while retaining independent state.
+        self._runtime_audit_logger = None  # legacy alias
+        self._runtime_audit_logger_lock = None
+        self._runtime_audit_loggers_by_player: Dict[
+            str, "DoublesDecisionAuditLogger"
+        ] = {}
+
         self._pair_counter = 0
+
+    def _get_runtime_audit_logger(
+        self, side_label: str
+    ) -> Optional["DoublesDecisionAuditLogger"]:
+        """V2l.1 — lazy-create the runtime audit
+        logger for one player side. Both p1 and p2
+        append to the same JSONL file, but each side
+        owns an independent logger state machine.
+        """
+        if self.runtime_audit_path is None:
+            return None
+        try:
+            from doubles_decision_audit_logger import (
+                DoublesDecisionAuditLogger
+            )
+        except ImportError:
+            return None
+        logger = self._runtime_audit_loggers_by_player.get(side_label)
+        if logger is None:
+            reset = not self._runtime_audit_loggers_by_player
+            logger = DoublesDecisionAuditLogger(
+                filepath=str(self.runtime_audit_path),
+                reset=reset,
+                detail_level="top5",
+            )
+            self._runtime_audit_loggers_by_player[side_label] = logger
+            if self._runtime_audit_logger is None:
+                self._runtime_audit_logger = logger
+        return logger
 
     def _log_battle(self, log: BattleLog):
         """Log battle to CSV and JSONL."""
@@ -723,13 +911,36 @@ class VGCBattleRunnerV2c:
             our_team.id, opponent_team.id, battle_index, pair_id, side
         )
 
+        # Each player gets independent pending/completed
+        # state while both loggers append to one file.
+        our_runtime_audit_logger = self._get_runtime_audit_logger(
+            f"{battle_tag}|p1"
+        )
+        opp_runtime_audit_logger = self._get_runtime_audit_logger(
+            f"{battle_tag}|p2"
+        )
+
         # Create players with controlled preview
         our_bot = create_controlled_player(
-            our_account, our_team_str, our_preview, battle_tag, pair_id, "p1", self.format_name
+            our_account, our_team_str, our_preview,
+            battle_tag, pair_id, "p1", self.format_name,
+            audit_logger=our_runtime_audit_logger,
         )
         opp_bot = create_controlled_player(
-            opp_account, opp_team_str, opp_preview, battle_tag, pair_id, "p2", self.format_name
+            opp_account, opp_team_str, opp_preview,
+            battle_tag, pair_id, "p2", self.format_name,
+            audit_logger=opp_runtime_audit_logger,
         )
+
+        # V2l.1 — record the audit logger instances
+        # handed to each player for the parity test.
+        if our_runtime_audit_logger is not None:
+            self._runtime_audit_loggers_by_player[
+                f"{battle_tag}|p1"
+            ] = our_runtime_audit_logger
+            self._runtime_audit_loggers_by_player[
+                f"{battle_tag}|p2"
+            ] = opp_runtime_audit_logger
 
         # Run battle with watchdog
         errors = ""
@@ -1011,6 +1222,19 @@ def parse_args():
     parser.add_argument("--smoke-battles", type=int, default=2, help="Battles per arm for smoke (default: 2)")
     parser.add_argument("--artifact-tag", type=str, default=None, help="Unique artifact tag (required for smoke, auto-generated if omitted)")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing artifacts")
+    parser.add_argument(
+        "--runtime-audit-path",
+        type=str,
+        default=None,
+        help="V2l.1 — path to the runtime-parity audit "
+        "JSONL. When supplied, the runner wires a "
+        "separate DoublesDecisionAuditLogger state "
+        "machine into each side; both append to the "
+        "same JSONL. Defaults to "
+        "<artifact_tag>_runtime_audit.jsonl when an "
+        "artifact tag is given; otherwise None "
+        "(legacy use without runtime audit logging).",
+    )
     return parser.parse_args()
 
 
@@ -1038,6 +1262,7 @@ async def main():
         overwrite=args.overwrite,
         smoke=args.smoke,
         smoke_battles=args.smoke_battles,
+        runtime_audit_path=args.runtime_audit_path,
     )
 
     if args.smoke:

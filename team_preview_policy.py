@@ -3,6 +3,13 @@
 VGC 2026 Team Preview Policy Module
 
 Provides 4-from-6 team selection policies for VGC battles.
+
+The canonical Pokémon mechanics primitives (type chart, type
+multiplier, ability interactions, dynamic move type, STAB,
+spread, priority, Fake Out legality, speed ordering) live in
+``doubles_mechanics``. This module imports them and re-exports
+the parts the preview evaluators depend on so the existing
+V2i / V2j test contracts continue to work.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -11,28 +18,27 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from collections import Counter
 
+from doubles_mechanics import (
+    TYPE_CHART,
+    calculate_type_multiplier,
+    resolve_effective_move_type,
+    get_effective_move_type,
+    classify_move as _dm_classify_move,
+    EXPLICIT_ABSORB_ABILITIES,
+)
 
-# Type effectiveness chart (Gen 9)
-TYPE_CHART = {
-    "normal": {"rock": 0.5, "ghost": 0, "steel": 0.5},
-    "fire": {"fire": 0.5, "water": 0.5, "grass": 2, "ice": 2, "bug": 2, "rock": 0.5, "dragon": 0.5, "steel": 2},
-    "water": {"fire": 2, "water": 0.5, "grass": 0.5, "ground": 2, "rock": 2, "dragon": 0.5},
-    "electric": {"water": 2, "electric": 0.5, "grass": 0.5, "ground": 0, "flying": 2, "dragon": 0.5},
-    "grass": {"fire": 0.5, "water": 2, "grass": 0.5, "poison": 0.5, "ground": 2, "flying": 0.5, "bug": 0.5, "rock": 2, "dragon": 0.5, "steel": 0.5},
-    "ice": {"fire": 0.5, "water": 0.5, "grass": 2, "ice": 0.5, "ground": 2, "flying": 2, "dragon": 2, "steel": 0.5},
-    "fighting": {"normal": 2, "ice": 2, "poison": 0.5, "flying": 0.5, "psychic": 0.5, "bug": 0.5, "rock": 2, "ghost": 0, "dark": 2, "steel": 2, "fairy": 0.5},
-    "poison": {"grass": 2, "poison": 0.5, "ground": 0.5, "rock": 0.5, "ghost": 0.5, "steel": 0, "fairy": 2},
-    "ground": {"fire": 2, "electric": 2, "grass": 0.5, "poison": 2, "flying": 0, "bug": 0.5, "rock": 2, "steel": 2},
-    "flying": {"electric": 0.5, "grass": 2, "fighting": 2, "bug": 2, "rock": 0.5, "steel": 0.5},
-    "psychic": {"fighting": 2, "poison": 2, "psychic": 0.5, "dark": 0, "steel": 0.5},
-    "bug": {"fire": 0.5, "grass": 2, "fighting": 0.5, "poison": 0.5, "flying": 0.5, "psychic": 2, "ghost": 0.5, "dark": 2, "steel": 0.5, "fairy": 0.5},
-    "rock": {"fire": 2, "ice": 2, "fighting": 0.5, "ground": 0.5, "flying": 2, "bug": 2, "steel": 0.5},
-    "ghost": {"normal": 0, "psychic": 2, "ghost": 2, "dark": 0.5},
-    "dragon": {"dragon": 2, "steel": 0.5, "fairy": 0},
-    "dark": {"fighting": 0.5, "psychic": 2, "ghost": 2, "dark": 0.5, "fairy": 0.5},
-    "steel": {"fire": 0.5, "water": 0.5, "electric": 0.5, "ice": 2, "rock": 2, "steel": 0.5, "fairy": 2},
-    "fairy": {"fire": 0.5, "fighting": 2, "poison": 0.5, "dragon": 2, "dark": 2, "steel": 0.5},
-}
+
+__all__ = [
+    "TYPE_CHART",
+    "SPECIES_TYPES",
+    "get_species_types",
+    "get_move_category",
+    "get_ability_category",
+    "calculate_type_matchup",
+    "calculate_weakness_avoidance",
+    "calculate_type_multiplier",
+    "ABSORB_ABILITIES",
+]
 
 
 # Species -> types mapping

@@ -2472,7 +2472,10 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
     st_move_split = {}; st_intended_split = {}; st_actual_split = {}
     st_reason_split = {}; st_samples = []
 
-    for fp in filepath if isinstance(filepath, list) else [filepath]:
+    # Phase 6.3.8b — the analyzer accepts a single
+    # path or a list. Wrap the path so the for-loop
+    # iterates over the path, not its characters.
+    for fp in [filepath] if isinstance(filepath, str) else filepath:
         if not os.path.exists(fp): continue
         with open(fp) as f:
             for line in f:
@@ -2520,7 +2523,8 @@ def analyze_audit_log(filepath="logs/doubles_decision_audit.jsonl"):
                         st_move_split[mid] = st_move_split.get(mid, 0) + 1
                         st_intended_split[i_side] = st_intended_split.get(i_side, 0) + 1
                         st_actual_split[a_side] = st_actual_split.get(a_side, 0) + 1
-                        st_reason_split[reason[:40]] = st_reason_split.get(reason[:40], 0) + 1
+                        _reason_key = (reason or "")[:40]
+                        st_reason_split[_reason_key] = st_reason_split.get(_reason_key, 0) + 1
 
                         if len(st_samples) < 10:
                             st_samples.append({

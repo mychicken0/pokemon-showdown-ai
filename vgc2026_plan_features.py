@@ -51,6 +51,9 @@ from team_preview_policy import (
     get_species_types,
 )
 
+from doubles_mechanics import calculate_type_multiplier
+import doubles_mechanics as _dm
+
 
 # ---------------------------------------------------------------------------
 # Hand-written role taxonomy (small, documented, not the dex's full surface)
@@ -283,11 +286,21 @@ def _resolve_plan(
 def _all_attacker_multiplier(
     attacker: str, defender_types: Sequence[str]
 ) -> float:
-    multipliers = TYPE_CHART.get(attacker, {})
-    combined = 1.0
-    for defender in defender_types:
-        combined *= multipliers.get(defender, 1.0)
-    return combined
+    """Composite type multiplier.
+
+    Delegates to ``doubles_mechanics.calculate_type_multiplier``
+    so the canonical Gen 9 chart lives in one place. The
+    shared module accepts upper-case type strings; this
+    wrapper normalises the call site's lower-case inputs.
+    """
+    if not attacker or not defender_types:
+        return 1.0
+    upper_defenders = [
+        str(t).upper() for t in defender_types if t
+    ]
+    return calculate_type_multiplier(
+        str(attacker).upper(), upper_defenders
+    )
 
 
 def _lead_shared_weakness_count(
@@ -296,13 +309,27 @@ def _lead_shared_weakness_count(
     lead_types = [get_species_types(p.get("species", "")) for p in leads]
     if any(not t for t in lead_types):
         return 0, 0
+    lead_abilities = [str(p.get("ability", "")).strip() for p in leads]
     shared_2x = 0
     shared_4x = 0
     for attack_type in TYPE_CHART:
         weak_count = 0
         max_weak = 0.0
-        for defender_types in lead_types:
-            mult = _all_attacker_multiplier(attack_type, defender_types)
+        for defender_types, defender_ability in zip(
+            lead_types, lead_abilities
+        ):
+            # Use the shared combined-mechanics call so a
+            # known typed-ability on the defender (e.g.
+            # ``Levitate`` into Ground) is applied.
+            res = _dm.evaluate_move_effectiveness(
+                move=None,
+                attacker=None,
+                target=None,
+                defender_types=defender_types,
+                target_ability=defender_ability,
+                move_type_override=attack_type.upper(),
+            )
+            mult = res.effective_multiplier
             if mult >= 2.0:
                 weak_count += 1
                 max_weak = max(max_weak, mult)
