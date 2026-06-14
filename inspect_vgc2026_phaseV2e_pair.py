@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import choose_four_from_six, PreviewResult
 from vgc_team_pool import load_vgc_pool

@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from vgc2026_matchup_evaluator_v2 import (
     COMPONENT_SPECS,

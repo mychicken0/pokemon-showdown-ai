@@ -42,7 +42,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from vgc2026_matchup_evaluator_v2 import (
     ABSORB_ABILITIES,
@@ -1173,7 +1173,7 @@ class TestSubprocessNaturalExit(unittest.TestCase):
                 "import inspect_vgc2026_phaseV2i_matchup; "
                 "print('ok')",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True, text=True, timeout=5,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1187,7 +1187,7 @@ class TestSubprocessNaturalExit(unittest.TestCase):
 
 class TestInspectorIntegration(unittest.TestCase):
     def setUp(self):
-        self.cwd = "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai"
+        self.cwd = str(Path(__file__).resolve().parent)
         self.logs_dir = Path(self.cwd) / "logs"
 
     def test_inspector_pair(self):
@@ -1275,7 +1275,7 @@ class TestInspectorIntegration(unittest.TestCase):
 
 class TestAnalyzerIntegration(unittest.TestCase):
     def setUp(self):
-        self.cwd = "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai"
+        self.cwd = str(Path(__file__).resolve().parent)
         self.logs_dir = Path(self.cwd) / "logs"
 
     def test_analyzer_runs(self):

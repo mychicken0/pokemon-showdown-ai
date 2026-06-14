@@ -33,7 +33,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import sys
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze_vgc2026_phaseV2f_qualification import (
     paired_sign_test as v2f_paired_sign_test,

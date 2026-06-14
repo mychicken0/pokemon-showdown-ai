@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 import sys
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from vgc_team_pool import VGCTeamPool, load_vgc_pool
 from team_preview_policy import choose_four_from_six, PreviewResult, validate_preview

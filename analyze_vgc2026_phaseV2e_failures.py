@@ -37,7 +37,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from analyze_vgc2026_phaseV2d_qualification import (
     analyze_pairs as v2d_analyze_pairs,

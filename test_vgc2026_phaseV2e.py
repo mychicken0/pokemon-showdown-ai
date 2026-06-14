@@ -47,7 +47,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import (
     choose_four_from_six,

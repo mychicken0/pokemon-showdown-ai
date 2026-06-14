@@ -31,7 +31,7 @@ import csv
 import json
 from pathlib import Path
 
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import (
     choose_four_from_six, PreviewResult, validate_preview,
@@ -402,7 +402,7 @@ class TestAnalyzerAndInspector(unittest.TestCase):
         result = subprocess.run([
             sys.executable, "analyze_vgc2026_preview_policy_failures.py",
             "--artifact-tag", "phaseV2c2_smoke_test"
-        ], capture_output=True, text=True, timeout=30, cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+        ], capture_output=True, text=True, timeout=30, cwd=str(Path(__file__).resolve().parent))
         self.assertEqual(result.returncode, 0, f"Analyzer failed: {result.stderr}")
 
     def test_inspector_lists_pairs(self):
@@ -412,7 +412,7 @@ class TestAnalyzerAndInspector(unittest.TestCase):
             sys.executable, "inspect_vgc2026_preview_pair.py",
             "--artifact-tag", "phaseV2c2_smoke_test",
             "--list-arm", "D"
-        ], capture_output=True, text=True, timeout=30, cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+        ], capture_output=True, text=True, timeout=30, cwd=str(Path(__file__).resolve().parent))
         self.assertEqual(result.returncode, 0, f"Inspector failed: {result.stderr}")
         self.assertIn("Pair   0:", result.stdout)
 

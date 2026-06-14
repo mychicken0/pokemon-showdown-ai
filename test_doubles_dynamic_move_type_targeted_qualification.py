@@ -333,10 +333,36 @@ class TestExtractorGates(unittest.TestCase):
     def test_old_phase637n_artifacts_discard(self):
         from bot_doubles_dynamic_move_type_targeted_qualification import _extract_evidence
         old = "logs/dynamic_type_targeted_phase637n.jsonl"
-        if not os.path.exists(old):
-            self.skipTest("old artifacts not found")
-        for bt, e in _extract_evidence(old).items():
-            self.assertFalse(e["setup_valid"], f"{bt} should be DISCARD")
+        if os.path.exists(old):
+            evidence = _extract_evidence(old)
+        else:
+            tmp = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, tmp, True)
+            old = os.path.join(tmp, "legacy.jsonl")
+            # Legacy rows lacked production reveal metadata and
+            # therefore must not qualify.
+            self._write(old, [{
+                "battle_tag": "legacy",
+                "won": True,
+                "audit_turns": [{
+                    "turn": 4,
+                    "slot_0": {
+                        "dynamic_type_absorb_candidate_target_table": [{
+                            "move_id": "aurawheel",
+                            "form": "morpeko",
+                            "effective_type": "ELECTRIC",
+                            "target_species": "lanturn",
+                            "selected": True,
+                        }],
+                    },
+                }],
+            }])
+            evidence = _extract_evidence(old)
+        self.assertTrue(evidence)
+        for bt, item in evidence.items():
+            self.assertFalse(
+                item["setup_valid"], f"{bt} should be DISCARD"
+            )
 
     def test_target_identity_change_discards(self):
         from bot_doubles_dynamic_move_type_targeted_qualification import _extract_evidence
@@ -401,12 +427,36 @@ class TestExtractorGates(unittest.TestCase):
 
     def test_cli_not_found_exits_nonzero(self):
         import subprocess
-        r = subprocess.run(["./venv/bin/python","bot_doubles_dynamic_move_type_targeted_qualification.py",
-                            "--artifact-tag","__nonexistent_artifact__"],
-                           capture_output=True,text=True,
-                           cwd=os.path.dirname(__file__) or ".",
-                           timeout=10)
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        script = os.path.join(
+            project_root,
+            "bot_doubles_dynamic_move_type_targeted_qualification.py",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            os.mkdir(os.path.join(tmp, "logs"))
+            collision = os.path.join(
+                tmp,
+                "logs",
+                "dynamic_type_targeted_collision.jsonl",
+            )
+            with open(collision, "w") as handle:
+                handle.write("existing\n")
+            r = subprocess.run(
+                [
+                    sys.executable,
+                    script,
+                    "--artifact-tag",
+                    "collision",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=tmp,
+                timeout=10,
+            )
         self.assertNotEqual(r.returncode, 0)
+        self.assertIn(
+            "already exist", (r.stdout + r.stderr).lower()
+        )
 
 
 class TestSlotSafeAction(unittest.TestCase):

@@ -2529,11 +2529,38 @@ class TestLoggerAnalyzer(unittest.TestCase):
 
     def test_existing_artifacts_without_overwrite_exits_nonzero(self):
         import subprocess
-        result = subprocess.run(
-            ["./venv/bin/python", "bot_doubles_dynamic_move_type_safety_benchmark.py",
-             "--artifact-tag", "phase637m_dynamic_aurawheel_smoke"],
-            capture_output=True, text=True, cwd=os.path.dirname(__file__) or ".")
+        import tempfile
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        script = os.path.join(
+            project_root,
+            "bot_doubles_dynamic_move_type_safety_benchmark.py",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            os.mkdir(os.path.join(tmp, "logs"))
+            existing = os.path.join(
+                tmp,
+                "logs",
+                "dynamic_move_type_collision.csv",
+            )
+            with open(existing, "w") as handle:
+                handle.write("existing\n")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    script,
+                    "--artifact-tag",
+                    "collision",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=tmp,
+                timeout=10,
+            )
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "already exist",
+            (result.stdout + result.stderr).lower(),
+        )
 
     def test_duplicate_orders_second_selected_merges_correctly(self):
         aw = _make_move("aurawheel","ELECTRIC")

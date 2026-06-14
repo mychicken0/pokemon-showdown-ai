@@ -35,7 +35,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import (
     choose_four_from_six,
@@ -637,36 +637,17 @@ class TestOutcomeIsolation(unittest.TestCase):
 
 
 class TestAnalyzerIntegration(unittest.TestCase):
-    def test_analyzer_runs(self):
-        # Run the full analyzer against the real V2f artifacts.
-        logs_dir = Path(
-            "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/logs"
-        )
-        artifact = (
-            logs_dir
-            / "vgc2026_phaseV2c_phaseV2f_v3_paired_qualification_benchmark.csv"
-        )
-        self.assertTrue(artifact.exists(), f"missing {artifact}")
+    def test_analyzer_missing_artifacts_fails(self):
+        """Unit discovery must not depend on ignored benchmark
+        artifacts. The production analyzer should fail explicitly
+        when its requested inputs are absent.
+        """
         from analyze_vgc2026_phaseV2h_feature_stability import (
             run_analysis,
         )
-        report = run_analysis(logs_dir, (
-            "vgc2026_phaseV2c_phaseV2f_v3_paired_qualification"
-        ))
-        self.assertEqual(report["sign_test"]["decisive_n"], 55)
-        self.assertEqual(report["sign_test"]["v3_both"], 30)
-        self.assertEqual(report["sign_test"]["random_both"], 25)
-        self.assertEqual(report["sign_test"]["split"], 45)
-        self.assertGreater(len(report["v3_both_table"]), 0)
-        self.assertGreater(len(report["within_failure_table"]), 0)
-        self.assertGreater(len(report["agreements"]), 0)
-        self.assertGreater(len(report["candidate_gates"]), 0)
-        self.assertIn("v3_plans", report["audit_unknown"])
-        self.assertIn("random_plans", report["audit_unknown"])
-        for stats in report["v3_both_table"].values():
-            self.assertIn("mean_diff_bootstrap_ci", stats)
-            self.assertIn("missing_v3_both", stats)
-            self.assertIn("missing_random_both", stats)
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(FileNotFoundError):
+                run_analysis(Path(tmp), "missing")
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +664,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "--pair", "0",
                 "--feature", "common_total",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,
@@ -700,7 +681,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "inspect_vgc2026_phaseV2h_feature.py",
                 "--contradictory",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,
@@ -715,7 +696,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "inspect_vgc2026_phaseV2h_feature.py",
                 "--candidate-actionable",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,
@@ -731,7 +712,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "--feature", "common_total",
                 "--largest-positive", "3",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,
@@ -747,7 +728,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "--feature", "common_total",
                 "--largest-negative", "3",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,
@@ -763,7 +744,7 @@ class TestInspectorIntegration(unittest.TestCase):
                 "--feature", "common_total",
                 "--group", "random_both",
             ],
-            cwd="/home/phurin/Program/Showdown_AI/pokemon-showdown-ai",
+            cwd=str(Path(__file__).resolve().parent),
             capture_output=True,
             text=True,
             timeout=60,

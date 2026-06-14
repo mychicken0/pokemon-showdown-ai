@@ -36,7 +36,7 @@ import subprocess
 import sys
 from pathlib import Path
 import pandas as pd
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import choose_four_from_six, PreviewResult, validate_preview
 from poke_env.teambuilder.constant_teambuilder import ConstantTeambuilder
@@ -1107,7 +1107,7 @@ class TestPokeEnvNaturalExit(unittest.TestCase):
         cmd = [
             sys.executable, "-c",
             "import sys; "
-            "sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai'); "
+            f"sys.path.insert(0, {str(Path(__file__).resolve().parent)!r}); "
             "import poke_env_test_cleanup; "
             "from bot_vgc2026_phaseV2c import ControlledTeamPreviewPlayer; "
             "from test_vgc2026_controlled_teampreview import make_minimal_player; "
@@ -1165,10 +1165,22 @@ class TestRegressionGuards(unittest.TestCase):
             Path("logs/vgc2026_phaseV2c_preview_evidence.csv"),
         ]
         # Capture stat before
-        before = {a: (a.stat().st_size, a.stat().st_mtime) for a in artifacts}
+        before = {
+            artifact: (
+                (artifact.stat().st_size, artifact.stat().st_mtime)
+                if artifact.exists() else None
+            )
+            for artifact in artifacts
+        }
         # Verify we never touched logs/ during this test run
         # All runners in tests use TemporaryDirectory, so default artifacts should be untouched
-        after = {a: (a.stat().st_size, a.stat().st_mtime) for a in artifacts}
+        after = {
+            artifact: (
+                (artifact.stat().st_size, artifact.stat().st_mtime)
+                if artifact.exists() else None
+            )
+            for artifact in artifacts
+        }
         for a in artifacts:
             self.assertEqual(
                 before[a], after[a],

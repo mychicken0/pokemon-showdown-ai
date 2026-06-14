@@ -40,7 +40,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bot_vgc2026_phaseV2f_qualification import (
     V2fPairedQualificationRunner,

@@ -14,7 +14,7 @@ from dataclasses import asdict
 
 import pandas as pd
 
-sys.path.insert(0, '/home/phurin/Program/Showdown_AI/pokemon-showdown-ai')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from team_preview_policy import choose_four_from_six, PreviewResult, validate_preview
 from vgc_team_pool import load_vgc_pool
