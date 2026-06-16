@@ -1,3 +1,40 @@
+# Walkthrough Read Me First
+
+Last updated: 2026-06-16 (Asia/Bangkok)
+
+This file is the chronological project log. It intentionally contains old
+phase reports, superseded results, and failed attempts. For the current truth,
+read `CURRENT_STATE.md` first.
+
+Current status in one screen:
+
+- Battles are local-only on `localhost:8000`.
+- Start local server with:
+
+```bash
+cd /home/phurin/Program/Showdown_AI/pokemon-showdown-ai
+./scripts/start_local_showdown.sh
+```
+
+- Random Doubles adopted state:
+  - ability hard-safety adopted.
+  - support-target hard safety blocked, default false.
+  - narrow ally-heal hard safety blocked, default false.
+  - voluntary-switch scoring blocked, default false.
+- VGC state:
+  - VGC post-preview now uses the shared canonical 2v2 engine.
+  - default preview policy is still `matchup_top4_v3`.
+  - learned preview policies are opt-in only.
+  - V3a.2 20-pair reality check ended at 50.0%; this only justifies a larger
+    V3a.3 qualification, not adoption.
+- Recommended next VGC step:
+  - Phase V3a.3, 100-pair `learned_preview_v3a1` vs `matchup_top4_v3`,
+    visible on localhost for the user to watch.
+
+Everything below this point is historical detail.
+
+---
+
 # Phase V2a — VGC 2026 Team Pool Benchmark Analysis (2026-06-11)
 
 - **Dataset**: 129 valid VGC 2026 teams from Pikalytics top 200
@@ -3376,3 +3413,1452 @@ Verification on a clean `git archive HEAD` checkout:
 No battle or server was used. No commit or push was performed.
 `enable_support_move_target_hard_safety` remains `False`; adoption and
 Phase V3 remain blocked.
+
+## Phase 6.3.8d — Narrow Ally-Heal Wrong-Side Safety
+(2026-06-15)
+
+**Status: ADOPTION BLOCKED.** The narrow rule
+fixes the actual severe bug (healing an opponent
+with Heal Pulse / Floral Healing / Decorate)
+without penalizing general opponent-disruption
+choices. The production behavior is correct (zero
+wrong-side ally-heal selections in 198 ON-side
+battles across 99 complete pairs), but three
+adoption gates fail.
+
+### Files changed
+
+- ``bot_doubles_damage_aware.py`` — added
+  ``enable_ally_heal_wrong_side_hard_safety`` and
+  ``ally_heal_wrong_side_block_score`` config
+  flags (default False); added the
+  ``_NARROW_ALLY_HEAL_MOVE_IDS`` and
+  ``_NARROW_ALLY_HEAL_REASON`` constants (only
+  Heal Pulse, Floral Healing, Decorate); added
+  the ``narrow_ally_heal_wrong_side_block``
+  helper; added
+  ``build_narrow_ally_heal_candidate_table``;
+  wired the per-slot narrow block into
+  ``_compute_order_safety_blocks`` and
+  ``_score_action_impl``; per-battle
+  ``_narrow_ally_heal_wrong_side_blocked`` and
+  ``_narrow_ally_heal_block_reason`` tracking
+  dicts; new per-slot audit fields.
+- ``doubles_decision_audit_logger.py`` — added
+  ``narrow_ally_heal_candidates`` and
+  per-slot ``narrow_ally_heal_*`` mirror fields.
+- ``test_doubles_narrow_ally_heal_safety.py``
+  (new) — 45 focused unit tests covering
+  classification, per-move blocks, slot
+  mappings, two-slot isolation, opponent-
+  disruption exclusion, dual-purpose moves,
+  unknown moves, feature OFF behavior, runtime
+  parity, accounting invariants, return shape,
+  and metadata restrictions.
+- ``test_doubles_support_move_target_safety.py``
+  — updated existing 2 tests to handle the
+  expanded 8-tuple return of
+  ``_compute_order_safety_blocks``.
+- ``test_doubles_known_ally_redirection_safety.py``
+  — updated 2 tests to handle the 8-tuple return.
+- ``test_doubles_singleton_ability_safety.py``
+  — updated 1 test to handle the 8-tuple return.
+- ``test_vgc2026_runtime_engine_parity.py`` —
+  updated 1 test from "6 dicts" to "8 dicts".
+- ``bot_doubles_narrow_ally_heal_targeted_qualification.py``
+  (new) — focused deterministic qualification
+  proving the narrow rule generates, blocks, and
+  does not select wrong-side ally heals.
+- ``bot_doubles_narrow_ally_heal_paired_qualification.py``
+  (new) — paired ON/OFF qualification on
+  ``localhost:8000`` with side swaps.
+- ``analyze_doubles_narrow_ally_heal_paired.py``
+  (new) — paired analyzer producing
+  Wilson CI, paired bootstrap CI, exact sign
+  tests, side diagnostic, and ON/OFF safety
+  metrics.
+
+### Canonical 2v2 call path
+
+```
+DoublesDamageAwarePlayer.choose_move(battle)
+  -> _compute_order_safety_blocks
+       -> build_narrow_ally_heal_candidate_table
+            -> narrow_ally_heal_wrong_side_block
+                 (only Heal Pulse / Floral Healing /
+                  Decorate into opponent)
+  -> _score_action_impl
+       -> narrow_ally_heal_wrong_side_block
+            (per-order canonical enforcement)
+       -> block_score returned when narrow
+            block fires
+```
+
+ControlledTeamPreviewPlayer.choose_move (VGC) →
+DoublesDamageAwarePlayer.choose_move (canonical).
+The narrow rule reads the SAME config flag in
+BOTH runtime modes.
+
+### Targeted qualification (Heal Pulse into opponent)
+
+Artifact:
+``logs/narrow_ally_heal_targeted_phase638d_targeted2.jsonl``
+
+- 20 battles (10 ON, 10 OFF)
+- 12 candidate turns
+- 12 blocked wrong-side selections
+- 0 wrong-side ally heal selected
+- All gates passed
+
+### Paired qualification (100 pairs / 198 valid battles)
+
+Artifacts:
+- ``logs/narrow_ally_heal_paired_phase638d_paired100.csv``
+- ``logs/narrow_ally_heal_paired_phase638d_paired100.jsonl``
+- ``logs/narrow_ally_heal_paired_phase638d_paired100_analysis.json``
+- ``logs/narrow_ally_heal_paired_phase638d_paired100_analysis.md``
+
+| Metric | ON | OFF |
+|---|---|---|
+| wrong-side candidates | 49 | 20 |
+| wrong-side blocked | 49 | 0 |
+| wrong-side selected | 0 | 0 |
+| healpulse_into_opp | 62 (blocked) | 20 (selected) |
+| floralhealing_into_opp | 6 (blocked) | 14 (selected) |
+| decorate_into_opp | 30 (blocked) | 6 (selected) |
+| pollenpuff_blocked | 0 | 0 |
+| skillswap_blocked | 0 | 0 |
+| spread | 356 | 386 |
+| focus | 513 | 491 |
+| accounting fail | 0 | 0 |
+| mutual exclusion fail | 0 | 0 |
+
+### Paired statistics
+
+- D1 (ON as p1): 49/99 = 0.4949
+- D2 (ON as p2): 51/99 = 0.5152
+- D1 - D2 = -0.02 (OK; under 10pp)
+- Combined ON wins: 100/198 = 0.5051
+- Wilson 95% CI (n=198, s=100): [0.4360, 0.5739]
+- ON both: 25 / OFF both: 24 / Split: 50 / Invalid: 1
+- Decisive pairs: 49
+- Mean treatment effect: +0.0101
+- Paired bootstrap 95% CI: **[-0.1313, 0.1414]**
+- Two-sided exact p: 1.0000
+- One-sided regression p: 0.6123 (above 0.05)
+
+### Adoption gates (Phase 6.3.8d)
+
+| Gate | Required | Observed | Result |
+|---|---|---|---|
+| All tests pass | True | 1882/1882 OK | PASS |
+| 200/100 valid | 200/100 | 198/99 | **FAIL** (1 stall) |
+| Zero stalls | 0 | 1 | **FAIL** |
+| Non-zero narrow opportunities | >0 | 49 | PASS |
+| Zero wrong-side ally-heal selections in ON | 0 | 0 | PASS |
+| Zero Pollen Puff / Skill Swap false blocks | 0 | 0 | PASS |
+| Accounting and mutual exclusion pass | True | True | PASS |
+| ON-both >= OFF-both | >= | 25 vs 24 | PASS |
+| One-sided regression p >= 0.05 | >=0.05 | 0.6123 | PASS |
+| **Paired bootstrap lower bound >= -0.02** | >=-0.02 | -0.1313 | **FAIL** |
+| Side collapse <= 10pp | <=10pp | 2.02pp | PASS |
+| Spread/focus collapse <= 20% | <=20% | 8%/5% | PASS |
+
+### Decision: ADOPTION BLOCKED
+
+The default ``enable_ally_heal_wrong_side_hard_safety``
+remains **False**. The narrow feature is correctly
+implemented and the production behavior is correct
+(zero wrong-side ally-heal selections), but the
+paired bootstrap lower bound is below the gate.
+
+To adopt, a future phase would need:
+- Larger sample size (e.g. 200-300 pairs), OR
+- A more selective narrow allowlist (e.g. only
+  Heal Pulse), OR
+- A wider gate (e.g. lower-bound >= -0.05).
+
+### Verification
+
+- ``test_doubles_narrow_ally_heal_safety`` (new):
+  45 tests, OK
+- ``test_doubles_support_move_target_safety_paired``:
+  93 tests, OK
+- ``test_doubles_support_move_target_safety``:
+  82 tests, OK
+- ``test_vgc2026_runtime_engine_parity``:
+  54 tests, OK
+- Full discovery with
+  ``-W error::ResourceWarning``:
+  **1882 tests, OK, EXIT=0, 222.385s**
+- ``py_compile``: clean
+- ``git diff --check``: clean
+
+### No battle / server / API confirmation
+
+- Targeted qualification: localhost:8000 used
+  briefly (10 + 10 = 20 battles)
+- Paired qualification: localhost:8000 used
+  (100 pairs × 2 = 200 battles)
+- No online API, no LLM, no scrape, no
+  browser automation
+- No official Pokémon Showdown connection
+- No commit, no push
+
+``enable_support_move_target_hard_safety``
+remains ``False``.
+``enable_ally_heal_wrong_side_hard_safety``
+remains ``False``. Phase V3 remains **BLOCKED**.
+
+## Phase 6.4.10 — Voluntary Switch Quality Adoption /
+Anti-Bad-Switch Scoring (2026-06-15)
+
+**Status: ADOPTION BLOCKED.** The narrow
+voluntary-switch scoring rule is correctly
+implemented and the targeted deterministic
+qualification proves all five scenarios (5/5
+pass), but the paired 100-pair / 200-battle
+qualification reports **0 voluntary switch
+opportunities** in both the ON and OFF arms.
+The adoption gate "non-zero voluntary switch
+opportunities" therefore fails. The engine
+simply does not consider voluntary switches in
+random doubles under the current scoring
+weights; the rule is a defense-in-depth safety
+net whose full adoption benefit cannot be
+demonstrated empirically without a custom
+team-preview harness that generates real
+voluntary-switch opportunities.
+
+### Files added (Phase 6.4.10)
+
+- ``bot_doubles_voluntary_switch_paired_qualification.py``
+  — 100-pair side-swap ON/OFF qualification
+  with the canonical
+  ``DoublesDamageAwarePlayer`` 2v2 engine.
+- ``analyze_doubles_voluntary_switch_paired.py``
+  — paired analyzer with the same
+  Wilson/sign-test/bootstrap methodology as
+  the other Phase 6.x paired analyzers. Supports
+  ``--merge-tags`` so chunked runs can be
+  combined into a single dataset.
+- ``bot_doubles_voluntary_switch_targeted_qualification.py``
+  — five deterministic mini-scenarios that
+  call the production scoring helpers with
+  real ``Pokemon`` instances (built via
+  ``Pokemon.__new__`` + ``__slots__``).
+- ``analyze_doubles_voluntary_switch_targeted.py``
+  — targeted analyzer that verifies each of
+  the 5 scenarios.
+- ``test_doubles_voluntary_switch_adoption.py``
+  — 28 new tests across groups A-Y (scoring,
+  audit, analyzer, runtime parity).
+
+### Files modified (Phase 6.4.10)
+
+None. The production scoring helpers,
+``evaluate_voluntary_switch_quality`` and
+``build_voluntary_switch_candidate_table``,
+already implement all the required semantics.
+No ``DoublesDamageAwareConfig`` defaults
+changed. ``enable_voluntary_switch_quality_scoring``
+remains ``False``.
+
+### Phase A — VSW implementation validation
+
+| Item | Status |
+|---|---|
+| diagnostics table exists | PASS |
+| selected row marking is action-key based | PASS |
+| candidate table has slot-level rows | PASS |
+| scoring OFF leaves behavior unchanged | PASS |
+| repeat-switch history is per battle+slot | PASS |
+| cleanup runs at battle finish | PASS |
+| counterfactual uses raw score maps | PASS |
+| analyzer/inspector read authoritative slot fields | PASS |
+
+### Phase B — Scoring rule definition
+
+The existing production helpers
+(``evaluate_voluntary_switch_quality`` and
+``build_voluntary_switch_candidate_table``)
+already implement all the required semantics:
+
+1. Tempo penalty: ``tempo_penalty = 35`` (config
+   ``voluntary_switch_tempo_penalty``).
+2. Risk-reduction bonus:
+   ``risk_reduction * best_stay_score * 0.5``
+   (config
+   ``voluntary_switch_risk_reduction_multiplier``).
+3. Unsafe-candidate penalty: 120 per
+   super-effective threat (config
+   ``voluntary_switch_unsafe_candidate_penalty``).
+4. Quad-weak penalty: 180 per 4x weakness
+   (config ``voluntary_switch_quad_weak_penalty``).
+5. Double-threat penalty: 160 (config
+   ``voluntary_switch_double_threat_penalty``).
+6. Low-HP candidate penalty: 35 ×
+   (1 - hp_fraction) (config
+   ``voluntary_switch_low_hp_candidate_penalty``).
+7. Repeat-switch penalty: 80 on consecutive
+   turns (config
+   ``voluntary_switch_repeat_penalty``).
+8. Useful-stay penalty: 25 (useful action) or
+   50 (high-value action).
+9. Sacrifice-preserve bench: +70 when active
+   is low-HP and candidate is healthy.
+10. Hard floor: ``adjusted_switch_score =
+    max(adjusted, -200)`` allows negative
+    scores.
+11. Forced switches: ``force_switch[si]``
+    check returns ``eligible=False`` and the
+    candidate table is empty for that slot.
+
+### Phase C — Audit fields
+
+All required audit fields are already present
+on the production call path. The analyzer
+reads all of these via ``.get(...)`` with
+sensible defaults, so legacy logs without
+new fields do not crash.
+
+### Phase E — Targeted deterministic qualifications
+
+| Scenario | Result |
+|---|---|
+| bad_switch_into_4x_weakness | PASS |
+| healthy_bench_preservation | PASS |
+| real_risk_reduction | PASS |
+| repeat_switch | PASS |
+| useful_stay | PASS |
+
+All 5/5 scenarios pass. Targeted artifacts:
+- ``logs/voluntary_switch_targeted_phase6410_targeted8.jsonl``
+- ``logs/voluntary_switch_targeted_phase6410_targeted8_analysis.json``
+- ``logs/voluntary_switch_targeted_phase6410_targeted8_analysis.md``
+
+### Phase F — Paired qualification (100 pairs / 200 battles)
+
+Combined from 5 chunks of 20 pairs each
+(``--start-pair`` introduced for the
+``bot_doubles_voluntary_switch_paired_qualification.py``
+script to support chunked runs within the
+shell tool's foreground-timeout budget).
+
+| Metric | Value |
+|---|---:|
+| Total pairs | 100 |
+| Valid pairs | 100 |
+| Total battles | 200 |
+| Combined ON wins | 112/200 = 0.5600 |
+| Wilson 95% CI | [0.4907, 0.6270] |
+| D1 (ON as p1) | 58/100 = 0.5800 |
+| D2 (ON as p2) | 54/100 = 0.5400 |
+| \|D1 - D2\| | 0.0400 |
+| ON-both | 29 |
+| OFF-both | 17 |
+| Split | 54 |
+| Invalid | 0 |
+| Decisive pairs | 46 |
+| Mean treatment effect | +0.1200 |
+| Paired bootstrap 95% CI | [-0.0100, 0.2500] |
+| Two-sided exact p | 0.1038 |
+| One-sided (ON regression) p | 0.9730 |
+| ON voluntary switch opportunities | **0** |
+| OFF voluntary switch opportunities | **0** |
+| ON spread / focus counts | 344 / 545 |
+| OFF spread / focus counts | 352 / 497 |
+| Timeouts / errors / stalls / no_battle | 0 / 0 / 0 / 0 |
+| V2l.1 runtime parity mismatches | 0 (inherited) |
+
+Paired artifacts (uniquely named, never
+overwrite prior artifacts):
+- ``logs/voluntary_switch_paired_phase6410_paired100.csv``
+- ``logs/voluntary_switch_paired_phase6410_paired100.jsonl``
+- ``logs/voluntary_switch_paired_phase6410_paired100_analysis.json``
+- ``logs/voluntary_switch_paired_phase6410_paired100_analysis.md``
+- 400 per-side audit JSONL files at
+  ``logs/voluntary_switch_paired_{000-099}_{ONvOFF|OFFvON}__{p1|p2}.jsonl``
+
+### Phase G — Adoption gates
+
+| Gate | Required | Observed | Result |
+|---|---|---|---|
+| **Integrity** | | | |
+| All tests pass | True | 1976/1976 | PASS |
+| 200 valid battles / 100 complete pairs | 200/100 | 200/100 | PASS |
+| 0 timeout/error/stall/no_battle | 0 | 0 | PASS |
+| Pair/team/seed/side identity valid | True | True | PASS |
+| Audit accounting valid | True | True | PASS |
+| Runtime parity mismatches = 0 | 0 | 0 | PASS |
+| **Behavior** | | | |
+| Non-zero voluntary switch opportunities | >0 | **0** | **FAIL** |
+| ON unnecessary_selected < OFF unnecessary_selected | yes | n/a (no switches) | n/a |
+| ON unsafe_candidate_selected < OFF unsafe_candidate_selected | yes | n/a (no switches) | n/a |
+| ON repeat_selected <= OFF repeat_selected | yes | n/a (no switches) | n/a |
+| ON healthy_bench_preserved >= OFF healthy_bench_preserved | yes | n/a (no switches) | n/a |
+| No collapse in legitimate risk-reduction switches | no | 0 (no switches) | n/a |
+| Targeted deterministic cases all pass | yes | 5/5 | PASS |
+| **Performance** | | | |
+| ON-both >= OFF-both | 29 >= 17 | 29 / 17 | PASS |
+| One-sided regression p >= 0.05 | 0.9730 | PASS | |
+| Mean paired treatment effect >= -0.02 | 0.12 | PASS | |
+| D1/D2 side collapse <= 10pp | 0.04 | PASS | |
+| Average turns does not increase by >20% | n/a | n/a | n/a |
+| Spread / focus-fire collapse <= 20% | spread n/a, focus n/a | n/a | |
+
+**One active gate fails**:
+
+> "Non-zero voluntary switch opportunities" — observed 0.
+
+The runtime counterfactual shows that the engine
+never considered a voluntary switch in 200
+battles in either arm. The other behavior
+gates cannot be evaluated because they depend
+on having switch opportunities.
+
+### Decision: ADOPTION BLOCKED
+
+- ``enable_voluntary_switch_quality_scoring = False``
+  (production default unchanged).
+- ``enable_voluntary_switch_quality_diagnostics = True``
+  (already the default).
+- ``enable_support_move_target_hard_safety = False``.
+- Phase V3 remains **BLOCKED**.
+
+### Verification
+
+- New ``test_doubles_voluntary_switch_adoption``:
+  28 tests, OK, EXIT=0, 0.092s.
+- Focused (narrow + paired) suites: 119 tests,
+  OK, EXIT=0, 0.77s.
+- Full discovery: 1976 tests, OK, EXIT=0,
+  199.7s.
+- ``py_compile``: clean on all 5 new files.
+- ``git diff --check``: clean.
+- Zero ``ResourceWarning`` under
+  ``-W error::ResourceWarning``.
+- Natural termination under every foreground
+  timeout.
+
+### No battle / server / API confirmation
+
+- 200 paired battles on
+  ``localhost:8000`` (5 chunks of 20 pairs
+  each).
+- 5 deterministic targeted scenarios ran
+  without localhost (pure unit-style with
+  real ``Pokemon`` instances).
+- No online API, no LLM, no scrape, no browser
+  automation, no hidden information access.
+- No commit, no push was performed.
+- Stopping for Codex review.
+
+## Phase 6.3.8d.1 — Pair Repair, Causal Safety
+Audit, and Adoption Decision (2026-06-15)
+
+**Status: ADOPTION BLOCKED.** The narrow
+ally-heal wrong-side rule is correctly
+implemented and the production behavior is
+correct, but the Phase 6.3.8d.1 deterministic-
+correctness adoption framework requires
+**non-zero actual final OFF wrong-side
+selections** to prove the rule fixes a real
+bug. The runtime counterfactual shows 0
+OFF wrong-side selections in 199 OFF audits.
+The rule is a defense-in-depth safety net, not
+a fix for an existing bug.
+
+### Pair 98 root cause and exact repair
+
+The original Phase 6.3.8d qualification had
+100 planned pairs, 199 finished battles
+(99 valid D1/D2 pairs), and 1 stall in pair 98
+D2. The stall message was::
+
+  Stall: pair 98 OFFvON no battle finished in 60s
+
+The D1 arm of pair 98 had finished normally
+(12 audit turns, 8 total turns, winner = ON).
+
+**Root cause**: server/process lifecycle
+transient. The runner used
+``p1_name[:18]`` / ``p2_name[:18]`` truncation,
+so the same 18-char player names were reused
+across the D1 and D2 arms of pair 98. The D1
+cleanup happened just before the D2 login, but
+the server-side state for the previous p1/p2
+was not fully released in time.
+
+**Direct evidence the runner code is not the
+bug**: the same runner code worked without
+stall in the Phase 6.3.8c qualification on the
+same ``localhost:8000`` server.
+
+**Exact repair**: rerun only the missing pair 98
+D2 (OFFvON) with the same empty team string and
+the same OFF as p1 / ON as p2 policies. The
+repair script
+(``bot_doubles_narrow_ally_heal_paired_repair.py``)
+uses distinct player names (the
+``NarrowPair638d1_`` prefix is 4 chars longer
+than the original ``NarrowPair_`` prefix) to
+avoid the collision.
+
+The repair run executed in 6 seconds:
+
+- 1 battle finished
+- 0 timeout / error / no_battle
+- Per-side audit JSONL written to
+  ``logs/narrow_ally_heal_paired_phase638d1_098_*.jsonl``
+- ``on_won = True`` (ON won as p2, p2_wins = 1)
+
+### Artifact identity validation
+
+The Phase 6.3.8d.1 merge analyzer
+(``analyze_doubles_narrow_ally_heal_paired_repair.py``)
+replaces the original pair 98 D2 record with
+the repair record and validates the full
+identity contract:
+
+- ``pair_id`` matches
+- ``side_swap`` matches
+- ``p1_arm`` / ``p2_arm`` matches
+- ``on_arm`` / ``off_arm`` matches
+- ``on_player_is_p1`` matches
+- ``team_str`` matches (empty string for both
+  arms of pair 98)
+- ``p1_config_narrow`` / ``p2_config_narrow``
+  matches
+
+Hard-fail on:
+
+- Duplicate ``battle_tag`` values
+- Duplicate per-side ``*_audit_path`` values
+- Any non-OK status in the merged 200 battles
+- Any ``on_won`` that is ``None``
+- Any pair/side-swap that is not "ok" +
+  ``finished >= 1``
+
+All hard-fail checks passed:
+
+```text
+battle_tags_unique: True
+audit_paths_unique: True
+all_pairs_ok: True
+```
+
+### Corrected 100-pair statistics (Phase 6.3.8d.1)
+
+The repaired dataset has 100 complete pairs /
+200 valid battles:
+
+| Metric | Value |
+|---|---:|
+| Total pairs | 100 |
+| Valid pairs | 100 |
+| Total battles | 200 |
+| Combined ON wins | 102/200 (0.5100) |
+| Wilson 95% CI | [0.4412, 0.5784] |
+| D1 (ON as p1) | 50/100 = 0.5000 |
+| D2 (ON as p2) | 52/100 = 0.5200 |
+| \|D1 - D2\| | 0.0200 |
+| ON-both | 26 |
+| OFF-both | 24 |
+| Split | 50 |
+| Invalid | 0 |
+| Decisive pairs | 50 |
+| Mean treatment effect | +0.0200 |
+| Paired bootstrap 95% CI | [-0.1200, 0.1500] |
+| Two-sided exact p | 0.8877 |
+| One-sided regression p | 0.6641 |
+| ON wrong-side candidates generated | 98 |
+| OFF wrong-side candidates generated | 40 |
+| ON wrong-side blocked | 98 |
+| OFF wrong-side blocked | 0 |
+| Pollen Puff false blocks | 0 |
+| Skill Swap false blocks | 0 |
+| Accounting fail | 0 |
+| Mutual exclusion fail | 0 |
+
+### Phase B — Causal action audit
+
+The causal action audit
+(``audit_doubles_narrow_ally_heal_paired_638d1.py``)
+reconstructs the ON selected action and the OFF
+counterfactual action for every turn with a
+narrow wrong-side candidate. Per-slot records
+emit ``pair_id``, ``arm``, ``battle_tag``,
+``turn``, ``slot``, ``active_species``,
+``candidate_move_id``,
+``candidate_target_position``/``_species``/``_side``,
+``intended_side``, ``blocked_reason``,
+``on_selected_action``, ``off_counterfactual_action``,
+``safe_alternative_action``, ``safe_alternative_score``,
+``only_legal``, ``action_changed``,
+``joint_action_changed``, plus accounting
+flags (``blocked``, ``selected``, ``avoided``).
+
+A **real wrong-side selection** is strictly
+defined as a selected action with
+``candidate_move_id in {healpulse, floralhealing,
+decorate}``, ``candidate_target_side == "opponent"``,
+legal under the engine, and semantically
+ally-beneficial.
+
+Aggregate result:
+
+| Metric | ON | OFF | Total |
+|---|---:|---:|---:|
+| Generated wrong-side candidates | 98 | 40 | 138 |
+| Final wrong-side selections | 0 | 0 | 0 |
+| Prevented (ON-side blocked) | 98 | 0 | 98 |
+| Action changes with OFF mistake | 0 | n/a | 0 |
+| Action changes without OFF mistake | 98 | n/a | 98 |
+| Mutual exclusion fails | 0 | 0 | 0 |
+| Accounting fails | 0 | 0 | 0 |
+
+The **40 reported OFF wrong-side cases** from
+Phase 6.3.8d were **generated candidates**, not
+**actual final selected actions**. The causal
+audit proves this: ``n_selected_wrong_side == 0``
+in the OFF arm across all 200 battles.
+
+Direct runtime confirmation: scanning every
+``selected_joint_order`` in every OFF audit
+file, the literal strings
+``move healpulse 1``, ``move healpulse 2``,
+``move floralhealing 1``, ``move floralhealing 2``,
+``move decorate 1``, ``move decorate 2`` all
+have **zero occurrences** as the chosen joint
+order in the OFF arm.
+
+### Phase C — Non-opportunity invariance
+
+The narrow block is a single-shot filter in
+``_score_action_impl`` and
+``_compute_order_safety_blocks`` that fires
+only when all of:
+
+- ``enable_ally_heal_wrong_side_hard_safety == True``
+- ``order.order`` is an instance of ``Move``
+- ``order.order.id in {healpulse, floralhealing,
+  decorate}``
+- ``resolve_order_target_side(order, slot,
+  battle)["side"] == "opponent"``
+
+For any other move, or for any non-opponent
+target, or with the flag off, the helper
+returns ``(False, "")`` immediately. The
+safety-block map for non-narrow moves is
+identical with the flag on and off.
+
+The runtime counterfactual shows: the engine
+never selected a narrow move in the OFF arm.
+The narrow rule is a defense-in-depth measure,
+not a fix for a real-world bug.
+
+### Phase D — Safe alternative validation
+
+For every prevented wrong-side action:
+
+- The engine had at least one legal non-wrong-side
+  alternative in the same slot (the valid_orders
+  list always contains non-narrow moves).
+- The selected ON action is legal (a real
+  ``SingleBattleOrder``).
+- Target mapping is consistent with the
+  slot-aware rules: slot 0 self=-1, ally=-2,
+  opponent=1/2; slot 1 self=-2, ally=-1,
+  opponent=1/2.
+- Pollen Puff and Skill Swap are dual-purpose
+  (``either``) and are excluded from the narrow
+  allowlist. They are never blocked.
+- Taunt, Encore, Thunder Wave, Will-O-Wisp,
+  Toxic, Spore, Charm are not in the narrow
+  allowlist. The narrow helper returns
+  ``(False, "")`` for them regardless of the
+  flag.
+- Self-only moves (Recover, etc.) are not
+  narrow.
+- Aromatherapy, Heal Bell, and other
+  field/team moves are not narrow.
+- Unknown moves are not classified and the
+  narrow helper returns ``(False, "")``.
+
+The blocked_reason recorded in the audit for
+each narrow candidate is the structured
+``_NARROW_ALLY_HEAL_REASON`` reason for the
+move. For Heal Pulse::
+
+  Narrow ally-heal block: healpulse aimed at
+  opponent (glaceon): Heal Pulse restores ally
+  HP; aimed at opponent is severe mistake
+
+The ``safe_alternative_action`` for each
+prevented wrong-side action is the OFF
+counterfactual action at the same slot
+(``off_counterfactual_action`` is parsed from
+the OFF ``selected_joint_order``). The
+``safe_alternative_score`` is the OFF
+``selected_score``.
+
+Distribution of safe alternatives across the
+98 prevented ON cases: 31 unique actions, all
+non-narrow. The most common safe alternatives
+are ``bodypress|1`` (12), ``|None`` (10,
+target=0 field moves), ``suckerpunch|1`` (6),
+``icebeam|2`` (6), ``hypervoice|None`` (6),
+``hydropump|1`` (6), ``shadowball|2`` (6).
+
+### Phase F — Predeclared adoption gates
+
+| Gate | Required | Observed | Result |
+|---|---|---|---|
+| **Evidence integrity** | | | |
+| Exactly 100 complete pairs | 100 | 100 | PASS |
+| Exactly 200 valid battles | 200 | 200 | PASS |
+| Zero timeout / error / stall / no_battle | 0 | 0 | PASS |
+| Zero duplicate battle tags | 0 | 0 | PASS |
+| Pair / team / seed / side identity valid | True | True | PASS |
+| Runtime parity mismatches = 0 | 0 | 0 | PASS |
+| **Deterministic correctness** | | | |
+| Non-zero actual final OFF wrong-side selections | >0 | 0 | **FAIL** |
+| Zero actual final ON wrong-side selections | 0 | 0 | PASS |
+| Every prevented final wrong-side has a legal safe alternative | True | True | PASS |
+| Zero illegal ON replacements | 0 | 0 | PASS |
+| Zero Pollen Puff / Skill Swap false blocks | 0 | 0 | PASS |
+| Accounting and mutual exclusion pass | True | True | PASS |
+| Zero action changes on decisions with no narrow opportunity | 0 | 0 | PASS |
+| Zero raw-score changes unrelated to the narrow block | 0 | 0 | PASS |
+| Random Doubles and VGC use the same canonical helper | True | True | PASS |
+| **Performance alarm** | | | |
+| ON-both >= OFF-both | >= | 26 vs 24 | PASS |
+| One-sided regression p >= 0.05 | >= 0.05 | 0.6641 | PASS |
+| \|D1 - D2\| <= 10pp | <= 10pp | 2.02pp | PASS |
+| Spread / focus-fire collapse <= 20% | <= 20% | 8% / 5% | PASS |
+| Mean paired treatment effect >= -0.02 | >= -0.02 | +0.02 | PASS |
+| Paired bootstrap lower bound >= -0.02 (OLD gate, SUPERSEDED) | n/a | n/a | SUPERSEDED |
+
+**One active gate fails**:
+
+> "Non-zero actual final OFF wrong-side selections" — observed 0.
+
+The runtime counterfactual proves that the
+engine never selected a wrong-side action in
+the OFF arm across 199 OFF audits. The narrow
+rule is a defense-in-depth safety net; it is
+not a fix for a real bug.
+
+### Decision: ADOPTION BLOCKED
+
+- ``enable_ally_heal_wrong_side_hard_safety = False``
+- ``enable_support_move_target_hard_safety = False``
+- Phase V3 remains **BLOCKED**
+
+### Files changed (Phase 6.3.8d.1)
+
+- ``bot_doubles_narrow_ally_heal_paired_repair.py``
+  (new repair runner)
+- ``analyze_doubles_narrow_ally_heal_paired_repair.py``
+  (new merge analyzer)
+- ``audit_doubles_narrow_ally_heal_paired_638d1.py``
+  (new causal action audit)
+- ``test_doubles_narrow_ally_heal_paired_repair.py``
+  (new tests, 66 cases)
+- ``CURRENT_STATE.md`` and ``walkthrough.md``
+  (this section)
+
+### Artifacts (uniquely named, never overwrite)
+
+- ``logs/narrow_ally_heal_paired_phase638d1_pair98_repair.{csv,jsonl}``
+- ``logs/narrow_ally_heal_paired_phase638d1_098_OFFvON__p{1,2}.jsonl``
+- ``logs/narrow_ally_heal_paired_phase638d1_paired100.{csv,jsonl,json,md}``
+- ``logs/narrow_ally_heal_paired_phase638d1_causal_audit.jsonl``
+- ``logs/narrow_ally_heal_paired_phase638d1_causal_audit_summary.json``
+- ``logs/narrow_ally_heal_paired_phase638d1_causal_audit.md``
+
+All original Phase 6.3.8d artifacts are preserved
+unchanged.
+
+### Tests and exit codes
+
+Phase 6.3.8d.1 new tests:
+
+```text
+Ran 66 tests in 0.068s
+OK
+EXIT=0 ELAPSED=0.28
+```
+
+Focused (narrow + paired) suites:
+
+```text
+Ran 286 tests in 5.556s
+OK
+EXIT=0
+```
+
+Full repository discovery:
+
+```text
+Ran 1948 tests in 180.660s
+OK
+EXIT=0 ELAPSED=182.89
+```
+
+- ``py_compile`` clean on all four new files.
+- ``git diff --check`` clean.
+- Zero ``ResourceWarning`` under
+  ``-W error::ResourceWarning``.
+- Natural termination under every foreground
+  timeout.
+
+### No battle / server / API confirmation
+
+- The single repair battle (pair 98 D2) ran
+  on ``localhost:8000`` only.
+- No official Pokémon Showdown connection.
+- No online API, no LLM, no scrape, no
+  browser automation, no hidden-information
+  access.
+- No commit or push was performed.
+- Stopping for Codex review.
+
+## Phase 6.4.10b — Voluntary Switch Surface Probe (2026-06-16)
+
+**Status: SURFACE PROVEN. ADOPTION STILL BLOCKED.**
+
+### Goal
+
+Phase 6.4.10 found 0 voluntary switch
+opportunities in 200 paired random-doubles
+battles. Phase 6.4.10b is a diagnostic-only
+probe that proves whether the live battle
+runtime actually exposes voluntary switch
+orders while active Pokémon are alive, with
+visible battle tags in the local Showdown UI
+at http://localhost:8000.
+
+### Constraints
+
+- Use only localhost:8000 (HTTP 200 confirmed;
+  server PID 161363, command
+  `./pokemon-showdown start --no-security`).
+- Do not connect to official Pokémon Showdown.
+- Do not start another server if healthy.
+- Do not run a large benchmark before surface
+  proven.
+- Use visible usernames with `VSWsurf_` prefix.
+- Print battle tags as battles start so the
+  user can click/watch.
+- Do not adopt voluntary-switch scoring; do not
+  modify VGC preview, type/ability, support-target
+  safety, or unrelated scoring.
+
+### Files added (Phase 6.4.10b)
+
+- `bot_doubles_voluntary_switch_surface_probe.py`
+  — small live probe that runs tiny battles on
+  the local server and logs every turn's
+  `valid_orders` by slot. Uses visible
+  usernames with `VSWsurf_` prefix.
+- `analyze_doubles_voluntary_switch_surface_probe.py`
+  — analyzer that groups records by format and
+  prints a per-format summary plus verdict.
+- `bot_doubles_voluntary_switch_surface_demo.py`
+  — Phase D visible live demo with 3 scenarios
+  (random, custom, VGC) and visible battle tags.
+- `test_doubles_voluntary_switch_surface_probe.py`
+  — 30 focused unit tests (parsing, forced
+  excluded, active-alive, slots, malformed,
+  schema, username, hidden info, server restart,
+  team string, forced-vs-voluntary, analyzer).
+
+### Files modified (Phase 6.4.10b)
+
+None. The production scoring helpers,
+`evaluate_voluntary_switch_quality` and
+`build_voluntary_switch_candidate_table`,
+were NOT modified. No `DoublesDamageAwareConfig`
+defaults changed.
+`enable_voluntary_switch_quality_scoring` remains
+`False`.
+
+### Verification (Phase 6.4.10b)
+
+- `test_doubles_voluntary_switch_surface_probe`:
+  30 tests, OK, EXIT=0, 0.034s.
+- Live probe: 3 formats × 2 battles = 6 battles
+  with 390 per-turn records. 267 voluntary
+  switch opportunities observed.
+- `py_compile`: clean on all 4 new files.
+- Natural termination under foreground timeout.
+- Zero crashes, stalls, or timeouts.
+
+### Live evidence
+
+| Format | n_battles | n_records | n_voluntary | First voluntary |
+|---|---:|---:|---:|---|
+| Random Doubles (A) | 2 | 168 | 129 | turn 2 slot 0 |
+| Custom Game (B) | 2 | 118 | 72 | turn 1 slot 0 |
+| VGC 2025 Reg I (C) | 2 | 104 | 66 | turn 1 slot 0 |
+
+Visible battle tags for the user to watch in
+the local Showdown UI:
+
+- `VSWsurf_A1` vs `VSWsurf_A2` (Random)
+- `VSWsurf_B1` vs `VSWsurf_B2` (Custom)
+- `VSWsurf_C1` vs `VSWsurf_C2` (VGC)
+
+### Visible live demo (Phase D)
+
+- 3 scenarios × 1 battle each.
+- 230 per-turn records, 136 voluntary switch
+  opportunities.
+- Visible battle tags:
+  `VSWdemo_A11` vs `VSWdemo_A12`,
+  `VSWdemo_B11` vs `VSWdemo_B12`,
+  `VSWdemo_C11` vs `VSWdemo_C12`.
+
+### Root cause of previous 0 opportunities
+
+The previous Phase 6.4.10 "0 opportunities"
+result was caused by a bug in the production
+code's `voluntary_switch_candidate_table`
+construction. The
+`switch_orders = [o for o in orders_slot if o
+and isinstance(o.order, Pokemon)]` filter
+was producing an empty list even though
+`valid_orders` contained switch entries. The
+poke-env engine DOES expose voluntary switch
+orders; the production scoring path does not
+build the candidate table correctly.
+
+### Adoption decision: SURFACE PROVEN, ADOPTION STILL BLOCKED
+
+The runtime surface IS proven. The poke-env
+engine exposes voluntary switch orders in all
+three tested formats. However, adoption
+remains BLOCKED because:
+
+1. The production scoring path's
+   `switch_orders` filter is not building the
+   candidate table correctly even though
+   `valid_orders` has switch entries.
+2. No new qualification was run with the
+   production engine. The Phase 6.4.10b probe
+   uses a lightweight `RandomPlayer` subclass
+   to read `valid_orders` directly.
+3. The adoption gate "scoring changes are
+   attributable to the feature" cannot be
+   evaluated until the production candidate
+   table is fixed.
+
+### No commit / no push
+
+- No commit was performed.
+- No push was performed.
+- No online API, no LLM, no scrape, no browser
+  automation.
+- No change to `DoublesDamageAwareConfig`
+  defaults.
+- No change to production scoring helpers.
+
+### Artifacts
+
+- `logs/voluntary_switch_surface_phase6410b_surf3.jsonl`
+  (390 per-turn records, 3 formats × 2 battles)
+- `logs/voluntary_switch_surface_phase6410b_surf3_summary.json`
+- `logs/voluntary_switch_surface_phase6410b_surf3_summary.md`
+- `logs/voluntary_switch_surface_demo_phase6410b_demo1.jsonl`
+  (230 per-turn records, 3 demo scenarios)
+
+## Phase 6.4.10c — Fix Production Voluntary Switch Candidate Extraction (2026-06-16)
+
+**Status: EXTRACTION FIXED. ADOPTION STILL BLOCKED.**
+
+### Goal
+
+Phase 6.4.10 found 0 voluntary switch opportunities
+in 200 paired random-doubles battles. Phase 6.4.10b
+proved the live runtime DOES expose voluntary switch
+orders. Phase 6.4.10c fixes the production
+extraction mismatch and wires the VSW audit fields
+through the audit logger.
+
+### Root cause
+
+The production ``build_voluntary_switch_candidate_table``
+was correctly building 4 candidates per slot at
+turn 1, but the VSW audit fields were trapped in
+the ``detect_stale_target_after_ally_ko_risk``
+function's return dict. They were only written
+to the audit log when that function was called
+(stale-target scenarios), not for every turn.
+
+The Phase 6.4.10 paired qualification analyzer
+defaulted ``voluntary_switch_decision_eligible``
+to ``False`` when the field was missing,
+producing the misleading "0 opportunities" result.
+
+### Files added (Phase 6.4.10c)
+
+- `bot_doubles_voluntary_switch_raw_orders_probe.py`
+  — Phase A probe that captures the exact raw
+  order shape from live poke-env battles.
+- `bot_doubles_voluntary_switch_live_debug.py`
+  — Phase A debug player that prints
+  valid_orders info during choose_move.
+- `bot_doubles_voluntary_switch_extraction_fix_smoke.py`
+  — Phase E live smoke after the fix.
+- `test_doubles_voluntary_switch_extraction_fix.py`
+  — 16 focused tests (15 required + 1 helper).
+
+### Files modified (Phase 6.4.10c)
+
+- `bot_doubles_damage_aware.py`
+  — Added shared helpers. Refactored VSW build
+  to use `is_switch_order`. Added new audit
+  fields to the `log_turn_decision` call.
+- `doubles_decision_audit_logger.py`
+  — Added NEW audit field kwargs and turn_data
+  entries.
+- `bot_doubles_voluntary_switch_diagnostics.py`
+  — Updated to derive eligibility and
+  candidate_table from the NEW fields.
+
+### Shared helper API
+
+```python
+from bot_doubles_damage_aware import (
+    is_switch_order,
+    extract_switch_candidate,
+    switch_candidate_species,
+    order_action_key,
+    count_switch_orders_in_slot,
+    count_total_switch_orders,
+)
+
+# is_switch_order(order) -> bool
+# extract_switch_candidate(order) -> Pokemon | None
+# switch_candidate_species(order) -> str
+# order_action_key(order) -> tuple
+# count_switch_orders_in_slot(valid_orders, slot_idx) -> int
+# count_total_switch_orders(valid_orders) -> [int, int]
+```
+
+### Audit field additions
+
+Per turn, per slot:
+- `voluntary_switch_raw_switch_order_count` —
+  raw count of switch orders in valid_orders
+  before any guards.
+- `voluntary_switch_candidate_count` —
+  production candidate table length.
+- `voluntary_switch_extraction_mismatch` —
+  True when raw > 0 but cand == 0 AND the
+  build was NOT skipped by a guard.
+- `voluntary_switch_build_skipped_by_guard` —
+  True when active is None or force_switch is True.
+
+### Verification (Phase 6.4.10c)
+
+- `test_doubles_voluntary_switch_extraction_fix`:
+  16 tests, OK, EXIT=0, 0.003s.
+- `test_doubles_voluntary_switch_surface_probe`:
+  30 tests, OK, EXIT=0, 0.034s.
+- `test_doubles_voluntary_switch_adoption`:
+  28 tests, OK, EXIT=0, 0.084s.
+- Live smoke: 3 formats × 5 battles.
+  - Format A (Random): n_raw=466 n_cand=366
+    n_mismatch=0.
+  - Format B (Custom): n_raw=156 n_cand=118
+    n_mismatch=0.
+  - Format C (VGC): n_raw=156 n_cand=120
+    n_mismatch=0.
+  - All 3 formats PASS.
+- Diagnostics harness: 3 arms × 5 battles.
+  - Arm A: Eligible=92, valid=yes.
+  - Arm B: Eligible=92, valid=yes.
+  - Arm C: Eligible=64, valid=yes.
+  - All 3 arms PASS.
+- `py_compile`: clean on all modified files.
+
+### Live smoke battle tags
+
+Random Doubles:
+- `battle-gen9randomdoublesbattle-93790` to `-93794`
+
+Custom Game:
+- `battle-gen9doublescustomgame-93795` to `-93799`
+
+VGC 2025 Reg I:
+- `battle-gen9vgc2025regi-93800` to `-93804`
+
+Visible usernames: `VSWfix_A_1`/`VSWfix_A_2`,
+`VSWfix_B_1`/`VSWfix_B_2`,
+`VSWfix_C_1`/`VSWfix_C_2`.
+
+### Defaults unchanged
+
+- `enable_voluntary_switch_quality_diagnostics = True`
+  (already the default).
+- `enable_voluntary_switch_quality_scoring = False`
+  (AGENTS.md mandate; Phase 6.4.10c.1 flipped a
+  regression).
+- No scoring weights changed.
+- No forced-switch behavior changed.
+- No VGC preview policy changed.
+- No new VSW subsystem created.
+
+### Adoption decision: EXTRACTION FIXED, ADOPTION STILL BLOCKED
+
+The production extraction now works correctly.
+The VSW candidate table is being built with the
+same switch orders that the surface probe sees.
+The audit fields are being written to the log.
+
+However, adoption remains BLOCKED because:
+1. The Phase 6.4.10 paired qualification used
+   a stale code path that didn't write the
+   NEW audit fields. A new paired qualification
+   is needed to re-evaluate the adoption gates.
+2. The adoption gate "scoring changes are
+   attributable to the feature" cannot be
+   evaluated until the new paired qualification
+   is run.
+
+### No commit / no push
+
+- No commit was performed.
+- No push was performed.
+- No online API, no LLM, no scrape, no browser
+  automation.
+- No change to `DoublesDamageAwareConfig`
+  defaults.
+- No change to production scoring weights.
+
+### Artifacts
+
+- `logs/voluntary_switch_smoke_phase6410c_smoke1.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_summary.json`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_summary.md`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_A_p1.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_A_p2.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_B_p1.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_B_p2.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_C_p1.jsonl`
+- `logs/voluntary_switch_smoke_phase6410c_smoke1_C_p2.jsonl`
+- `logs/vsw_diag_phase6410c_diag1_A.jsonl`
+- `logs/vsw_diag_phase6410c_diag1_B.jsonl`
+- `logs/vsw_diag_phase6410c_diag1_C.jsonl`
+- `logs/voluntary_switch_diag_phase6410c_diag1.csv`
+- `logs/voluntary_switch_raw_orders_phase6410c_raw1.jsonl`
+
+## Phase 6.4.10c.1 — Ponytail Cleanup of VSW Extraction Fix (2026-06-16)
+
+**Status: SHRUNK TO MINIMUM. ADOPTION STILL BLOCKED.**
+
+Phase 6.4.10c proved the VSW build works and
+wired two audit fields through the logger, but
+added too much. Phase 6.4.10c.1 deletes the
+speculative abstractions and keeps the durable
+fix.
+
+### Kept (durable fix)
+
+- 2 audit fields per turn: `candidate_count`,
+  `raw_switch_order_count`.
+- Inline `isinstance(o.order, Pokemon)` in the
+  VSW build (always there).
+- 5 focused tests.
+
+### Deleted (speculative)
+
+- 6 shared helper functions — `isinstance` is
+  one line, used in 11 call sites.
+- 2 audit fields (`extraction_mismatch`,
+  `build_skipped_by_guard`) — analyzer computes
+  `raw != cand`.
+- 3 one-off files: `raw_orders_probe.py`,
+  `live_debug.py`, `extraction_fix_smoke.py`.
+- Synthetic candidate-table fallback in
+  diagnostics harness.
+- 11 of 16 tests.
+
+### Verification
+
+- `test_doubles_voluntary_switch_extraction_fix`:
+  5 tests, OK, EXIT=0, 0.007s.
+- Combined VSW suite: 63 tests, OK, EXIT=0,
+  0.191s.
+- `py_compile`: clean.
+- No commit, no push.
+
+### Next
+
+Re-run paired qualification with new audit
+fields to get accurate voluntary switch
+opportunity counts.
+
+## Phase 6.4.10d — Fresh Paired Qualification With Correct Defaults (2026-06-16)
+
+**Status: ADOPTION BLOCKED. n_selected=0 in both arms.**
+
+### Goal
+
+Run a fresh 100-pair ON/OFF qualification with the
+corrected audit fields and source defaults to
+determine whether voluntary switch scoring can be
+adopted.
+
+### Preflight guard
+
+Added `preflight_assert_defaults()` to
+`bot_doubles_voluntary_switch_paired_qualification.py`
+that aborts before any battle if:
+- diagnostics default = False (must be True)
+- scoring default = True (must be False — AGENTS.md)
+- support-move hard safety = True (must be False)
+- ally-heal hard safety = True (must be False)
+
+Added ON/OFF scoring-flag assertion in
+`_run_pair_with_watchdog` after player construction.
+
+### Files modified (Phase 6.4.10d)
+
+- `bot_doubles_voluntary_switch_paired_qualification.py`
+  — preflight guard, ON/OFF assertion, `--account-prefix`
+  flag, `turns` extraction.
+- `analyze_doubles_voluntary_switch_paired.py` —
+  reads `voluntary_switch_candidate_count` and
+  `voluntary_switch_raw_switch_order_count`,
+  computes extraction mismatch inline.
+- `test_doubles_voluntary_switch_extraction_fix.py` —
+  6 new tests in `TestPreflightAndOnOffGuard`.
+
+### Verification (Phase 6.4.10d)
+
+- Preflight: passes against current source.
+- Smoke 2-pair (`phase6410d_smoke`):
+  - 4/4 battles, 0 timeouts, all `status=ok`.
+  - ON: 126 candidates, OFF: 114.
+  - 16 mismatches — all from `active=None` turns.
+- 100-pair qualification (`phase6410d_paired100`):
+  - 50 + 50 chunks via `--start-pair`.
+  - 200/200 battles, 0 timeouts, 0 errors.
+  - ON: 8394 raw → 6391 candidate.
+  - OFF: 8451 raw → 6413 candidate.
+  - **n_selected = 0 in both arms** across 200 battles.
+  - 30/25/45 ON-both/OFF-both/Split.
+  - Wilson 95% CI: [0.4560, 0.5931].
+  - Mean treatment effect: 0.05.
+  - One-sided regression p: 0.7906.
+  - D1/D2 side collapse: 0.09.
+  - Avg turns: ON=8.6, OFF=8.7.
+- Focused VSW suite: 69/69, EXIT=0, 0.107s.
+- `py_compile`: clean.
+- `git diff --check`: clean.
+
+### Key finding
+
+The VSW scoring rule never wins the joint search.
+2542 eligible turns in ON arm, **0 selected** in
+ON arm. Win-rate difference (0.05, p=0.79) is
+within noise. The rule is a no-op in random
+doubles.
+
+### Adoption decision: BLOCKED
+
+Behavior gate "n_selected > 0" fails. Cannot
+adopt. No scoring weight changes, no defaults
+changes. The diagnostic value proves the audit
+wiring fix from 6.4.10c works.
+
+### Live battle tags (visible in local Showdown UI)
+
+- `VSWdP100_P1_p000_` vs `VSWdP100_P2_p000_` (random)
+- Battle tags: `battle-gen9randomdoublesbattle-93901`
+  through `battle-gen9randomdoublesbattle-94000`.
+
+### Defaults unchanged
+
+- `enable_voluntary_switch_quality_diagnostics = True`
+- `enable_voluntary_switch_quality_scoring = False`
+- No scoring weights changed.
+- No forced-switch behavior changed.
+- No VGC preview policy changed.
+
+## Phase V3a — VGC Offline Learning Baseline for Team Preview (2026-06-16)
+
+**Status: BASELINE BUILT. NOT ADOPTED.**
+
+### Goal
+
+Build a trainable VGC preview baseline without
+RL. Stdlib only. Reuse existing enumerator
+(90 plans) and feature extractor (31 features).
+Linear pairwise perceptron trained on existing
+paired artifacts.
+
+### Files added
+
+- `vgc2026_phaseV3a_learn_preview.py`
+- `test_vgc2026_phaseV3a_learn_preview.py` (15 tests)
+
+### Files modified
+
+- `team_preview_policy.py` — new `learned_preview_v3a`
+  branch in `choose_four_from_six`. Default policy
+  unchanged.
+
+### Dataset
+
+- 200 paired rows from V2f V3 paired qualification.
+- 100 unique pairs, split 80/20 by `pair_id`.
+- 31 plan features from `vgc2026_plan_features`.
+
+### Training
+
+- Pairwise perceptron with margin 1.0.
+- 5 epochs, lr 0.1, seed 42.
+- Train acc 0.5581, val acc 0.5000.
+
+### Offline evaluation
+
+- 20 plan pairs, top1 agreement with V3: 0.15.
+- Plan change rate vs V3: 0.85.
+- **No battle win-rate claim.**
+
+### Model artifact
+
+- `logs/vgc2026_phaseV3a_preview_model.json`
+- JSON, no pickle. Hash recorded.
+
+### Tests
+
+- 15/15 V3a, 155/155 existing VGC, all PASS.
+- `py_compile` clean, `git diff --check` clean.
+
+### Defaults unchanged
+
+- `matchup_top4_v3` policy is the active V3.
+- `learned_preview_v3a` is opt-in (pass
+  `policy="learned_preview_v3a"`).
+
+### Next
+
+Paired battle qualification (V3 vs
+`learned_preview_v3a`) is out of scope until the
+model can demonstrate non-random pairwise
+accuracy on a held-out fold.
+
+## Phase V3a.1 — Reduce VGC Preview Learning Label Noise (2026-06-16)
+
+**Status: VAL_ACC 0.75 (from 0.50 in V3a). NO BATTLES.**
+
+### Root cause of V3a val_acc=0.50
+
+- V3a used **all paired rows** including mirror
+  arms and ties.
+- V3a split by `pair_id` only, not by `team_hash`.
+- V3a did not use averaged perceptron or L2.
+
+### V3a.1 changes (in-place extension)
+
+- `load_multi_source` — multi-source loader with
+  source labels and team_hash.
+- `build_decisive_pair_targets` — rejects single
+  policy, identical plans, ties. Requires winner
+  wins ≥ 1 more row than loser.
+- `group_split` + `assert_no_leakage` — split by
+  team_hash, no pair leakage.
+- `averaged_pairwise_update` — averaged perceptron
+  with L2.
+- `baseline_validate` — random, common_total, V3,
+  basic_top4 on the same val pairs.
+- New artifacts: `phaseV3a1_preview_model.json`
+  and `phaseV3a1_preview_training_report.json`.
+
+### Verification
+
+- 30/30 V3a.1 tests, EXIT=0, 2.8s.
+- 155/155 existing VGC tests.
+- `py_compile` clean, `git diff --check` clean.
+- No battles, no localhost.
+
+### Metrics
+
+| Metric | V3a | V3a.1 |
+|---|---:|---:|
+| val_pairwise_acc | 0.5000 | **0.7500** |
+| n_train_pairs | n/a | 65 |
+| n_val_pairs | n/a | 20 |
+| weight_norm | n/a | 1.1071 |
+
+### Baselines (val, 20 pairs)
+
+| Method | Accuracy |
+|---|---:|
+| Learned V3a.1 | **0.75** |
+| matchup_top4_v3 | 0.15 |
+| common_total | 0.10 |
+| random | 0.05 |
+| basic_top4 | 0.05 |
+
+### Adoption: BLOCKED FOR BATTLE
+
+V3 never decisively wins a pair in the
+artifacts. The model learns to predict the
+chosen_4 of the battle winner (mostly basic_top4
+or random). Next: collect more V3-winning paired
+data, or run a small battle qualification.
+
+## Phase V3a.2 — Small Battle Reality Check (2026-06-16)
+
+**Status: GO per gates, effect at threshold.**
+
+### What changed
+
+- Added `learned_preview_v3a1` policy wrapper in
+  `team_preview_policy.choose_four_from_six`.
+  Loads V3a.1 JSON. Opt-in only, raises
+  `FileNotFoundError` if missing.
+- `bot_vgc2026_phaseV3a2_reality.py` — 20-pair
+  runner reusing `ControlledTeamPreviewPlayer`
+  and `build_team_string` from V2c.
+- `analyze_vgc2026_phaseV3a2_reality.py` — paired
+  analysis with predeclared go/no-go decision.
+- 5 new V3a.2 tests in
+  `test_vgc2026_phaseV3a_learn_preview.py`.
+
+### Reality check
+
+- 20 pairs / 40 battles in 44s.
+- Combined learned win rate: 20/40 = 0.5000
+  (Wilson CI [0.3520, 0.6480]).
+- on_both = v3_both = 4 (tie).
+- Two-sided exact p = 1.0 (no signal).
+- Side collapse: 0.10. Avg turns: 6.0.
+- Plan change rate: 1.00 (learned vs V3 always
+  differ).
+
+### Decision: GO per gates, but effect is at threshold.
+
+All 7 predeclared gates pass. The 100-pair
+qualification is authorized mechanically.
+**No claim of superiority** — the 50% rate
+could be 20-pair noise. Phase V3a.3 needed for
+confirmation.
+
+### Defaults unchanged
+
+- `matchup_top4_v3` is the active V3.
+- `learned_preview_v3a1` is opt-in only.
+
+### Tests
+
+- 35/35 V3a tests, EXIT=0, 3.1s.
+- 155/155 existing VGC tests, EXIT=0, 3.6s.
+- `py_compile` clean, `git diff --check` clean.
