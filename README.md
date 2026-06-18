@@ -12,12 +12,43 @@ Open a new terminal window, navigate to the `pokemon-showdown` directory, and ru
 cd /home/phurin/Program/Showdown_AI/pokemon-showdown
 npm install
 cp -n config/config-example.js config/config.js
-node pokemon-showdown start --no-security
+./pokemon-showdown start --no-security
 ```
 
 > **Note:** The `--no-security` flag is required so that bots can log in and challenge each other locally without requiring real Pokémon Showdown account registration and authentication. Do not expose this server to the public internet or use port forwarding when running in this mode.
 
 The server will be available at `http://localhost:8000`.
+
+Known-good helper from this repo:
+
+```bash
+cd /home/phurin/Program/Showdown_AI/pokemon-showdown-ai
+./scripts/start_local_showdown.sh
+```
+
+Expected server output:
+
+```text
+Worker 1 now listening on 0.0.0.0:8000
+Test your server at http://localhost:8000
+```
+
+Health check from another terminal:
+
+```bash
+python3 - <<'PY'
+from urllib.request import urlopen
+with urlopen("http://localhost:8000", timeout=3) as r:
+    print("HTTP", r.status)
+PY
+```
+
+Expected result: `HTTP 200`.
+
+Do **not** use `node pokemon-showdown start --no-security`; on this checkout the
+working command is the executable wrapper `./pokemon-showdown start --no-security`.
+For Codex/OpenCode tool sessions, keep it as a long-running foreground session
+rather than trying to detach it with `nohup`.
 
 ---
 

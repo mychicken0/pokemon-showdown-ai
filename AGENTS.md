@@ -237,6 +237,58 @@ current count and exit code.
 - Include positive, negative, exception, accounting, and regression cases.
 - Run tests with `-W error::ResourceWarning`.
 
+### Evidence Ladder
+
+Do not use large battle samples to debug logic. Use the smallest evidence that
+can answer the question.
+
+Use this order for new mechanics, scoring, switching, learned policies, audit
+fields, and runner changes:
+
+1. **Fixture/unit test for logic.**
+   - Arrange the exact battle state, active Pokemon, legal orders, HP,
+     flags, scores, and audit inputs.
+   - Assert the exact generated orders, scores, selected action, blocked
+     action, or serialized audit field.
+   - This is the correct tool for questions like "does Mega get generated",
+     "does a status move avoid the Mega bonus", "does a low-HP switch candidate
+     beat staying in", or "does default OFF strip all Mega orders".
+
+2. **Targeted runtime probe for integration.**
+   - Use one battle or one pair only when the question involves poke-env,
+     Showdown protocol, runner wiring, side/perspective labels, or persisted
+     audit artifacts.
+   - This is the correct tool for questions like "does Showdown expose
+     `can_mega_evolve`", "does the runner attach the audit logger", or
+     "does the persisted JSONL contain the expected field".
+   - Do not interpret this as strength evidence.
+
+3. **Small smoke for regression shape.**
+   - Use roughly 5-20 pairs to check for crashes, timeouts, spam, missing audit
+     fields, side collapse, or obviously broken behavior after logic and
+     integration already pass.
+   - This is not an adoption gate.
+
+4. **Preview sample for directional signal.**
+   - Use moderate samples only after fixture tests and targeted probes prove
+     the feature is actually exercising the intended path.
+   - Treat the result as a signal to continue, defer, or redesign. Do not flip
+     defaults from a preview.
+
+5. **Full qualification for adoption.**
+   - Use large paired benchmarks only when deciding whether to adopt or flip a
+     default.
+   - Never run a 100/200-pair benchmark to discover that a flag, audit field,
+     order generator, side mapping, or baseline arm is wired incorrectly.
+
+If logic is not fixture-tested, do not proceed to a large benchmark. If runtime
+integration is not proven with a targeted probe, do not proceed to a smoke or
+qualification. If audit/accounting is inconsistent, stop and fix the accounting
+before interpreting win rates.
+
+When the user asks for speed, reduce sample size and improve targeting; do not
+skip the earlier evidence layers.
+
 ### poke-env Test Lifecycle
 
 `Player.__init__` can create background `POKE_LOOP` resources.
@@ -253,8 +305,20 @@ Start only the local server:
 
 ```bash
 cd /home/phurin/Program/Showdown_AI/pokemon-showdown
-node pokemon-showdown start --no-security
+./pokemon-showdown start --no-security
 ```
+
+Repo helper:
+
+```bash
+cd /home/phurin/Program/Showdown_AI/pokemon-showdown-ai
+./scripts/start_local_showdown.sh
+```
+
+Use the `pokemon-showdown` executable wrapper, not
+`node pokemon-showdown start --no-security`. In Codex/OpenCode tool sessions,
+run it as a long-running foreground session; `nohup`/detached launches have
+been observed to exit immediately without keeping port 8000 open.
 
 Health check:
 

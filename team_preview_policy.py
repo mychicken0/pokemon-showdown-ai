@@ -1116,6 +1116,122 @@ def choose_four_from_six(
             seed=seed
         )
 
+    elif policy == "learned_preview_v3a":
+        # Phase V3a: linear-scored baseline.
+        # Loads the model JSON. If missing, raises
+        # FileNotFoundError so the caller can decide
+        # to fallback in explicit test mode only.
+        from vgc2026_phaseV3a_learn_preview import (
+            choose_plan_with_scorer,
+            load_model,
+        )
+        import os
+        from vgc2026_phaseV3a_learn_preview import (
+            DEFAULT_MODEL_PATH,
+        )
+        if not os.path.isfile(DEFAULT_MODEL_PATH):
+            raise FileNotFoundError(
+                f"learned_preview_v3a model not found at "
+                f"{DEFAULT_MODEL_PATH}. Train with "
+                f"vgc2026_phaseV3a_learn_preview.py first."
+            )
+        model = load_model(DEFAULT_MODEL_PATH)
+        weights = model["weights"]
+        bias = model["bias"]
+        feature_names = model["feature_names"]
+        chosen, lead_2, back_2 = choose_plan_with_scorer(
+            our_team,
+            opponent_team,
+            weights,
+            bias,
+            feature_names,
+        )
+        return PreviewResult(
+            chosen_4=list(chosen),
+            lead_2=list(lead_2),
+            back_2=list(back_2),
+            scores=[],
+            policy="learned_preview_v3a",
+            seed=seed
+        )
+
+    elif policy == "learned_preview_v3a1":
+        # Phase V3a.1: averaged perceptron + L2 model.
+        # Same scoring as V3a but uses the V3a.1
+        # artifact. Opt-in only: no fallback to V3.
+        from vgc2026_phaseV3a_learn_preview import (
+            choose_plan_with_scorer,
+            load_model,
+            DEFAULT_V3A1_MODEL_PATH,
+        )
+        import os as _os_v3a1
+        if not _os_v3a1.path.isfile(DEFAULT_V3A1_MODEL_PATH):
+            raise FileNotFoundError(
+                f"learned_preview_v3a1 model not found at "
+                f"{DEFAULT_V3A1_MODEL_PATH}. Train with "
+                f"vgc2026_phaseV3a_learn_preview.py first."
+            )
+        model = load_model(DEFAULT_V3A1_MODEL_PATH)
+        weights = model["weights"]
+        bias = model["bias"]
+        feature_names = model["feature_names"]
+        chosen, lead_2, back_2 = choose_plan_with_scorer(
+            our_team,
+            opponent_team,
+            weights,
+            bias,
+            feature_names,
+        )
+        return PreviewResult(
+            chosen_4=list(chosen),
+            lead_2=list(lead_2),
+            back_2=list(back_2),
+            scores=[],
+            policy="learned_preview_v3a1",
+            seed=seed
+        )
+
+    elif policy == "learned_preview_v3c1":
+        # Phase V3c.1: averaged perceptron trained on
+        # the V3c balanced VGC dataset with V3b
+        # opponent-adaptive features. Opt-in only.
+        # V3c.1 training gates all passed (mean
+        # val_acc=0.602 across 30 seeds; beats V3 on
+        # 93% of splits; overfit gap 0.098). Adoption
+        # is BLOCKED: this is for a 20-pair reality
+        # check, not production.
+        from vgc2026_phaseV3a_learn_preview import (
+            choose_plan_with_scorer,
+            load_model,
+        )
+        from vgc2026_phaseV3c1_train import V3C1_MODEL_PATH
+        import os as _os_v3c1
+        if not _os_v3c1.path.isfile(V3C1_MODEL_PATH):
+            raise FileNotFoundError(
+                f"learned_preview_v3c1 model not found at "
+                f"{V3C1_MODEL_PATH}. Train with "
+                f"vgc2026_phaseV3c1_train.py first."
+            )
+        model = load_model(V3C1_MODEL_PATH)
+        weights = model["weights"]
+        bias = model["bias"]
+        feature_names = model["feature_names"]
+        chosen, lead_2, back_2 = choose_plan_with_scorer(
+            our_team,
+            opponent_team,
+            weights,
+            bias,
+            feature_names,
+        )
+        return PreviewResult(
+            chosen_4=list(chosen),
+            lead_2=list(lead_2),
+            back_2=list(back_2),
+            scores=[],
+            policy="learned_preview_v3c1",
+            seed=seed
+        )
+
     else:
         raise ValueError(f"Unknown policy: {policy}")
 

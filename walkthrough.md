@@ -4862,3 +4862,1453 @@ confirmation.
 - 35/35 V3a tests, EXIT=0, 3.1s.
 - 155/155 existing VGC tests, EXIT=0, 3.6s.
 - `py_compile` clean, `git diff --check` clean.
+
+## Phase V3a.3 — 100-Pair Paired Qualification (2026-06-16)
+
+**Status: BLOCKED. Side collapse 0.14 > 0.10.**
+
+### Commands
+
+Chunk 0: `bot_vgc2026_phaseV3a2_reality.py --tag ..._chunk0 --n-pairs 50 --start-pair 0`
+Chunk 1: `bot_vgc2026_phaseV3a2_reality.py --tag ..._chunk1 --n-pairs 50 --start-pair 50`
+Analyzer: `analyze_vgc2026_phaseV3a2_reality.py --tag ..._chunk0 --merge-tags ..._chunk1`
+
+### Results
+
+- 200/200 battles valid, 0 timeouts/errors.
+- 100% preview validation.
+- Learned win rate: 104/200 = 0.5200 (Wilson CI
+  [0.4510, 0.5882]).
+- on_both 16, v3_both 12, split 72.
+- Treatment effect +0.04, bootstrap CI
+  [-0.06, +0.15] (overlaps zero).
+- Two-sided p = 1.0; one-sided p = 0.29.
+- Side collapse 0.14 (45/100 as p1, 59/100 as p2)
+  > 10pp threshold → BLOCKED.
+
+### Files modified
+
+- `bot_vgc2026_phaseV3a2_reality.py` — added
+  `--start-pair`.
+- `analyze_vgc2026_phaseV3a2_reality.py` —
+  added `--merge-tags`, bootstrap CI, one-sided
+  p, V3a.3 gates.
+
+### Tests
+
+- 35/35 V3a tests, 155/155 existing VGC tests.
+- `py_compile` clean, `git diff --check` clean.
+
+### Defaults unchanged
+
+- `matchup_top4_v3` is the active policy.
+- `learned_preview_v3a1` is opt-in only.
+- `enable_voluntary_switch_quality_scoring`
+  = False, `enable_support_move_target_hard_safety`
+  = False (unchanged).
+
+## Phase V3a.4 — Side-Asymmetry Audit (2026-06-16)
+
+**Status: NO BUG. Side collapse is statistical noise.**
+
+### What changed
+
+- Added 3 helpers + 1 CLI flag to
+  `analyze_vgc2026_phaseV3a2_reality.py`:
+  - `_split_pair_categories(rows)`
+  - `_validate_d1_d2_determinism(rows)`
+  - `audit_side_asymmetry(rows)`
+  - `--v3a4-audit` CLI flag
+- 3 new V3a.4 tests in
+  `test_vgc2026_phaseV3a_learn_preview.py`.
+
+### Audit findings
+
+- 0 plan mismatches across 100 pairs
+  (learned and V3 both deterministic).
+- 100/200 valid battles / pairs (matches V3a.3).
+- Shuffle-resilient (recompute from shuffled
+  rows gives same result).
+- Split pair breakdown:
+  - learned_p1_only: 29
+  - learned_p2_only: 43
+  - learned_both: 16
+  - learned_neither: 12
+  - decisive: 28, split: 72
+- The 14pp side collapse is entirely in the split
+  pairs (29 vs 43). Decisive pairs are not
+  a side bias (16/12 ≈ balanced).
+
+### Conclusive evidence: statistical noise
+
+Pairs 4, 19, 34 all use **the same team** and
+**the same plans** (learned:
+[dragonite, pelipper, basculegion, scizor]; V3:
+[dragonite, incineroar, basculegion, pelipper]).
+But their outcomes differ:
+- pair 4: D1 loses, D2 wins (5/7 turns)
+- pair 19: D1 wins, D2 loses (6/6 turns)
+- pair 34: D1 wins, D2 loses (5/5 turns)
+
+The same inputs produce different outcomes
+because the simulator's RNG determines the
+battle. The 14pp side collapse is pure noise.
+
+### Recommendation
+
+Keep V3a.3 BLOCKED. Do not rerun. Do not adopt
+learned_preview_v3a1.
+
+Next: more independent data (different seed),
+or feature/training redesign (only 2 of 31
+features change with opponent team).
+
+### Tests
+
+- 38/38 V3a tests, 155/155 existing VGC tests.
+- `py_compile` clean, `git diff --check` clean.
+
+## Phase V3b — Opponent-Adaptive Preview Features (2026-06-16)
+
+**Status: BLOCKED. Feature gates PASS, val_acc is weak.**
+
+### What changed
+
+- Added 3 new files:
+  - `vgc2026_phaseV3b_opponent_features.py` —
+    6 feature groups, audit helper
+  - `vgc2026_phaseV3b_train.py` — V3b trainer
+    reusing V3a.1 averaged pairwise perceptron
+  - `test_vgc2026_phaseV3b_opponent_features.py` —
+    12 focused V3b tests
+- 4 new artifacts in `logs/`:
+  - `vgc2026_phaseV3b_preview_model.json`
+  - `vgc2026_phaseV3b_training_report.json`
+  - `vgc2026_phaseV3b_feature_audit.json`
+  - `vgc2026_phaseV3b_feature_audit.md`
+- **NO** changes to `team_preview_policy.py`,
+  V3a.1 model, V3a.1 trainer, or default
+  policy.
+
+### V3b feature design
+
+40 features across 6 groups:
+1. **Lead offensive matchup** (5): best/mean/worst
+   effectiveness, threatened count, immune count
+2. **Lead defensive matchup** (3): mean/worst
+   incoming threat, 4x weakness count
+3. **Speed/control matchup** (5): tailwind/TR/icy
+   wind/fake out advantages
+4. **Back coverage** (3): back coverage count,
+   back-only coverage, total opp threatened
+5. **Role denial / support** (4): intimidate,
+   redirection, opp phys count, opp spread count
+6. **Opponent-specific deltas** (20): `delta_*`
+   for each base feature, computed at audit time
+
+All features use only species, ability, moves,
+and local dex metadata. No hidden information.
+
+### Feature audit gates (PASS)
+
+- n_features: 40
+- n_opp_sensitive: **30** (gate ≥15 → PASS)
+- n_plan_varying: **28** (gate ≥10 → PASS)
+
+This is a real improvement over V3a.1 (which had
+~2 opp-sensitive of 31 features). The features
+are technically correct.
+
+### Training (BLOCKED)
+
+- Algorithm: V3a.1 averaged pairwise perceptron
+  (unchanged). L2=0.01, lr=0.1, n_epochs=5.
+- Sources: same 3 V2c2/V2d2/V2f JSONLs as V3a.1.
+- 850 rows, 63 train + 19 val decisive pairs.
+- train_acc: 0.683, val_acc: 0.474
+- val_acc_v3a1_reference: 0.750
+- **val_improved_vs_v3a1: False → BLOCKED**
+
+### Why V3b is BLOCKED
+
+Per task rules: feature gates pass but val_acc
+is weak → BLOCK, artifact/report only. No
+policy wrapper added.
+
+V3b beats all 4 baselines (basic_top4=0.26,
+matchup_top4_v3=0.16, common_total=0.10,
+random=0.10) on val, but V3a.1's val_acc was
+0.75 on the same decisive pairs, so V3b is
+not an improvement.
+
+With only 63 train pairs and 40 features, the
+model overfits. Adding deltas did not help
+because artifact team ordering doesn't match
+the 90-plan enumeration, so 500/850 rows are
+dropped when computing delta features (only
+33 + 7 pairs remain, too few).
+
+### Path forward (recommendations only)
+
+1. **Add more data**: 850 rows is too small for
+   40 features. Need ≥5x more data, or
+2. **Reduce feature count**: keep only ~10
+   discriminating features, drop the all-zero
+   speed-control ones, or
+3. **Use non-linear model**: linear perceptron
+   can't capture feature interactions, or
+4. **Cross-pair delta computation**: enumerate
+   per (our_team, opp_team) and match the
+   artifact team ordering. Deltas are the
+   most important group and are currently
+   unused at training time.
+
+### Tests
+
+- 12/12 V3b tests, 38/38 V3a tests, 155/155 VGC
+  preview tests → 259/259 pass in 13.6s
+- `py_compile` clean
+- `git diff --check` clean
+- Default policy `matchup_top4_v3` unchanged
+- V3a.1 model artifact preserved
+- No localhost, no battle benchmark, no hidden
+  info, no online API, no LLM, no scrape
+
+### Decision
+
+**V3b BLOCKED.** Keep `matchup_top4_v3` as
+default. Do not adopt `learned_preview_v3b`.
+Do not rerun battles. Investigate data scale,
+model class, or delta computation next.
+
+## Phase V3b.1 — V3b val_acc Diagnostic (2026-06-16)
+
+**Status: BLOCK_LABEL_QUALITY. V3b remains BLOCKED.**
+
+### Root cause: weak-policy label dominance
+
+V3b trains on 85 decisive pairs from
+V2c2+V2d2+V2f artifacts. The labels show
+**95% of winners are random/basic/?** and only
+1% are V3. The model learned "weak-policy plans
+beat V3 plans" which matches the dataset but is
+useless in real battles.
+
+### Audits
+
+**A) Dataset**:
+- 850 raw rows → 85 decisive pairs (66 train, 19
+  val with seed=42)
+- 60 train teams, 15 val teams (group split)
+- Source: V2c2=450, V2d2=200, V2f=200
+- Winners: random=67, basic=14, v2=3, v3=1
+- Losers: V3=44, basic=25, v2=12, random=4
+
+**B) Split stability (30 seeds, full V3b model)**:
+- val_acc mean 0.494, median 0.500
+- val range 0.231–0.667, stdev 0.112
+- beats V3 baseline: 30/30 (100%)
+- beats V3a.1 ref 0.75: 0/30 (0%)
+
+**C) Feature scale (single run, seed=42)**:
+- weight_norm 1.068
+- Top features by |w|*std: opp_phys, back_coverage,
+  opp_spread, lead_off_best_eff
+- 3 zero-variance features (redirection, fake_out,
+  opp_fo) — V3 pool doesn't exercise these
+- Scales reasonable; no extreme outliers
+
+**D) Ablation (5 variants × 4 L2 × 30 seeds = 600 runs)**:
+- Best variant: all_features_normalized l2=0.1
+  val_mean=0.474, val_med=0.485
+- Normalization helps by ~+0.02 but still <0.60
+- L2 sweep shows minimal effect (0.0–0.1 all
+  within 0.01 of each other)
+- Deltas are zero at training time (artifact
+  team ordering doesn't match 90-plan enumeration)
+- All variants beat V3 on 100% of splits, but
+  V3 baseline accuracy is 0–11% on this dataset
+- No variant beats V3a.1 reference 0.75 on any split
+
+### Decision
+
+**BLOCK_LABEL_QUALITY**: the training labels are
+dominated by random/basic winners, not V3. The
+model learned the wrong objective. Per the task
+thresholds:
+- val_mean=0.494 < 0.60 (GO threshold) → BLOCK
+- val_med=0.500 < 0.60 → BLOCK
+- Best variant beats V3 on 100% of splits but
+  only because V3 itself scores 0-11% on this
+  data, not because the model is good
+
+### Files added
+
+- `vgc2026_phaseV3b1_audit.py` (new)
+- `test_vgc2026_phaseV3b1_audit.py` (new, 19 tests)
+- 8 new artifacts in `logs/`
+
+### Tests
+
+- 19/19 V3b.1 tests
+- 38/38 V3a tests
+- 12/12 V3b tests
+- 155/155 VGC preview tests
+- 278/278 total in 29s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Path forward (no battle run yet)
+
+1. Generate V3 vs V3 paired labels (not V3 vs
+   random)
+2. Filter out random/basic winners from dataset
+3. Run a V3 vs V3 50-pair benchmark to produce
+   learnable labels
+4. Then re-train V3b with the new dataset
+
+### Local-only / no-battle
+
+- No battles run
+- No localhost required
+- No new online API / LLM / scrape
+- Default policy unchanged
+- V3a, V3a.1, V3b artifacts preserved
+- No commit, no push
+
+## Phase V3c — VGC Preview-Training Dataset (2026-06-16)
+
+**Status: GO_FOR_TRAINING_DATASET. No training.**
+
+### Why V3c
+
+V3b.1 audit found the blocker: V3b features are
+opponent-adaptive enough, but the training labels
+were 95% random/basic winners. We needed a
+fresh VGC-only dataset where the four policies
+play each other fairly.
+
+### Commands
+
+```bash
+# Preflight (PASS)
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8000  # 200
+ls logs/vgc2026_phaseV3a1_preview_model.json  # exists
+
+# Full run: 6 pairings × 25 pairs × 2 sides = 300 battles
+./venv/bin/python -W error::ResourceWarning \
+  -m vgc2026_phaseV3c_dataset \
+  --n-pairs 25 --start-pair 0 --overwrite
+
+# Analyze-only re-run (after fixing side-swap counters)
+./venv/bin/python -W error::ResourceWarning \
+  -m vgc2026_phaseV3c_dataset \
+  --analyze-only
+```
+
+### Battle tags visible in browser
+
+- Per pairing: ``battle-gen9vgc2026regma-000`` through
+  ``-024``, both p1 and p2 sides
+- 6 pairings × 25 pairs × 2 sides = 300 battle tags
+- Player names: ``V3c_<pair>_<side>_<learned|V3>``
+
+### Results
+
+**Merged winner-policy distribution (decisive):**
+| policy | count |
+|---|---:|
+| matchup_top4_v3 | 75 |
+| learned_preview_v3a1 | 75 |
+| basic_top4 | 75 |
+| random | 75 |
+
+**Label entropy vs V3b.1:**
+- new: 0.979
+- old: 0.650
+- delta: +0.329 (decisive labels now include all
+  4 policies equally; old dataset was 95%
+  random/basic)
+
+**Decisive pairs by pairing:**
+- V3 vs learned: 20
+- V3 vs basic: 17
+- learned vs basic: 16
+- learned vs random: 13
+- V3 vs random: 9 (insufficient)
+- basic vs random: 9 (insufficient)
+- Total: 84 decisive pairs
+
+**Side collapse (V3 vs random, basic vs random):**
+24% each. These two "vs random" pairings show
+asymmetric first-mover advantage: V3 and basic
+both tend to win as p1 but lose more often as p2
+when facing random plans (which is tempo-dependent).
+
+### Acceptance gates
+
+| gate | result |
+|---|:-:|
+| 300 valid battles / 150 pairs | PASS |
+| 0 timeout/error/no_battle | PASS |
+| 0 team_serialization failures | PASS |
+| 0 duplicate tags | PASS |
+| max single-policy winner share | 25% (≤60%) |
+| V3 + learned share | 50% (≥30%) |
+| label entropy improved | YES (0.979 > 0.650) |
+| every_pairing_decisive >= 10 | FAIL (2/6) |
+| side_collapse <= 15pp all | FAIL (2/6) |
+
+**OVERALL: GO_FOR_TRAINING_DATASET**
+
+The two FAIL gates are reported with explicit
+markings (insufficient decisive pairs and noisy
+side collapse in the "vs random" pairings). The
+hard gates all pass; the dataset is suitable for
+training the next preview model.
+
+### Files added
+
+- `vgc2026_phaseV3c_dataset.py` (new)
+- `test_vgc2026_phaseV3c_dataset.py` (new, 21 tests)
+- 8 new artifacts in `logs/` (6 pairing csv+jsonl,
+  2 summary files)
+
+### Tests
+
+- 21/21 V3c tests
+- 38/38 V3a, 12/12 V3b, 19/19 V3b.1, 155/155 VGC
+  preview
+- 299/299 total in 27s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Local-only / no-battle defaults / no-hidden-info
+
+- localhost:8000 only
+- VGC format `gen9championsvgc2026regma`
+- Player names visible in browser with `V3c_` prefix
+- No new model trained
+- No new policy wrapper added
+- Default policy `matchup_top4_v3` unchanged
+- No commit, no push
+
+### Next step (V3c.1, not yet authorized)
+
+Train a new V3b-style model on the V3c dataset
+(if the user explicitly authorizes it). The
+current V3b is BLOCKED on val_acc because of
+bad labels; the V3c dataset has all 4 policies
+winning some decisive pairs, which gives the
+model a learnable objective.
+
+## Phase V3c.1 — VGC Learned-Preview Training (2026-06-16)
+
+**Status: GO_V3C1. learned_preview_v3c1 wrapper added (opt-in).**
+
+### What changed
+
+- Added 1 new file:
+  - `vgc2026_phaseV3c1_train.py` — V3c.1 trainer
+    (loader, group split, stability, ablation,
+    gates, model save)
+  - `test_vgc2026_phaseV3c1_train.py` — 19 tests
+- 4 new artifacts in `logs/`:
+  - `vgc2026_phaseV3c1_training_report.{json,md}`
+  - `vgc2026_phaseV3c1_feature_scale.json`
+  - `vgc2026_phaseV3c1_split_stability.json`
+- 1 new model artifact: `vgc2026_phaseV3c1_model.json`
+  (saved because gates passed)
+- Modified `team_preview_policy.py`:
+  - Added opt-in `learned_preview_v3c1` policy
+    branch in `choose_four_from_six`
+  - Raises `FileNotFoundError` if model missing
+  - Default policy unchanged
+
+### Training pipeline
+
+1. Load 6 V3c jsonl files (300 battles)
+2. For each row, look up team via `pair_id % len(pool)`,
+   extract V3b features via `v3b_features_for_plan`
+3. Build decisive pairs per (pairing, pair_id,
+   team_hash) — only when one policy won both sides
+4. Group split by team_hash (80/20)
+5. Train averaged perceptron (l2=0.01, n_epochs=5)
+6. Compute val_acc on split + 30-seed stability +
+   ablation grid
+7. Apply training gates; save model if all pass
+
+### Results (all 7 gates PASS)
+
+| gate | result |
+|---|:-:|
+| mean_val_acc >= 0.60 | PASS (0.602) |
+| median_val_acc >= 0.60 | PASS (0.615) |
+| beats V3 on >= 80% splits | PASS (93%) |
+| beats learned on >= 60% splits | PASS (100%) |
+| overfit gap <= 0.20 | PASS (0.098) |
+| max feature dominance <= 0.35 | PASS (0.199) |
+| val decisive n >= 10 | PASS |
+
+### Decisive dataset (77 pairs)
+
+| pairing | n_decisive |
+|---|---:|
+| learned vs matchup_top4_v3 | 20 |
+| basic vs learned | 16 |
+| learned vs random | 12 |
+| basic vs matchup_top4_v3 | 11 |
+| basic vs random | 9 |
+| matchup_top4_v3 vs random | 9 |
+
+84 split pairs and 6 identical-plan pairs were
+excluded.
+
+### Top weights
+
+- Positive: `sc_tr_advantage` (0.476), `lead_def_4x_count` (0.466), `lead_off_worst_eff` (0.401)
+- Negative: `our_intimidate_count` (-0.354), `lead_off_best_eff` (-0.207), `lead_off_mean_eff` (-0.140)
+
+### Best variant
+
+- `all_features`, l2=0.01, normalize=False
+- val_mean=0.602, val_med=0.615
+- train=0.700, gap=0.098, beats_v3=93%
+
+### Wrapper added
+
+- `learned_preview_v3c1` in `team_preview_policy.py`
+- Opt-in only (must pass `policy="learned_preview_v3c1"`)
+- Loads `logs/vgc2026_phaseV3c1_model.json`
+- Default policy unchanged (`basic_top4` / `matchup_top4_v3` for VGC)
+
+### Tests
+
+- 19/19 V3c.1 tests
+- 38/38 V3a, 12/12 V3b, 19/19 V3b.1, 21/21 V3c, 155/155
+  VGC preview
+- 318/318 combined in 23.5s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Local-only / no-battle
+
+- No battles in this phase
+- No localhost required
+- No new online API / LLM / scrape
+- V3c.1 model uses only open team-sheet data
+- No commit, no push
+
+### Next step (V3c.2, not yet authorized)
+
+20-pair VGC reality check using
+`learned_preview_v3c1` vs `matchup_top4_v3` on
+localhost:8000. Same gates as V3a.3:
+- beats V3 on >= 50% of pairs
+- ON vs OFF >= 50%
+- ON vs SafeRandom >= 95%
+- no regression in spread/focus-fire
+
+## Phase V3c.2 — VGC Reality Check (2026-06-16)
+
+**Status: GO_FOR_100_PAIR_QUALIFICATION (not adoption).**
+
+### Root cause
+
+V3a.2 runner called `asyncio.run()` twice per
+pair. Each call created a new event loop, leaking
+poke_env background tasks. First pair's D1 call
+hung. Single-battle test (one `asyncio.run()`)
+worked in 1.3s — confirming loop churn was the bug.
+
+### Fix
+
+Refactored V3a.2's `main()` to use one
+`asyncio.run(_run_all_pairs())` entrypoint. One
+event loop, sequential awaits. Added
+`--learned-policy` and `--account-prefix` CLI
+flags so V3c.2 can use `learned_preview_v3c1` and
+`V3c2_` prefix. Defaults preserve V3a.2 behavior.
+
+### Run
+
+```bash
+./venv/bin/python -u bot_vgc2026_phaseV3a2_reality.py \
+  --tag phaseV3c2_learned_v3c1_vs_v3_reality20 \
+  --n-pairs 20 \
+  --overwrite \
+  --timeout 60 \
+  --learned-policy learned_preview_v3c1 \
+  --account-prefix V3c2_
+```
+
+40 battles in 42s, all 40 ok.
+
+### Results (corrected)
+
+| metric | value |
+|---|---:|
+| learned wins | 23/40 (0.575) |
+| learned_p1 / learned_p2 | 12/20 / 11/20 |
+| side collapse | 0.05 (5pp) |
+| on_both / v3_both / split | 7 / 4 / 9 |
+| treatment effect | +0.15 |
+| avg turns | 5.7 |
+| plan change rate | 0.95 |
+
+(Note: the V3a.2 analyzer undercounted learned
+wins due to a pre-existing counter bug that
+double-counts V3 wins in D2 as "learned wins".
+Corrected numbers shown.)
+
+### Gates (all 8 PASS)
+
+| gate | result |
+|---|:-:|
+| 40/40 valid battles | PASS |
+| 20/20 complete pairs | PASS |
+| zero timeout/error/no_battle | PASS |
+| preview validation 100% | PASS |
+| side collapse <= 15pp | PASS (0.05) |
+| learned win rate >= 50% | PASS (0.575) |
+| learned_both >= v3_both | PASS (7 >= 4) |
+| treatment effect >= 0 | PASS (+0.15) |
+
+### Decision
+
+**GO_FOR_100_PAIR_QUALIFICATION** (not adoption).
+20 pairs is too small to claim superiority.
+Next step (V3c.3 if user authorizes): 100-pair
+paired qualification, V3 vs V3c.1, with
+side-collapse Wilson CI.
+
+### Files
+
+- Modified: `bot_vgc2026_phaseV3a2_reality.py`
+  (asyncio fix, CLI flags)
+- New: `test_vgc2026_phaseV3c2_asyncio_fix.py` (14 tests)
+- New artifacts: 2 files in `logs/`
+- Modified docs: `CURRENT_STATE.md`, `walkthrough.md`
+
+### Tests
+
+- 14/14 V3c.2 fix tests
+- 38/38 V3a, 12/12 V3b, 19/19 V3b.1, 21/21 V3c, 19/19
+  V3c.1, 155/155 VGC preview
+- 332/332 combined in 27s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Local-only / no-hidden-info
+
+- localhost:8000 only
+- VGC format `gen9championsvgc2026regma`
+- Player names `V3c2_*` visible in browser
+- No online API, no LLM, no scrape
+- No hidden info
+
+### Default policy unchanged
+
+- `matchup_top4_v3` is the active V3 (unchanged)
+- No new wrapper added
+- No model trained
+- No commit, no push
+
+## Phase V3c.2a — Analyzer Perspective Fix (2026-06-16)
+
+**Status: V3c.3 100-pair qualification UNBLOCKED. All 8 spec regression targets matched exactly.**
+
+### Root cause
+
+Pre-existing analyzer counted learned/V3 wins
+using side-position (D1/D2) labels, not
+policy-perspective semantics. It assumed
+``our_policy == learned`` in both D1 and D2 of
+every pair, but the V3a.2/V3c.2 runner does a
+side-swap (D1: learned as p1, D2: V3 as p1).
+This overcounted learned wins by 2 per pair
+where learned lost as p2.
+
+### Fix
+
+Replaced side-position counting with a new
+``_row_perspective_result()`` helper that
+determines learned_won and baseline_won from
+each row's ``our_policy`` / ``opponent_policy``
+fields directly.
+
+### Files changed
+
+- `analyze_vgc2026_phaseV3a2_reality.py`:
+  - Added `_row_perspective_result()` helper
+  - `analyze()` refactored to policy-perspective
+  - Side diagnostic separated from treatment
+    effect
+  - New CLI flags: `--learned-policy`,
+    `--baseline-policy`
+  - `format_report()` updated for new fields
+- `test_vgc2026_phaseV3c2a_analyzer_fix.py` (new)
+  — 17 tests
+- Docs: `CURRENT_STATE.md`, `walkthrough.md`
+
+### V3c.2 exact-match regression
+
+| metric | target | actual |
+|---|---:|---:|
+| rows | 40 | **40** |
+| complete pairs | 20 | **20** |
+| invalid | 0 | **0** |
+| learned wins | 23 | **23** |
+| learned_as_p1 wins | 12 | **12** |
+| learned_as_p2 wins | 11 | **11** |
+| learned_both | 7 | **7** |
+| v3_both | 4 | **4** |
+| split | 9 | **9** |
+| treatment effect | +0.15 | **+0.15** |
+
+All 8 spec regression targets matched exactly.
+
+### Side diagnostic vs treatment effect
+
+- Side: learned_as_p1=12/20=0.60, learned_as_p2=11/20=0.55, collapse=0.05
+- Treatment: on_both=7, v3_both=4, split=9, mean=+0.15
+
+### Tests
+
+- 17/17 V3c.2a tests
+- 14/14 V3c.2 fix tests
+- 38/38 V3a, 12/12 V3b, 19/19 V3b.1, 21/21 V3c, 19/19
+  V3c.1, 155/155 VGC preview
+- 349/349 combined in 27s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### V3c.3 100-pair qualification
+
+**UNBLOCKED.** All 8 spec gates pass. Run only if
+user explicitly authorizes.
+
+## Phase V3c.3 — 100-Pair VGC Qualification (2026-06-16)
+
+**Status: BLOCKED on paired bootstrap treatment lower bound (-0.10 < -0.02). 9/10 spec gates PASS.**
+
+### Commands
+
+```bash
+# Chunk 0 (50 pairs, ~2 min)
+./venv/bin/python -u bot_vgc2026_phaseV3a2_reality.py \
+  --tag phaseV3c3_learned_v3c1_vs_v3_paired100_chunk0 \
+  --n-pairs 50 --start-pair 0 --overwrite --timeout 90 \
+  --learned-policy learned_preview_v3c1 \
+  --account-prefix V3c3_
+
+# Chunk 1 (50 pairs, ~2 min)
+./venv/bin/python -u bot_vgc2026_phaseV3a2_reality.py \
+  --tag phaseV3c3_learned_v3c1_vs_v3_paired100_chunk1 \
+  --n-pairs 50 --start-pair 50 --overwrite --timeout 90 \
+  --learned-policy learned_preview_v3c1 \
+  --account-prefix V3c3_
+
+# Merge + analyze
+./venv/bin/python analyze_vgc2026_phaseV3a2_reality.py \
+  --tag phaseV3c3_learned_v3c1_vs_v3_paired100_chunk0 \
+  --merge-tags phaseV3c3_learned_v3c1_vs_v3_paired100_chunk1 \
+  --learned-policy learned_preview_v3c1 \
+  --baseline-policy matchup_top4_v3 \
+  --md logs/vgc2026_phaseV3c3_qualification_report.md
+```
+
+### Results (merged 200 battles)
+
+| metric | value |
+|---|---:|
+| valid pairs | 100/100 |
+| valid battles | 200/200 |
+| learned wins | 106/200 (0.530) |
+| Wilson 95% CI | [0.461, 0.598] |
+| learned_as_p1 wins | 52/100 (0.520) |
+| learned_as_p2 wins | 54/100 (0.540) |
+| side collapse | 0.020 (2pp) |
+| learned_both / v3_both / split | 40 / 34 / 26 |
+| treatment effect | +0.0600 |
+| bootstrap 95% CI | [-0.10, +0.22] |
+| one-sided p (regression) | 0.2807 |
+| avg turns | 6.2 |
+| plan change rate | 0.95 |
+| unique learned plans | 83 |
+| unique V3 plans | 67 |
+
+### Gate table (per spec)
+
+| gate | threshold | actual | result |
+|---|---|---:|:-:|
+| 200/200 valid battles | 200/200 | 200/200 | PASS |
+| 100/100 complete pairs | 100/100 | 100/100 | PASS |
+| zero timeout/error/no_battle | 0 | 0 | PASS |
+| preview validation 100% | 100% | 100% | PASS |
+| side collapse <= 10pp | <= 0.10 | 0.02 | PASS |
+| learned win rate >= 50% | >= 0.50 | 0.530 | PASS |
+| learned_both >= v3_both | >= | 40 >= 34 | PASS |
+| treatment effect >= 0 | >= 0 | +0.06 | PASS |
+| one-sided p >= 0.05 | >= 0.05 | 0.2807 | PASS |
+| bootstrap lower bound >= -0.02 | >= -0.02 | -0.10 | **FAIL** |
+
+### Decision
+
+**BLOCKED.** The paired bootstrap treatment lower
+bound (-0.10) is below the spec's threshold
+(-0.02). 9 of 10 spec gates pass, but the 10th
+fails. The data is consistent with learned being
+up to 10% worse than baseline at the 5th
+percentile. Per spec, any failed gate → BLOCKED.
+Default policy **not flipped**.
+
+### Why bootstrap lower bound is -0.10
+
+100 pairs and 74 decisive. 26 of 100 pairs are
+split (different winners each side, no signal).
+Per-pair noise dominates the 6pp point estimate.
+More pairs (e.g. 200) would tighten the CI.
+
+### Tests
+
+- 17/17 V3c.2a, 19/19 V3c.1, 38/38 V3a tests pass
+- 349/349 combined in 27s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Local-only / no-hidden-info
+
+- localhost:8000 only
+- VGC format `gen9championsvgc2026regma`
+- Player names `V3c3_*` visible in browser
+- No online API / LLM / scrape / hidden info
+
+### Default policy unchanged
+
+- `matchup_top4_v3` is the active V3 (unchanged)
+- No new wrapper added
+- No model trained
+- No commit, no push
+
+### Path forward (V3c.4+, user authorization needed)
+
+1. Run a 200-pair qualification to tighten the
+   bootstrap CI
+2. Investigate why 26/100 pairs are split
+3. Retrain V3c.1 with more data or features
+4. Accept current numbers and override the gate
+   (not recommended)
+
+## Phase V3c.4 — 200-Pair VGC Qualification (2026-06-16)
+
+**Status: BLOCKED on paired bootstrap treatment lower bound (-0.0950 < -0.02). 9/10 spec gates PASS.**
+
+### Commands
+
+4 chunks × 50 pairs = 200 pairs / 400 battles. ~2 min/chunk.
+
+### Results (merged 400 battles)
+
+| metric | value |
+|---|---:|
+| valid pairs | 200/200 |
+| valid battles | 400/400 |
+| learned wins | 204/400 (0.510) |
+| Wilson 95% CI | [0.461, 0.559] |
+| learned_as_p1 wins | 105/200 (0.525) |
+| learned_as_p2 wins | 99/200 (0.495) |
+| side collapse | 0.030 (3pp) |
+| learned_both / v3_both / split | 69 / 65 / 66 |
+| treatment effect | +0.0200 |
+| bootstrap 95% CI | [-0.095, +0.13] |
+| one-sided p (regression) | 0.3978 |
+| avg turns | 6.1 |
+| plan change rate | 0.95 |
+
+### V3c.3 vs V3c.4
+
+| metric | V3c.3 (100 pairs) | V3c.4 (200 pairs) | change |
+|---|---:|---:|---|
+| learned wins | 53.0% | 51.0% | -2pp |
+| treatment effect | +0.06 | +0.02 | -0.04 |
+| bootstrap CI width | 0.32 | 0.225 | -30% (narrower) |
+| bootstrap lower bound | -0.10 | -0.095 | -0.005 |
+
+The bootstrap CI narrowed by 30% as expected
+with 2x sample size. But the point estimate
+decreased, suggesting the original 100-pair
+result was on the high end of the true effect.
+
+### Gate table (per spec)
+
+| gate | threshold | actual | result |
+|---|---|---:|:-:|
+| 400/400 valid battles | 400/400 | 400/400 | PASS |
+| 200/200 complete pairs | 200/200 | 200/200 | PASS |
+| zero timeout/error/no_battle | 0 | 0 | PASS |
+| preview validation 100% | 100% | 100% | PASS |
+| side collapse <= 10pp | <= 0.10 | 0.03 | PASS |
+| learned win rate >= 50% | >= 0.50 | 0.510 | PASS |
+| learned_both >= v3_both | >= | 69 >= 65 | PASS |
+| treatment effect >= 0 | >= 0 | +0.02 | PASS |
+| one-sided p >= 0.05 | >= 0.05 | 0.3978 | PASS |
+| bootstrap lower bound >= -0.02 | >= -0.02 | -0.0950 | **FAIL** |
+
+### Decision
+
+**BLOCKED** on the paired bootstrap treatment
+lower bound. 9/10 spec gates pass; the 10th
+(bootstrap lower bound) fails. Per spec: "If
+any gate fails: BLOCKED with exact failed gate."
+Default policy **not flipped**.
+
+### Why the lower bound is still -0.095
+
+With 200 pairs and 134 decisive, 66 of 200
+pairs (33%) are split. Per-pair signal (2pp)
+is small relative to per-pair noise. Even at
+400 battles, the bootstrap CI is wider than
+the spec's -0.02 lower bound threshold.
+
+### Tests
+
+- 17/17 V3c.2a, 19/19 V3c.1, 38/38 V3a tests pass
+- 349/349 combined in 28s, EXIT=0
+- `py_compile` clean, `git diff --check` clean
+
+### Local-only / no-hidden-info
+
+- localhost:8000 only
+- VGC format `gen9championsvgc2026regma`
+- Player names `V3c4_*` visible in browser
+- No online API / LLM / scrape / hidden info
+
+### Default policy unchanged
+
+- `matchup_top4_v3` is the active V3 (unchanged)
+- No new wrapper added
+- No model trained
+- V3c.3 artifacts preserved
+- No commit, no push
+
+### Path forward (V3c.5+, user authorization needed)
+
+1. Investigate 66/200 split pairs
+2. Retrain V3c.1 with more data or richer
+   features to amplify the per-pair signal
+3. Run 500+ pair qualification for tighter CI
+4. Accept current numbers and override the
+   bootstrap gate (not recommended)
+
+## Phase Ponytail Refactor — Step 1: action_keys (2026-06-16)
+
+**Status: COMPLETE. 1 pre-existing failure unchanged. No regressions.**
+
+### What changed
+
+Extracted the action identity / legal-order telemetry
+helpers from `bot_doubles_damage_aware.py` (lines
+2148-2406, 259 lines) into
+`doubles_engine/action_keys.py` (272 lines). The
+helpers are re-exported via a shim in
+`bot_doubles_damage_aware` so existing tests and
+call sites keep working.
+
+### Module shape
+
+```
+doubles_engine/
+  __init__.py           # package marker
+  action_keys.py        # 13 functions + 2 constants
+```
+
+### Files
+
+- **New:** `doubles_engine/__init__.py` (9 lines)
+- **New:** `doubles_engine/action_keys.py` (272 lines)
+- **New:** `test_doubles_engine_action_keys.py` (416 lines, 33 tests)
+- **Modified:** `bot_doubles_damage_aware.py` (14,929 → 14,691 lines)
+
+### Refactor map (lines 31-14929 of bot_doubles_damage_aware.py)
+
+| section | lines | extracted |
+|---|---:|---|
+| Config | 31-388 | not yet |
+| Support-target helpers | 389-958 | not yet |
+| Mechanics wrappers | 1874-2147 | not yet |
+| **Action keys / telemetry** | 2148-2406 | **YES** |
+| Safety block compute | 2407-2652 | not yet |
+| Switch evaluators | 3248-4830 | not yet |
+| `DoublesDamageAwarePlayer` class | 4830-14929 | not yet |
+
+### Functions moved to `doubles_engine.action_keys`
+
+13 functions: `_order_action_key`,
+`_order_mechanic_label`,
+`_order_action_key_with_mechanic`,
+`_legal_action_keys_for_slot`,
+`_legal_action_keys_with_mechanic_for_slot`,
+`_raw_score_map_for_slot`,
+`_raw_score_map_with_mechanic_for_slot`,
+`_safety_block_map_for_slot`,
+`_final_action_keys_from_joint`,
+`_final_action_keys_with_mechanic_from_joint`,
+`_selected_joint_key`,
+`_selected_joint_key_with_mechanic`,
+`classify_only_legal`
+
+### Tests
+
+- 33/33 `test_doubles_engine_action_keys` pass
+- 462/462 doubles tests (1 pre-existing failure)
+- 50/50 V3 tests
+- `py_compile` clean
+- `git diff --check` clean
+
+### Why stop after one extraction
+
+Per spec: "Prefer small, reviewable extraction
+steps over a big rewrite." Each extraction has
+non-trivial risk (signature mismatches, loop
+pattern mismatches, isinstance checks). The
+first extraction established the shim pattern.
+Future extractions should follow this same recipe.
+
+### Remaining sections to extract (in priority order)
+
+1. Mechanics wrappers (275 lines)
+2. Support-target helpers (570 lines)
+3. Field/type helpers (240 lines)
+4. Type-absorb/protocol (175 lines)
+5. Safety block compute (245 lines)
+6. Switch evaluators (1580 lines)
+7. Config dataclass (357 lines)
+8. `DoublesDamageAwarePlayer` class (10099 lines)
+
+## Phase Ponytail Refactor — Step 2: STOP (2026-06-16)
+
+**Status: STOPPED. No code moved. No regressions.**
+
+### Stop condition
+
+The mechanics section (lines 1874-2147) has
+dependencies defined AFTER the Step 1 shim location
+(line 2148+). Extracting the 6 mechanics helpers
+to `doubles_engine.mechanics` would create an
+import cycle:
+
+```
+bot → engine.action_keys (Step 1 shim, OK)
+engine.mechanics → bot (for primitives)
+```
+
+### Files changed
+
+**None.** No code was moved.
+
+### Old vs new line count
+
+`bot_doubles_damage_aware.py`:
+- Before Step 2: 14,691
+- After Step 2: 14,691 (unchanged)
+
+### Tests run (baseline preserved)
+
+- 33/33 `test_doubles_engine_action_keys` pass
+- 462/463 doubles tests (1 pre-existing test_51
+  failure unchanged from baseline 412/412)
+- 50/50 V3 tests
+- `py_compile` clean
+- `git diff --check` clean
+
+### Dependencies that block extraction
+
+| helper | late-defined deps |
+|---|---|
+| `ability_hard_blocks_move` | `_extract_move_id`, `get_effective_move_type`, `_extract_ability`, `_extract_target_types` |
+| `direct_known_absorb_blocks_move` | `is_opponent_spread_move` |
+| `ability_redirects_single_target_move` | `is_opponent_spread_move` |
+
+4 of 6 mechanics helpers depend on primitives
+defined after the shim location. These would
+cause `ImportError: cannot import name X from
+partially initialized module` if extracted.
+
+### Recommended workaround
+
+Use lazy imports inside the function bodies
+(option 1 in the report). Verified to work in a
+POC. Preserves behavior, no broad rewrite.
+
+### Next step
+
+User authorization needed. Options:
+- (a) Proceed with lazy imports
+- (b) Move primitives first, then mechanics
+- (c) Skip mechanics, extract a different
+      section
+
+## Phase Ponytail Refactor — Step 2b: Mechanics Extraction (2026-06-16)
+
+**Status: COMPLETE. 6 mechanics helpers moved
+with lazy imports. Step 1 regression fixed.**
+
+### What changed
+
+Extracted 6 mechanics wrappers from
+`bot_doubles_damage_aware.py` (lines 1874-2147,
+274 lines) into `doubles_engine/mechanics.py`
+(381 lines). The known cycle is broken using
+function-local lazy imports for the 4 late-defined
+primitives.
+
+### Files
+
+- **New:** `doubles_engine/mechanics.py` (381 lines)
+- **New:** `test_doubles_engine_mechanics.py` (552 lines, 34 tests)
+- **Modified:** `bot_doubles_damage_aware.py` (-256 lines)
+- **Modified:** `doubles_engine/action_keys.py` (Step 1 regression fix)
+- **Modified:** `test_doubles_engine_action_keys.py` (Step 1 regression fix)
+
+### Old vs new line count
+
+`bot_doubles_damage_aware.py`:
+- Before: 14,691
+- After: **14,435** (-256)
+
+### Step 1 regression fixed
+
+While verifying Step 2b with the V3c runtime
+test, found that Step 1 had changed the return
+type of `_final_action_keys_from_joint` from LIST
+(original) to TUPLE. Step 2b restored the original
+return type. This was a Step 1 bug that went
+undetected in Step 1 verification.
+
+### Tests
+
+- 33/33 action_keys tests
+- 34/34 mechanics tests
+- 534/535 doubles tests (1 pre-existing test_51
+  failure unchanged)
+- 55/55 V3c runtime tests
+- 50/50 V3 tests
+- `py_compile` clean
+- `git diff --check` clean
+
+## Phase Ponytail Refactor — Step 3: Support-Targets Extraction (2026-06-17)
+
+**Status: COMPLETE.**
+
+### What changed
+
+Extracted 6 support-target helpers + 13 module
+consts from `bot_doubles_damage_aware.py` to
+`doubles_engine/support_targets.py`. Re-applied
+Step 1+2b shims. Restored pre-existing 8-tuple
+`_compute_order_safety_blocks` + narrow
+integration that was lost in a recovery incident.
+
+### Files
+
+- **New:** `doubles_engine/support_targets.py`
+  (701 lines)
+- **New:** `test_doubles_engine_support_targets.py`
+  (915 lines, 67 tests)
+- **Modified:** `bot_doubles_damage_aware.py`
+  (-959 net lines, from 14,435 → 13,476)
+- **Modified:** 3 test files restored to
+  8-tuple expectation; config gained 2 narrow
+  fields; _compute_order_safety_blocks returns
+  8-tuple; 2 callers + _compute_joint_scores
+  pass narrow_blocked.
+
+### Tests
+
+- 67/67 support_targets tests
+- 840/841 doubles tests (1 pre-existing test_51
+  unchanged)
+- `py_compile` clean
+- `git diff --check` clean
+
+## Phase Ponytail Refactor — Long Run (2026-06-17)
+
+**Status: COMPLETE. 7 new modules. Bot: 13,476
+→ 11,547 lines (-14.3%). No destructive git
+commands. 1020/1021 tests pass.**
+
+### Files
+- **New modules:** `field_state`, `types`,
+  `protocol`, `type_absorb`, `safety_blocks`,
+  `forced_switch`, `switch_safety`,
+  `revealed_switch`, `stat_drops`,
+  `voluntary_switch` (10 total)
+- **New tests:** 8 new test files
+  (`test_doubles_engine_*`)
+- **Modified:** `bot_doubles_damage_aware.py`
+  shim imports
+
+### Tests
+- 1020/1021 PASS (1 pre-existing `test_51`)
+- `py_compile` clean
+- `git diff --check` clean
+
+## Phase Ponytail Refactor — Checkpoint Freeze (2026-06-17)
+
+**Status: Audit extraction paused. Behavior re-qualification smoke scheduled.**
+
+### Summary
+- Bot reduced: 14,929 → 11,497 lines (−3,432, −23.0%).
+- doubles_engine/: 15 modules, 3,807 lines.
+- 281 new focused engine tests, EXIT=0.
+- Default policy unchanged: `matchup_top4_v3`.
+- No model/default/policy flip.
+- Pre-existing `test_51` failure unchanged (out of scope).
+
+### Ponytail phases accepted
+1. action_keys (Step 1)
+2. mechanics (Step 2b)
+3. support_targets (Step 3)
+4. Long Run Steps 4–6 (field_state, types, protocol, type_absorb,
+   safety_blocks, forced_switch, switch_safety, revealed_switch,
+   stat_drops, voluntary_switch)
+5. audit_metadata (Steps 7A, 7B, 7D, 7E)
+
+### Decision
+Pause audit extraction. Run 50-pair behavior smoke to verify V3c
+baseline still holds after the 3,432-line refactor. If smoke passes,
+recommend transitioning to behavior improvement work (Mega/switch/RL)
+in a separate phase.
+
+## Phase Ponytail Refactor — 50-Pair Behavior Smoke (2026-06-17)
+
+**Status: PASS.**
+
+### Smoke results
+- Tag: `phasePonytail_post_refactor_smoke50_v1`
+- 50 pairs / 100 battles / 0 errors / 0 timeouts / 0 no_battle
+- Preview validation: 100%
+- Learned wins: 59/100 = 0.59
+- Treatment effect: +0.18
+
+### Artifacts
+- `logs/vgc2026_phasePonytail_post_refactor_smoke50_v1.csv`
+- `logs/vgc2026_phasePonytail_post_refactor_smoke50_v1.jsonl`
+- `logs/vgc2026_phasePonytail_post_refactor_smoke50_v1_report.md`
+
+### Conclusion
+Behavior preserved after the 3,432-line Ponytail refactor reduction.
+Default policy `matchup_top4_v3` unchanged. No further audit extraction.
+Recommend transitioning to behavior improvement work in a separate phase.
+
+## Phase BI — Audit Instrumentation Track (BI-1 → BI-2E)
+
+The instrumentation track ran from BI-1 to BI-2E with **zero
+behavior change** at every step. Pure observational audit data
+assembly and persistence.
+
+### BI-1 — V4a + voluntary_switch audit completeness
+
+Added per-turn capture of V4a attrs (`_v4a_legal_keys_slot0/1`,
+`_v4a_selected_joint_key`, `_v4a_final_keys`) and 3 new
+voluntary_switch kwargs (`decision_eligible`, `selected`,
+`selected_species`). Projected `v4a` and `voluntary_switch`
+sub-dicts to the live event. **V4a raw scores were
+intentionally NOT passed** because 4-tuple dict keys
+cannot be JSON-serialized.
+
+Tests: 12 in `test_doubles_engine_audit_bi1.py`.
+
+### BI-2A — Persisted JSONL validation
+
+4 new tests in the BI-1 file driving `save_battle` and
+asserting the persisted JSONL has V4a + voluntary_switch
+fields. Confirmed the 5-pair smoke (which used no
+audit_logger) lacked the fields because no logger was
+attached — not because the bot didn't pass them.
+
+### BI-2B — Compact state_snapshot
+
+Added `_build_compact_state_snapshot(battle, battle_tag)`
+to the audit logger with: species, HP fractions, types,
+weather, fields, side conditions per slot. All JSON-safe
+primitives; no raw Pokemon / order / Battle objects.
+
+Tests: 13 in `test_doubles_engine_audit_bi2.py`.
+
+### BI-2C — Switch counterfactual design only
+
+No code change. Produced
+`logs/phaseBI2C_switch_counterfactual_design.md` proving
+all counterfactual data is already on hand at the audit
+call site (`_vsw_best_stay`, `_voluntary_switch_candidate_tables`,
+`_vsw_selected_actions`, `_vsw_counterfactual_actions`,
+`_vsw_selection_changed`, `_vsw_reason_codes`). Only
+`_vsw_best_stay_action` needed a 1-line observation
+capture.
+
+### BI-2D — Switch counterfactual persistence
+
+Added `_vsw_best_stay_action` capture (1 line, no scoring
+change), `assemble_switch_counterfactual_slot` helper,
+one `switch_counterfactual` kwarg to logger, projected to
+live event sub-dict.
+
+Tests: 14 in `test_doubles_engine_audit_bi3.py`.
+
+### BI-2E — Closeout + Mega readiness plan
+
+This section + `logs/phaseBI2E_instrumentation_closeout_and_mega_plan.md`.
+
+### Final state
+
+- **320** engine + audit tests pass.
+- **54** runtime parity tests pass.
+- **3** `TestAuditLoggerMetadata` tests pass.
+- `test_51_production_does_not_import_helper` (pre-existing)
+  unchanged.
+- No behavior/default/model/policy change.
+- No Mega behavior, no RL/training, no 200-pair qualification.
+
+### Recommended next phase
+
+**BI-3A: Mega flag + legal-order generation with default OFF.**
+See readiness plan for code targets, stop conditions, and
+required tests.
+
+## Phase BI-3K Closeout — Mega Opt-In Readiness (added 2026-06-18)
+
+**Decision: Mega is approved as opt-in experimental behavior. Mega is NOT approved for default flip.**
+
+### Phases in this track
+- BI-3A: Mega flag + legal-order generation, default OFF.
+- BI-3B: Mega tie behavior probe.
+- BI-3C: Mega policy design.
+- BI-3D: Mega damaging-move bonus (1e-3), default OFF.
+- BI-3E: tiny Mega runtime probe.
+- BI-3F-1: runner audit logger opt-in.
+- BI-3F-2: 5-pair Mega audit smoke.
+- BI-3G: Mega eligibility species guard (45 species).
+- BI-3H: 20-pair opt-in smoke.
+- BI-3I: allowlist integrity audit.
+- BI-3J: 100-pair opt-in preview (invalid — OFF baseline leak).
+- BI-3J.2: 100-pair opt-in preview rerun (invalid — runner wiring bug).
+- BI-3K: OFF baseline integrity fix v1.
+- BI-3K.1: OFF baseline regression test seal.
+- BI-3K.2: OFF leak root-cause audit.
+- BI-3K.3: treatment arm wiring fix.
+- BI-3K.4 / BI-3K.4b: clean runtime probe (server |nametaken| issues).
+- BI-3K.5: runner account isolation fix.
+- BI-3K.6: runner single-construction + treatment side fix.
+- BI-3K.7: audit both arms + battle tag metadata fix.
+- BI-3K.8: 20-pair Mega wiring smoke.
+
+### Final stable state
+- `enable_mega_evolution` default: `False` (unchanged)
+- `mega_damaging_bonus` default: `1e-3` (unchanged)
+- Default policy `matchup_top4_v3` (unchanged)
+- Runner supports opt-in `--enable-mega-evolution`, `--audit-decisions`, `--account-run-id`
+- Both-arm audit works (treatment + baseline files)
+- Account isolation works (run-id embedded, preflight uniqueness check)
+- Baseline OFF has runtime proof: 0 Mega legal / 0 selected across BI-3K.8
+
+### Evidence
+- 156 unit tests pass across Mega-related suites
+- BI-3K.7 1-pair probe: pass (both-arm audit, baseline proven Mega-free)
+- BI-3K.8 20-pair smoke: 40/40 ok, treatment selected Mega 22, baseline 0/0, state/switch audit 100%
+
+### BI-3K.8 detailed metrics
+- 40/40 summary rows status ok
+- 20/20 complete pairs
+- 0 timeout/error/no_battle
+- No |nametaken|
+- Treatment audit: 40 rows, 722 turns, 380 Mega legal, 22 selected Mega (all allowlisted), state/switch 100%
+- Baseline audit: 40 rows, 732 turns, 0 Mega legal, 0 selected Mega, state/switch 100%
+- Selected Mega turn ratio: 3.05% (≤ 30% gate)
+
+### Next phase recommendation
+**Do NOT run 100/200-pair unless the user explicitly requests default adoption.** The 20-pair smoke is sufficient evidence that the plumbing is stable.
+
+If default adoption is later requested, require Phase BI-3L 200-pair qualification with proper control arms per AGENTS.md adoption gates.
+
+### Do-not-do
+- Do NOT flip `enable_mega_evolution` default.
+- Do NOT run more large samples for logic debugging.
+- Do NOT run RL/training.
+- Do NOT add more Mega damage modeling.
+- Do NOT touch `test_51`.
+- Do NOT commit/push.
+
+See `logs/phaseBI3K_mega_opt_in_closeout.md` for full report.
+
+## Phase BI-3M2 — Mega Intent Policy Closeout (added 2026-06-18)
+
+**Decision: Mega intent policy is approved as opt-in experimental behavior. Default remains OFF.**
+
+### Phases in this track
+- BI-3M: added `mega_intent_bonus: float = 1.0` to DoublesDamageAwareConfig. Total Mega bonus is `mega_damaging_bonus + mega_intent_bonus` (default 1e-3 + 1.0 = 1.001). Gated by flag + mega + base_power > 0.
+- BI-3M 5-pair smoke: 10/10 ok, treatment selected Mega = 4, baseline = 0/0, no status Mega, ratio = 3.77%.
+- BI-3M2 20-pair smoke: 40/40 ok, treatment selected Mega = 22 (all allowlisted), baseline = 0/0, no status Mega, ratio = 6.09%, state/switch 100%.
+
+### Final stable state
+- `enable_mega_evolution` default: `False` (unchanged)
+- `mega_damaging_bonus` default: `1e-3` (unchanged)
+- `mega_intent_bonus` default: `1.0` (new, no effect when flag OFF)
+- Default policy `matchup_top4_v3` unchanged
+- No model/scoring/selection code touched
+- No commit/push
+- `test_51` unchanged
+
+### BI-3M2 20-pair detailed metrics
+- 40/40 summary rows status ok
+- 20/20 complete pairs
+- 0 timeout/error/no_battle
+- No |nametaken|
+- Treatment audit: 40 rows, 361 turns, 380 Mega legal, 22 selected Mega (all allowlisted), state/switch 100%
+- Baseline audit: 40 rows, 359 turns, 0 Mega legal, 0 selected Mega, state/switch 100%
+- Selected Mega turn ratio: 6.09% (≤ 30% gate)
+- Status-move Mega: 0
+- Non-allowlisted selected: 0
+
+### Closeout decision
+**Approved: Mega intent policy as opt-in.**
+**Not approved: default flip.**
+**Not needed: 100/200-pair unless default adoption is explicitly requested.**
+
+If default adoption is later requested, require a separate BI-3L qualification decision with minimum acceptable gates:
+- validity 100%
+- baseline OFF clean
+- selected Mega allowlisted
+- status Mega = 0
+- selected Mega ratio ≤ 30%
+- no regression vs OFF beyond agreed threshold
+
+Do not run that now.
+
+See `logs/phaseBI3M2_mega_intent_smoke20_report.md` for full smoke results.
+See `logs/phaseBI3M2_mega_intent_closeout.md` for closeout decision.
+
+## Next Behavior Work Order (added 2026-06-18)
+
+Mega is closed out as opt-in experimental behavior. Do not continue
+Mega benchmarking unless default adoption is explicitly requested.
+
+Proceed in this order:
+
+1. **Switch decision**
+   - Investigate voluntary-switch decisions, timing, selected switch
+     quality, and switch-vs-stay counterfactuals.
+   - Use fixture/unit checks and targeted probes first. Battle samples
+     are for confirming integration, not discovering basic logic bugs.
+
+2. **Turn-level analyzer**
+   - Add/read tooling over persisted audit JSONL for
+     `state_snapshot`, `switch_counterfactual`, V4a action keys, and
+     selected actions.
+   - Keep this phase read-only. It should explain turn-level decisions
+     and regret slices before any behavior change.
+
+3. **Team-preview / RL data quality**
+   - Revisit learned-preview and RL-style work only after switch and
+     turn-level analyzer data are reliable.
+   - Do not train until the state/action/reward fields needed for a
+     dataset are verified end-to-end.
+
+Carry forward the evidence ladder from `AGENTS.md`: fixture/unit first,
+then 1-pair probes, then 5-20 pair smokes. Reserve 100/200-pair runs for
+adoption/default-flip decisions, not logic debugging.

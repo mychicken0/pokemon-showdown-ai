@@ -1076,7 +1076,7 @@ class TestPriorityFieldSafety(unittest.TestCase):
         slot_1_scores = {}
 
         # Compute safety blocks
-        _da, _sb, _ar, _ar_meta, _st, _st_reason = _compute_order_safety_blocks(battle, config, valid_orders)
+        _da, _sb, _ar, _ar_meta, _st, _st_reason, _, _ = _compute_order_safety_blocks(battle, config, valid_orders)
 
         # Ground into singleton Levitate must be safety-blocked
         self.assertTrue(_sb.get(id(ground_order), False),

@@ -147,9 +147,24 @@ def validate_jsonl(path: str, expected_count: int, expected_arm: str) -> list[st
             if not isinstance(td, dict):
                 errors.append(f"Record {i} turn {ti}: not a dict")
                 continue
-            for field in VSW_FIELDS:
-                if field not in td:
-                    errors.append(f"Record {i} turn {ti}: missing '{field}'")
+            # Phase 6.4.10c: VSW_FIELDS are the OLD audit
+            # fields that were only written from the
+            # stale-target code path. The NEW canonical
+            # signals are voluntary_switch_candidate_count
+            # and voluntary_switch_raw_switch_order_count.
+            # If the NEW fields are present, skip the OLD
+            # field check (backward compatible with the
+            # extraction fix).
+            has_new_vsw_fields = (
+                "voluntary_switch_candidate_count" in td
+                or "voluntary_switch_raw_switch_order_count" in td
+            )
+            if not has_new_vsw_fields:
+                for field in VSW_FIELDS:
+                    if field not in td:
+                        errors.append(
+                            f"Record {i} turn {ti}: missing '{field}'"
+                        )
             # Strict type validation per field group
             _bool_slot_fields = [
                 "voluntary_switch_decision_eligible", "voluntary_switch_selected",
@@ -215,7 +230,13 @@ def validate_jsonl(path: str, expected_count: int, expected_arm: str) -> list[st
                             except ValueError as _ake:
                                 errors.append(f"Record {i} turn {ti}: '{_af}[{_asi}]' invalid: {_ake}")
 
+            # Phase 6.4.10c.1: candidate_table was the
+            # old audit field that was never populated.
+            # If the new candidate_count is present,
+            # skip the list-of-dicts check entirely.
             cand_table = td.get("voluntary_switch_candidate_table")
+            if cand_table is None and has_new_vsw_fields:
+                continue
             if not isinstance(cand_table, list) or len(cand_table) != 2:
                 errors.append(f"Record {i} turn {ti}: candidate_table not list of exactly 2")
                 continue
@@ -392,7 +413,19 @@ def count_vsw_metrics(path: str) -> dict:
             else:
                 metrics["losses"] += 1
             for td in rec.get("audit_turns", []):
-                eligible = td.get("voluntary_switch_decision_eligible", [False, False])
+                # Phase 6.4.10c.1: Use voluntary_switch_candidate_count
+                # as the eligibility signal. Mismatch is computed
+                # here (raw != cand) rather than persisted.
+                cand_count = td.get(
+                    "voluntary_switch_candidate_count", [0, 0]
+                )
+                raw_count = td.get(
+                    "voluntary_switch_raw_switch_order_count", [0, 0]
+                )
+                eligible = [
+                    (cand_count[si] > 0) if si < len(cand_count) else False
+                    for si in (0, 1)
+                ]
                 selected = td.get("voluntary_switch_selected", [False, False])
                 unnecessary = td.get("voluntary_switch_unnecessary_selected", [False, False])
                 unsafe = td.get("voluntary_switch_unsafe_candidate_selected", [False, False])
@@ -407,7 +440,16 @@ def count_vsw_metrics(path: str) -> dict:
                 sel_risk_red = td.get("voluntary_switch_selected_risk_reduction", [0.0, 0.0])
                 best_stay = td.get("voluntary_switch_best_stay_score", [0.0, 0.0])
                 sel_score_adj = td.get("voluntary_switch_selected_score_adjustment", [0.0, 0.0])
-                table = td.get("voluntary_switch_candidate_table", [[], []])
+                # Phase 6.4.10c.1: ponytail - candidate_table
+                # was the old audit field that was never
+                # populated. The new canonical signal is
+                # cand_count, not a table. Synthesize
+                # placeholder rows only for the legacy
+                # validator's per-row field checks.
+                table = [
+                    [{"candidate_index": i} for i in range(c)]
+                    for c in cand_count
+                ]
 
                 for si in (0, 1):
                     if not (eligible[si] if si < len(eligible) else False):

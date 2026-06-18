@@ -246,9 +246,50 @@ class DoublesDamageAwareConfig:
     support_move_wrong_side_block_score: float = 0.0
     support_move_allow_only_legal_wrong_side: bool = True
 
+    # Phase 6.3.8d: Narrow ally-heal wrong-side hard safety
+    # (production-grade replacement for the broad
+    # support-target safety; only blocks Heal Pulse,
+    # Floral Healing, Decorate aimed at an opponent).
+    enable_ally_heal_wrong_side_hard_safety: bool = False
+    ally_heal_wrong_side_block_score: float = 0.0
+
     # Phase 6.4.9: Voluntary Switch Quality and Sacrifice Awareness
     enable_voluntary_switch_quality_diagnostics: bool = True
     enable_voluntary_switch_quality_scoring: bool = True
+    # Phase BI-3A: Mega Evolution legal-order generation
+    # capability. Default OFF preserves bit-for-bit pre-BI-3A
+    # behavior. When ON, the canonical engine augments
+    # ``battle.valid_orders`` with parallel Mega variants
+    # (``SingleBattleOrder(..., mega=True)``) for any
+    # active mon whose ``battle.can_mega_evolve[slot_idx]``
+    # is True and whose selected action is a non-switch
+    # move order that does not already carry a mechanic
+    # flag. V4a keys distinguish plain vs Mega via the
+    # ``mechanic`` field; V2l.1 keys remain 3-tuples for
+    # backward compatibility.
+    enable_mega_evolution: bool = False
+    # Phase BI-3D: Mega damaging-move tie-breaker bonus.
+    # Only applies when ``enable_mega_evolution=True`` and
+    # the underlying move has ``base_power > 0``. Default
+    # 1e-3 is a near-tie breaker: it lets Mega win a
+    # genuine tie on joint score, but does not override
+    # any real scoring gap (typical joint scores are
+    # 50–500). Status moves never get the bonus.
+    mega_damaging_bonus: float = 1e-3
+    # Phase BI-3M: Mega damaging-move intent bonus. Only
+    # applies when ``enable_mega_evolution=True`` and
+    # the underlying move has ``base_power > 0``. Default
+    # 1.0 makes Mega behavior intentional (not just a
+    # tie-breaker) when the feature is opted in: a
+    # damaging Mega move beats a same-move plain order on
+    # equal scoring by ``mega_intent_bonus``, and can
+    # outweigh small plain-vs-Mega gaps on the same
+    # scoring axis. Status moves and non-Mega orders
+    # receive zero bonus. With ``enable_mega_evolution``
+    # default False, this field has no effect on the
+    # default policy. To restore pure tie-breaker
+    # behavior, set ``mega_intent_bonus=0.0``.
+    mega_intent_bonus: float = 1.0
     voluntary_switch_min_risk_reduction: float = 1.0
     voluntary_switch_tempo_penalty: float = 35.0
     voluntary_switch_unsafe_candidate_penalty: float = 120.0
@@ -265,501 +306,9 @@ class DoublesDamageAwareConfig:
     voluntary_switch_stay_penalty: float = 100.0
 
 
-# Phase 6.3.8: Support move target intent classification
-_SUPPORT_ALLY_BENEFICIAL_SINGLE = {
-    "healpulse",
-    "floralhealing",
-    "decorate",
-}
-_SUPPORT_ALLY_BENEFICIAL_SINGLE_REASON = {
-    "healpulse": "Heal Pulse restores HP; intended for ally",
-    "floralhealing": "Floral Healing restores HP; intended for ally",
-    "decorate": "Decorate sharply boosts ally's stats",
-}
-_SUPPORT_ALLY_BENEFICIAL_ALLIES = {
-    "helpinghand",
-    "coaching",
-    "howl",
-    "lifedew",
-}
-_SUPPORT_ALLY_BENEFICIAL_ALLIES_REASON = {
-    "helpinghand": "Helping Hand boosts ally's move power",
-    "coaching": "Coaching boosts ally's Attack and Defense",
-    "howl": "Howl boosts ally's Attack",
-    "lifedew": "Life Dew heals all allies",
-}
-_SUPPORT_ALLY_BENEFICIAL_TEAM = {
-    "aromatherapy",
-    "healbell",
-}
-_SUPPORT_ALLY_BENEFICIAL_TEAM_REASON = {
-    "aromatherapy": "Aromatherapy cures team status",
-    "healbell": "Heal Bell cures team status",
-}
-
-_SUPPORT_OPPONENT_DISRUPTIVE_SINGLE = {
-    "taunt",
-    "encore",
-    "disable",
-    "torment",
-    "thunderwave",
-    "willowisp",
-    "toxic",
-    "spore",
-    "sleeppowder",
-    "charm",
-    "scaryface",
-    "screech",
-    "faketears",
-    "metalsound",
-    "gastroacid",
-}
-_SUPPORT_OPPONENT_DISRUPTIVE_REASON = {
-    "taunt": "Taunt disables opponent's status moves",
-    "encore": "Encore locks opponent into a repeated move",
-    "disable": "Disable temporarily prevents opponent from using a move",
-    "torment": "Torment prevents opponent from using the same move twice",
-    "thunderwave": "Thunder Wave paralyzes opponent",
-    "willowisp": "Will-o-Wisp burns opponent",
-    "toxic": "Toxic badly poisons opponent",
-    "spore": "Spore puts opponent to sleep",
-    "sleeppowder": "Sleep Powder puts opponent to sleep",
-    "charm": "Charm sharply lowers opponent's Attack",
-    "scaryface": "Scary Face sharply lowers opponent's Speed",
-    "screech": "Screech sharply lowers opponent's Defense",
-    "faketears": "Fake Tears sharply lowers opponent's Sp.Def",
-    "metalsound": "Metal Sound sharply lowers opponent's Sp.Def",
-    "gastroacid": "Gastro Acid removes opponent's ability",
-}
-# Skill Swap is excluded from opponent-disruptive because it can
-# legitimately target an ally (e.g., give them a useful ability).
-
-# Moves with legitimate dual-side tactical use remain unclassified.
-_SUPPORT_EITHER_MOVE_IDS = {
-    "skillswap",
-}
-_SUPPORT_EITHER_REASON = {
-    "skillswap": "Skill Swap can target ally or opponent strategically",
-}
-
-# Phase 6.5: Moves that consume the user's type
-_TYPE_CONSUMING_MOVES = {
-    "doubleshock": "ELECTRIC",
-    "burnup": "FIRE",
-}
-
-# Pollen Puff is special: damaging vs opponent, healing vs ally
-_POLLEN_PUFF_MOVE_ID = "pollenpuff"
 
 
-def classify_support_move_target_intent(move) -> dict:
-    """Classify a move's intended target side based on its known behavior.
 
-    Returns:
-        dict with keys:
-            classified (bool): True if we can determine the intent
-            intended_side (str): "ally" | "opponent" | "self" | "field" | "either" | "unknown"
-            reason (str): Human-readable explanation
-            source (str): "move_metadata" | "explicit_allowlist" | "unclassified"
-    """
-    if not move:
-        return {
-            "classified": False,
-            "intended_side": "unknown",
-            "reason": "No move object",
-            "source": "unclassified",
-        }
-
-    move_id = getattr(move, "id", "")
-    if not move_id:
-        return {
-            "classified": False,
-            "intended_side": "unknown",
-            "reason": "Move has no ID",
-            "source": "unclassified",
-        }
-
-    # Pollen Puff: dual-purpose, handled separately
-    if move_id == _POLLEN_PUFF_MOVE_ID:
-        return {
-            "classified": True,
-            "intended_side": "either",
-            "reason": "Pollen Puff damages opponents, heals allies",
-            "source": "explicit_allowlist",
-        }
-
-    # Check metadata first
-    target_str = (
-        str(getattr(move, "target", "") or "").lower().replace("_", "").replace(" ", "")
-    )
-    deduced_target = getattr(move, "deduced_target", None)
-    deduced_str = str(deduced_target or "").lower().replace("_", "").replace(" ", "")
-
-    # Self-targeting moves
-    if target_str in ("self",) or deduced_str in ("self",):
-        return {
-            "classified": True,
-            "intended_side": "self",
-            "reason": "Move targets the user (metadata: self)",
-            "source": "move_metadata",
-        }
-
-    # Ally-only targeting (adjacentAlly)
-    if target_str in ("adjacentally",) or deduced_str in ("adjacentally",):
-        return {
-            "classified": True,
-            "intended_side": "ally",
-            "reason": "Move only targets ally (metadata: adjacentAlly)",
-            "source": "move_metadata",
-        }
-
-    # Allies team-wide (allies, allySide, allyTeam)
-    if target_str in ("allies", "allyside", "allyteam") or deduced_str in (
-        "allies",
-        "allyside",
-        "allyteam",
-    ):
-        return {
-            "classified": True,
-            "intended_side": "field",
-            "reason": "Move targets/allies team side (metadata)",
-            "source": "move_metadata",
-        }
-
-    # Field-wide (all, allAdjacent, allAdjacentFoes, foeSide)
-    if target_str in (
-        "all",
-        "alladjacent",
-        "alladjacentfoes",
-        "foeside",
-        "randomnormal",
-        "scripted",
-    ) or deduced_str in (
-        "all",
-        "alladjacent",
-        "alladjacentfoes",
-        "foeside",
-        "randomnormal",
-        "scripted",
-    ):
-        return {
-            "classified": True,
-            "intended_side": "field",
-            "reason": f"Field-wide/automatic targeting move (metadata: {target_str})",
-            "source": "move_metadata",
-        }
-
-    # Adjacent Foe only (adjacentFoe)
-    if target_str in ("adjacentfoe",) or deduced_str in ("adjacentfoe",):
-        return {
-            "classified": True,
-            "intended_side": "opponent",
-            "reason": "Move only targets adjacent foes (metadata: adjacentFoe)",
-            "source": "move_metadata",
-        }
-
-    # Adjacent Ally Or Self (ADJACENT_ALLY_OR_SELF)
-    if target_str in ("adjacentallyorself",) or deduced_str in ("adjacentallyorself",):
-        return {
-            "classified": True,
-            "intended_side": "ally",
-            "reason": "Move targets ally or self (metadata: adjacentAllyOrSelf)",
-            "source": "move_metadata",
-        }
-
-    # Now use explicit allowlists for moves with "normal" or "any" target
-    # that have a clear intended direction
-
-    # Ally-beneficial single-target moves
-    if move_id in _SUPPORT_ALLY_BENEFICIAL_SINGLE:
-        reason = _SUPPORT_ALLY_BENEFICIAL_SINGLE_REASON.get(
-            move_id, "Ally-beneficial support move"
-        )
-        return {
-            "classified": True,
-            "intended_side": "ally",
-            "reason": reason,
-            "source": "explicit_allowlist",
-        }
-
-    if move_id in _SUPPORT_ALLY_BENEFICIAL_ALLIES:
-        reason = _SUPPORT_ALLY_BENEFICIAL_ALLIES_REASON.get(
-            move_id, "Ally-boosting support move"
-        )
-        return {
-            "classified": True,
-            "intended_side": "ally",
-            "reason": reason,
-            "source": "explicit_allowlist",
-        }
-
-    if move_id in _SUPPORT_ALLY_BENEFICIAL_TEAM:
-        reason = _SUPPORT_ALLY_BENEFICIAL_TEAM_REASON.get(
-            move_id, "Team-curing support move"
-        )
-        return {
-            "classified": True,
-            "intended_side": "field",
-            "reason": reason,
-            "source": "explicit_allowlist",
-        }
-
-    # Moves that can legitimately target either side
-    if move_id in _SUPPORT_EITHER_MOVE_IDS:
-        reason = _SUPPORT_EITHER_REASON.get(move_id, "Move can target either side")
-        return {
-            "classified": True,
-            "intended_side": "either",
-            "reason": reason,
-            "source": "explicit_allowlist",
-        }
-
-    # Opponent-directed disruptive status moves
-    if move_id in _SUPPORT_OPPONENT_DISRUPTIVE_SINGLE:
-        reason = _SUPPORT_OPPONENT_DISRUPTIVE_REASON.get(
-            move_id, "Opponent-disruptive status move"
-        )
-        return {
-            "classified": True,
-            "intended_side": "opponent",
-            "reason": reason,
-            "source": "explicit_allowlist",
-        }
-
-    # Not classified
-    return {
-        "classified": False,
-        "intended_side": "unknown",
-        "reason": "Move not in classification lists",
-        "source": "unclassified",
-    }
-
-
-def build_support_target_candidate_table(
-    valid_orders_slot, slot_idx, battle, config=None
-) -> list:
-    """Build a candidate table of support-target orders for a slot-turn.
-
-    Each row contains:
-        move_id, attacker_species, target_position, target_side, target_species,
-        intended_side, classification_source, blocked, block_reason,
-        candidate_score, selected
-
-    Deduplicated by (move_id, target_position).
-    Only includes orders that have a classified intended side (opponent or ally).
-    """
-    rows = []
-    seen = set()
-    if not valid_orders_slot:
-        return rows
-    active_mon = (
-        battle.active_pokemon[slot_idx]
-        if slot_idx < len(battle.active_pokemon)
-        else None
-    )
-    attacker_species = getattr(active_mon, "species", "") if active_mon else ""
-
-    for order in valid_orders_slot:
-        if not order or not hasattr(order, "order") or not hasattr(order.order, "id"):
-            continue
-        move = order.order
-        move_id = getattr(move, "id", "")
-        classification = classify_support_move_target_intent(move)
-        if not classification["classified"]:
-            continue
-        intended_side = classification["intended_side"]
-        # Only include ally/opponent classified moves
-        if intended_side not in ("ally", "opponent"):
-            continue
-        target_pos = getattr(order, "move_target", 0)
-        dedup_key = (move_id, target_pos)
-        if dedup_key in seen:
-            continue
-        seen.add(dedup_key)
-        target_info = resolve_order_target_side(order, slot_idx, battle)
-        blocked = False
-        block_reason = ""
-        if config and getattr(config, "enable_support_move_target_hard_safety", False):
-            blocked, block_reason = support_move_wrong_side_block(
-                order, slot_idx, battle, config=config
-            )
-        rows.append(
-            {
-                "move_id": move_id,
-                "attacker_species": attacker_species,
-                "slot": slot_idx,
-                "target_position": target_pos,
-                "target_side": target_info.get("side", "unknown"),
-                "target_species": target_info.get("target_species", ""),
-                "intended_side": intended_side,
-                "classification_source": classification.get("source", ""),
-                "blocked": blocked,
-                "block_reason": block_reason,
-                "selected": False,
-            }
-        )
-    return rows
-
-
-def resolve_order_target_side(order, slot_idx, battle) -> dict:
-    """Resolve which side an order targets.
-
-    Returns:
-        dict with keys:
-            side (str): "ally" | "opponent" | "self" | "field" | "unknown"
-            target_position (int | None): the move_target value
-            target_species (str): species name of the target
-            target_identity (str): identity string of the target
-    """
-    result = {
-        "side": "unknown",
-        "target_position": None,
-        "target_species": "",
-        "target_identity": "",
-    }
-    if not order or not battle:
-        return result
-
-    target_pos = getattr(order, "move_target", 0)
-    result["target_position"] = target_pos
-
-    if target_pos == 0:
-        result["side"] = "field"
-        return result
-
-    # Our side: negative positions
-    if target_pos in (-1, -2):
-        ally_idx = abs(target_pos) - 1  # -1 -> 0, -2 -> 1
-        result["side"] = (
-            "self" if target_pos == (-1 if slot_idx == 0 else -2) else "ally"
-        )
-        # self = targeting your own slot; ally = targeting your partner's slot
-        if ally_idx < len(battle.active_pokemon):
-            mon = battle.active_pokemon[ally_idx]
-            if mon:
-                result["target_species"] = getattr(mon, "species", "")
-                result["target_identity"] = getattr(
-                    mon, "ident", getattr(mon, "name", "")
-                )
-        return result
-
-    # Opponent side: positive positions
-    if target_pos in (1, 2):
-        result["side"] = "opponent"
-        opp_idx = target_pos - 1
-        if opp_idx < len(battle.opponent_active_pokemon):
-            mon = battle.opponent_active_pokemon[opp_idx]
-            if mon:
-                result["target_species"] = getattr(mon, "species", "")
-                result["target_identity"] = getattr(
-                    mon, "ident", getattr(mon, "name", "")
-                )
-        return result
-
-    return result
-
-
-def support_move_wrong_side_block(order, slot_idx, battle, config=None) -> tuple:
-    """Check if an order is a wrong-side support move that should be blocked.
-
-    Args:
-        order: SingleBattleOrder to check
-        slot_idx: which of our slots (0 or 1)
-        battle: DoubleBattle instance
-        config: DoublesDamageAwareConfig (or None to check defaults)
-
-    Returns:
-        tuple[bool, str]: (blocked, reason)
-    """
-    if not order or not battle:
-        return (False, "")
-
-    if config is None:
-        from dataclasses import dataclass
-
-        c = DoublesDamageAwareConfig()
-        if not c.enable_support_move_target_hard_safety:
-            return (False, "")
-    else:
-        if not config.enable_support_move_target_hard_safety:
-            return (False, "")
-
-    move = getattr(order, "order", None)
-    if not move or not hasattr(move, "id"):
-        return (False, "")
-
-    # Only applies to Move orders
-    if not isinstance(move, Move):
-        return (False, "")
-
-    # Skip damaging moves that are not Pollen Puff
-    base_power = getattr(move, "base_power", 0)
-    category = getattr(move, "category", None)
-    category_name = getattr(category, "name", "STATUS") if category else "STATUS"
-
-    move_id = getattr(move, "id", "")
-
-    # Pollen Puff is special
-    if move_id == _POLLEN_PUFF_MOVE_ID:
-        target_pos = getattr(order, "move_target", 0)
-        if target_pos in (1, 2):
-            # Targeting opponent: damaging move, not blocked
-            return (False, "")
-        elif target_pos in (-1, -2):
-            # Targeting ally: healing, not blocked (correct usage)
-            return (False, "")
-        else:
-            return (False, "")
-
-    # Only block STATUS moves (or moves with 0 base_power that are also status)
-    if category_name != "STATUS" and base_power > 0:
-        return (False, "")
-
-    # Also block damaging moves with dual heal/damage behavior that are NOT
-    # handled above — currently only Pollen Puff is classified as either.
-    # Any future dual-purpose damaging moves would be added here.
-
-    classification = classify_support_move_target_intent(move)
-    if not classification["classified"]:
-        return (False, "")
-
-    intended_side = classification["intended_side"]
-    target_side_info = resolve_order_target_side(order, slot_idx, battle)
-    actual_side = target_side_info["side"]
-
-    # Field/team/either/unknown moves are never blocked
-    if intended_side in ("field", "either", "unknown"):
-        return (False, "")
-
-    if intended_side == "self":
-        if actual_side != "self":
-            return (
-                True,
-                f"Self-targeting move {move_id} targeting {actual_side} instead of self",
-            )
-        return (False, "")
-
-    if intended_side == "ally":
-        # Ally-beneficial: targeting opponent is wrong, targeting self might be OK
-        if actual_side == "opponent":
-            target_species = target_side_info.get("target_species", "?")
-            return (
-                True,
-                f"Ally-beneficial move {move_id} targeting opponent ({target_species}): {classification.get('reason', '')}",
-            )
-        return (False, "")
-
-    if intended_side == "opponent":
-        # Opponent-disruptive: targeting ally/self is wrong
-        if actual_side in ("ally", "self"):
-            target_species = target_side_info.get("target_species", "?")
-            return (
-                True,
-                f"Opponent-disruptive move {move_id} targeting {actual_side} ({target_species}): {classification.get('reason', '')}",
-            )
-        return (False, "")
-
-    return (False, "")
 
 
 def _normalize_ability_name(ability) -> str:
@@ -1135,1194 +684,162 @@ def classify_known_ally_redirection_error(
     return (False, False)
 
 
-_ALLOWED_DYNAMIC_ABSORB_REASONS = frozenset(
-    {
-        "water_into_waterabsorb",
-        "water_into_stormdrain",
-        "water_into_dryskin",
-        "electric_into_voltabsorb",
-        "electric_into_motordrive",
-        "electric_into_lightningrod",
-        "fire_into_flashfire",
-        "fire_into_wellbakedbody",
-        "grass_into_sapsipper",
-    }
+# ponytail: Protocol/replay scan helpers and
+# identity helpers extracted to
+# doubles_engine.protocol (Phase Ponytail
+# Refactor Step 4B). The shim re-exports the
+# helpers under their original names so existing
+# call sites and tests keep working. Behavior
+# is preserved bit-for-bit.
+from doubles_engine.protocol import (
+    find_protocol_ability_reveal_turn,
+    _normalize_protocol_token,
+    _get_pokemon_by_ident,
+    _get_battle_pokemon_identity,
 )
 
-
-def find_protocol_ability_reveal_turn(
-    battle,
-    target,
-    ability_name: str,
-) -> int | None:
-    """Scan battle replay events for the exact turn an ability was protocol-revealed.
-
-    Reads only replay/protocol events up to battle.turn.  Matches the exact
-    target Pokemon via battle.get_pokemon(), never by species substring.
-    Recognizes |-ability|IDENT|Ability and [from] ability: Ability patterns.
-
-    Returns the turn number (int) or None if no explicit reveal exists.
-    """
-    if not battle or not target or not ability_name:
-        return None
-    events = getattr(battle, "_replay_data", []) or []
-    if not events:
-        return None
-    decision_turn = getattr(battle, "turn", 0)
-    ability_lower = _normalize_protocol_token(ability_name)
-    current_turn = 0
-    for event in events:
-        if not isinstance(event, list) or len(event) < 2:
-            continue
-        try:
-            if event[1] == "turn" and len(event) >= 3:
-                try:
-                    current_turn = int(event[2])
-                except (ValueError, TypeError):
-                    pass
-                continue
-            if current_turn > decision_turn and current_turn > 0:
-                continue
-            if event[1] == "-ability" and len(event) >= 4:
-                ident = event[2]
-                resolved = _get_pokemon_by_ident(battle, ident)
-                if resolved is not target:
-                    continue
-                evt_ability = _normalize_protocol_token(event[3])
-                if evt_ability == ability_lower:
-                    return (
-                        current_turn
-                        if current_turn > 0 and current_turn <= decision_turn
-                        else None
-                    )
-            elif any(str(e).lower().startswith("[from] ability:") for e in event):
-                event_type = str(event[1])
-                from_ability = ""
-                for part in event:
-                    part_str = str(part)
-                    if part_str.lower().startswith("[from] ability:"):
-                        from_ability = _normalize_protocol_token(
-                            part_str.split(":", 1)[1]
-                        )
-                        break
-                if from_ability != ability_lower:
-                    continue
-                owner_ident = None
-                for e in event:
-                    e_str = str(e)
-                    if e_str.startswith("[of]"):
-                        owner_ident = e_str[4:].strip()
-                        break
-                if (
-                    owner_ident is None
-                    and event_type in {"-heal", "-immune", "-boost", "-unboost"}
-                    and len(event) >= 3
-                ):
-                    owner_ident = event[2]
-                if not owner_ident:
-                    continue
-                resolved = _get_pokemon_by_ident(battle, owner_ident)
-                if resolved is not target:
-                    continue
-                return (
-                    current_turn
-                    if current_turn > 0 and current_turn <= decision_turn
-                    else None
-                )
-        except Exception:
-            continue
-    return None
-
-
-def _normalize_protocol_token(value) -> str:
-    return "".join(c for c in str(value).lower() if c.isalnum())
-
-
-def _get_pokemon_by_ident(battle, ident: str):
-    """Resolve a protocol identity string to a Pokemon object."""
-    if not battle or not ident:
-        return None
-    try:
-        return battle.get_pokemon(ident)
-    except Exception:
-        return None
-
-
-def _get_battle_pokemon_identity(battle, pokemon) -> str:
-    """Return the stable battle-team key for an exact Pokemon object."""
-    if not battle or not pokemon:
-        return ""
-    for collection_name in ("team", "opponent_team", "_team", "_opponent_team"):
-        collection = getattr(battle, collection_name, None)
-        if not isinstance(collection, dict):
-            continue
-        for ident, candidate in collection.items():
-            if candidate is pokemon:
-                return str(ident)
-    return ""
-
-
-def classify_dynamic_type_absorb_candidates(
-    valid_orders,
-    selected_order,
-    attacker,
-    opponent_targets,
-    battle,
-    config,
-    candidate_scores,
-) -> dict:
-    """Classify dynamic-type absorb candidates for audit."""
-    result = {
-        "candidate_blocked": False,
-        "selected": False,
-        "avoided": False,
-        "reason": "",
-        "target_species": "",
-        "target_ability": "",
-        "blocked_order_id": "",
-        "blocked_candidate_score": 0.0,
-        "dynamic_candidate_available": False,
-        "dynamic_candidate_move_id": "",
-        "dynamic_candidate_declared_type": "",
-        "dynamic_candidate_effective_type": "",
-        "dynamic_candidate_form": "",
-        "dynamic_candidate_source": "",
-        "dynamic_candidate_target_table": [],
-    }
-    if not attacker or not valid_orders:
-        return result
-    selected_meta = None
-    best_blocked_score = float("-inf")
-    best_meta = None
-    seen_opportunity = set()
-    table_rows = {}
-    for cand in valid_orders or []:
-        if not cand or not hasattr(cand, "order"):
-            continue
-        move = getattr(cand, "order", None)
-        if not move or getattr(move, "base_power", 0) <= 0:
-            continue
-        t_pos = getattr(cand, "move_target", None)
-        if t_pos not in (1, 2):
-            continue
-        t_mon = (
-            opponent_targets[t_pos - 1]
-            if opponent_targets and len(opponent_targets) >= t_pos
-            else None
-        )
-        if not t_mon or getattr(t_mon, "fainted", False):
-            continue
-        resolved = resolve_effective_move_type(move, attacker, battle)
-        if not resolved["dynamic_applied"]:
-            continue
-
-        move_id = getattr(move, "id", "")
-        form = resolved.get("observed_form", "")
-        target_key = (move_id, form, t_pos)
-        is_sel = cand is selected_order
-        blocked, reason = ability_hard_blocks_move(
-            move, attacker, t_mon, battle, config=config
-        )
-        absorb_blocked = blocked and reason in _ALLOWED_DYNAMIC_ABSORB_REASONS
-        sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
-        tgt_ability = get_known_ability(t_mon, battle) or ""
-        tgt_resolution = resolve_known_ability(t_mon, battle, config)
-        decision_turn = int(getattr(battle, "turn", 0))
-        reveal_turn_val = (
-            find_protocol_ability_reveal_turn(battle, t_mon, tgt_ability)
-            if tgt_ability
-            else None
-        )
-        known_before = bool(
-            tgt_ability
-            and tgt_resolution["source"] == "protocol_revealed"
-            and reveal_turn_val is not None
-            and reveal_turn_val <= decision_turn
-        )
-        row_data = {
-            "move_id": move_id,
-            "declared_type": resolved.get("declared_type", ""),
-            "effective_type": resolved.get("effective_type", ""),
-            "form": form,
-            "source": resolved.get("source", ""),
-            "target_position": t_pos,
-            "target_species": getattr(t_mon, "species", ""),
-            "target_identity": _get_battle_pokemon_identity(battle, t_mon),
-            "target_known_ability": tgt_ability,
-            "target_known_ability_source": tgt_resolution["source"]
-            if tgt_ability
-            else "",
-            "target_ability_known_before_decision": known_before,
-            "target_ability_reveal_turn": reveal_turn_val,
-            "decision_turn": decision_turn,
-            "selected": is_sel,
-            "ability_blocked": absorb_blocked,
-            "block_reason": reason if absorb_blocked else "",
-            "candidate_score": sc,
-        }
-        if target_key in table_rows:
-            existing = table_rows[target_key]
-            if is_sel:
-                existing["selected"] = True
-                existing["candidate_score"] = sc
-            else:
-                existing["candidate_score"] = max(existing["candidate_score"], sc)
-            existing["ability_blocked"] = existing["ability_blocked"] or absorb_blocked
-            if absorb_blocked and not existing["block_reason"]:
-                existing["block_reason"] = reason
-        else:
-            table_rows[target_key] = row_data
-
-        opp_key = (move_id, form)
-        if (
-            not result["dynamic_candidate_available"]
-            and opp_key not in seen_opportunity
-        ):
-            result["dynamic_candidate_available"] = True
-            result["dynamic_candidate_move_id"] = move_id
-            result["dynamic_candidate_declared_type"] = resolved.get(
-                "declared_type", ""
-            )
-            result["dynamic_candidate_effective_type"] = resolved.get(
-                "effective_type", ""
-            )
-            result["dynamic_candidate_form"] = form
-            result["dynamic_candidate_source"] = resolved.get("source", "")
-        seen_opportunity.add(opp_key)
-
-        blocked, reason = ability_hard_blocks_move(
-            move, attacker, t_mon, battle, config=config
-        )
-        if not blocked:
-            continue
-        if reason not in _ALLOWED_DYNAMIC_ABSORB_REASONS:
-            continue
-        result["candidate_blocked"] = True
-        is_sel = cand is selected_order
-        if is_sel:
-            result["selected"] = True
-            sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
-            selected_meta = {
-                "reason": reason,
-                "target_species": getattr(t_mon, "species", ""),
-                "target_ability": get_known_ability(t_mon, battle) or "",
-                "order_id": getattr(move, "id", ""),
-                "blocked_candidate_score": sc,
-            }
-        sc = candidate_scores.get(id(cand), 0.0) if candidate_scores else 0.0
-        if sc > best_blocked_score:
-            best_blocked_score = sc
-            best_meta = {
-                "reason": reason,
-                "target_species": getattr(t_mon, "species", ""),
-                "target_ability": get_known_ability(t_mon, battle) or "",
-                "order_id": getattr(move, "id", ""),
-                "blocked_candidate_score": sc,
-            }
-    result["dynamic_candidate_target_table"] = list(table_rows.values())
-    if result["candidate_blocked"] and not result["selected"]:
-        result["avoided"] = True
-    if result["selected"] and selected_meta:
-        result["reason"] = selected_meta["reason"]
-        result["target_species"] = selected_meta["target_species"]
-        result["target_ability"] = selected_meta["target_ability"]
-        result["blocked_order_id"] = selected_meta["order_id"]
-        result["blocked_candidate_score"] = selected_meta["blocked_candidate_score"]
-    elif best_meta:
-        result["reason"] = best_meta["reason"]
-        result["target_species"] = best_meta["target_species"]
-        result["target_ability"] = best_meta["target_ability"]
-        result["blocked_order_id"] = best_meta["order_id"]
-        result["blocked_candidate_score"] = best_blocked_score
-    return result
-
-
-def is_gravity_active(battle) -> bool:
-    try:
-        for field in getattr(battle, "fields", {}) or {}:
-            field_name = getattr(field, "name", str(field))
-            if _normalize_ability_name(field_name) == "gravity":
-                return True
-    except Exception:
-        pass
-    return False
-
-
-def get_max_type_threat(our_active, opponent, battle=None) -> float:
-    """Get the maximum type effectiveness of any of the opponents  types against our active.
-
-    Uses both type_1 and type_2 of the opponent. Returns the max multiplier.
-    Never calculates from type_1 alone."""
-    if not our_active or not opponent:
-        return 0.0
-    try:
-        best = 0.0
-        opp_type_1 = getattr(opponent, "type_1", None)
-        opp_type_2 = getattr(opponent, "type_2", None)
-        for t in (opp_type_1, opp_type_2):
-            if t is None:
-                continue
-            try:
-                mult = our_active.damage_multiplier(t)
-                if mult > best:
-                    best = mult
-            except Exception:
-                pass
-        return best
-    except Exception:
-        return 0.0
-
-
-DYNAMIC_TYPE_MOVES = {
-    "aurawheel": {
-        "attacker_base_species": "morpeko",
-        "form_map": {
-            "morpeko": "ELECTRIC",
-            "morpekohangry": "DARK",
-        },
-    },
-}
-
-
-# Phase 6.3.7h: Object-identity form tracker
-# _pokemon_forms: (battle_tag, id(pokemon)) -> observed_form
-# _ident_to_obj: (battle_tag, normalized_ident) -> id(pokemon)
-_pokemon_forms: dict = {}
-_ident_to_obj: dict = {}
-_replay_cursors: dict = {}
-
-
-def _normalize_form_name(s) -> str:
-    return str(s).lower().replace("-", "").replace("_", "").replace(" ", "")
-
-
-def _normalize_ident(ident) -> str:
-    return str(ident).strip().lower().replace(" ", "").replace("_", "").replace("-", "")
-
-
-def record_observed_form_change(
-    battle_tag: str, ident: str, new_form: str, pokemon=None
-):
-    bt = str(battle_tag)
-    nf = _normalize_form_name(new_form)
-    if pokemon is not None:
-        key = (bt, id(pokemon))
-        _pokemon_forms[key] = nf
-    id_key = (bt, _normalize_ident(ident))
-    _ident_to_obj[id_key] = id(pokemon) if pokemon is not None else 0
-
-
-def get_observed_form(battle, pokemon) -> str | None:
-    if battle is None or pokemon is None:
-        return None
-    bt = str(getattr(battle, "battle_tag", ""))
-    # First try exact object lookup
-    obj_key = (bt, id(pokemon))
-    if obj_key in _pokemon_forms:
-        return _pokemon_forms[obj_key]
-    # Fall back to ident-based lookup via _ident_to_obj
-    for (tag, ident), oid in _ident_to_obj.items():
-        if tag == bt and oid == id(pokemon):
-            obj_fallback = (bt, oid)
-            if obj_fallback in _pokemon_forms:
-                return _pokemon_forms[obj_fallback]
-    return None
-
-
-def clear_observed_form_state(battle_tag: str):
-    bt = str(battle_tag)
-    for k in list(_pokemon_forms.keys()):
-        if k[0] == bt:
-            del _pokemon_forms[k]
-    for k in list(_ident_to_obj.keys()):
-        if k[0] == bt:
-            del _ident_to_obj[k]
-    if bt in _replay_cursors:
-        del _replay_cursors[bt]
-
-
-def _scan_replay_for_form_changes(battle):
-    replay = getattr(battle, "_replay_data", None)
-    if not replay:
-        return
-    bt = str(getattr(battle, "battle_tag", ""))
-    cursor = _replay_cursors.get(bt, 0)
-    for idx in range(cursor, len(replay)):
-        event = replay[idx]
-        if not isinstance(event, list) or len(event) < 4:
-            continue
-        if event[1] in ("-formechange", "detailschange"):
-            ident = event[2]
-            species_str = event[3].split(",")[0]
-            new_form = _normalize_form_name(species_str)
-            pokemon = None
-            try:
-                pokemon = battle.get_pokemon(ident)
-            except Exception:
-                pass
-            record_observed_form_change(bt, ident, new_form, pokemon=pokemon)
-    _replay_cursors[bt] = len(replay)
-
-
-def _scan_replay_for_type_consumption(battle, consumed_types):
-    """Scan replay for type-consumption events (Double Shock, Burn Up).
-
-    Updates consumed_types dict in place: consumed_types[battle_tag][pokemon_ident] = set of types.
-    """
-    replay = getattr(battle, "_replay_data", None)
-    if not replay:
-        return
-    bt = str(getattr(battle, "battle_tag", ""))
-    cursor = _replay_cursors.get(bt + "_type", 0)
-    for idx in range(cursor, len(replay)):
-        event = replay[idx]
-        if not isinstance(event, list) or len(event) < 3:
-            continue
-        # Format: ["", "-usedup", "p1a: Pawmot", "Electric"]
-        if event[1] == "-usedup":
-            ident = event[2]
-            consumed_type = event[3].upper().strip() if len(event) > 3 else ""
-            if ident and consumed_type:
-                if bt not in consumed_types:
-                    consumed_types[bt] = {}
-                if ident not in consumed_types[bt]:
-                    consumed_types[bt][ident] = set()
-                consumed_types[bt][ident].add(consumed_type)
-    _replay_cursors[bt + "_type"] = len(replay)
-
-
-def is_type_consumed(move, attacker, battle, consumed_types) -> bool:
-    """Check if a move is blocked because the attacker consumed its required type.
-
-    Moves like Double Shock require Electric type. If the user already used
-    Double Shock, it loses its Electric type and the move will fail.
-    """
-    if not move or not attacker or not battle:
-        return False
-    move_id = getattr(move, "id", "")
-    if not move_id or move_id not in _TYPE_CONSUMING_MOVES:
-        return False
-    bt = str(getattr(battle, "battle_tag", ""))
-    if bt not in consumed_types:
-        return False
-    # Get the attacker's identity
-    try:
-        ident = battle.get_pokemon_identifier(attacker)
-    except Exception:
-        return False
-    if not ident or ident not in consumed_types[bt]:
-        return False
-    needed_type = _TYPE_CONSUMING_MOVES[move_id]
-    if needed_type in consumed_types[bt][ident]:
-        return True
-    return False
-
-
-def resolve_effective_move_type(move, attacker=None, battle=None) -> dict:
-    """Resolve the effective move type accounting for dynamic form changes.
-
-    Returns dict with: declared_type, effective_type, source, dynamic_applied,
-    observed_form, information_explicitly_visible. Uses the
-    ``doubles_mechanics`` shared layer; the production form
-    tracker (``get_observed_form``) and the attacker's
-    species string are forwarded to the shared module so the
-    Aura Wheel / Morpeko logic is identical between battle
-    callers and preview callers.
-    """
-    observed = None
-    species_form = None
-    if move is not None:
-        move_id = ""
-        if hasattr(move, "id") and move.id:
-            move_id = _dm.normalize_id(move.id)
-        elif isinstance(move, str):
-            move_id = _dm.normalize_id(move)
-        if move_id in _dm.DYNAMIC_TYPE_MOVES and attacker:
-            observed = get_observed_form(battle, attacker)
-            species_form = getattr(attacker, "species", "") or None
-    shared = _dm.resolve_effective_move_type(
-        move, attacker,
-        observed_form=observed,
-        species_form=species_form,
-    )
-    return {
-        "declared_type": shared.declared_type,
-        "effective_type": shared.effective_type,
-        "source": shared.source,
-        "dynamic_applied": shared.dynamic_applied,
-        "observed_form": shared.observed_form,
-        "information_explicitly_visible": (
-            shared.information_explicitly_visible
-        ),
-    }
-
-
-def _get_declared_move_type(move) -> str:
-    """Extract declared move.type as uppercase string.
-
-    Delegates to ``doubles_mechanics`` to keep the canonical
-    declared-type extraction in one place.
-    """
-    return _dm._get_declared_move_type(move)
-
-
-def get_effective_move_type(move, attacker=None, battle=None) -> str:
-    """Compatibility wrapper: return effective type string.
-
-    Delegates to the shared module. The production
-    ``resolve_effective_move_type`` is the authoritative
-    implementation; this thin façade exists only because many
-    call sites already import the string-returning variant.
-    """
-    return resolve_effective_move_type(move, attacker, battle)["effective_type"]
-
-
-def resolve_known_ability(pokemon, battle=None, config=None) -> dict:
-    """Resolve the known ability of a Pokemon.
-
-    Returns:
-        dict with keys: ability, source, possible_abilities, is_deterministic,
-        is_currently_suppressed, suppression_reason
-    """
-    result = {
-        "ability": None,
-        "source": "unknown",
-        "possible_abilities": [],
-        "is_deterministic": False,
-        "is_currently_suppressed": False,
-        "suppression_reason": "",
-    }
-
-    if not pokemon:
-        return result
-
-    # 1. Check if this is our own team's Pokemon (always known)
-    if _pokemon_is_on_our_team(pokemon, battle):
-        result["ability"] = _normalize_ability_name(getattr(pokemon, "ability", None))
-        result["source"] = "our_team_known"
-        result["is_deterministic"] = True
-        return result
-
-    # 2. Check explicit protocol reveal
-    revealed = get_known_ability(pokemon, battle)
-    if revealed:
-        result["ability"] = revealed
-        result["source"] = "protocol_revealed"
-        result["is_deterministic"] = True
-        return result
-
-    # 3. Check for temporary ability changes (Trace, Skill Swap, etc.)
-    temp_ability = getattr(pokemon, "temporary_ability", None)
-    if temp_ability:
-        norm = _normalize_ability_name(temp_ability)
-        if norm:
-            result["ability"] = norm
-            result["source"] = "temporary_changed"
-            result["is_deterministic"] = True
-            return result
-
-    # 4. Check for Gastro Acid suppression
-    # (would be tracked as a status condition)
-    status = getattr(pokemon, "status", None)
-    if status and _normalize_ability_name(str(status)) == "gastroacid":
-        result["is_currently_suppressed"] = True
-        result["suppression_reason"] = "gastro_acid"
-
-    # 5. Check for Neutralizing Gas on field
-    if battle:
-        fields = getattr(battle, "fields", {}) or {}
-        for field in fields:
-            fname = (
-                getattr(field, "name", str(field))
-                if hasattr(field, "name")
-                else str(field)
-            )
-            if _normalize_ability_name(fname) == "neutralizinggas":
-                result["is_currently_suppressed"] = True
-                result["suppression_reason"] = "neutralizing_gas"
-                break
-
-    # 6. Deterministic singleton deduction (only when flag enabled)
-    allow_singleton = False
-    if config:
-        allow_singleton = getattr(
-            config, "ability_hard_safety_allow_singleton_deduction", False
-        )
-
-    if allow_singleton and not result["is_currently_suppressed"]:
-        try:
-            possible = getattr(pokemon, "possible_abilities", None)
-            if possible is not None:
-                norm_possible = normalize_possible_abilities(possible)
-                result["possible_abilities"] = norm_possible
-
-                # Check if exactly one distinct ability
-                if len(norm_possible) == 1:
-                    the_ability = norm_possible[0]
-                    current_ability = _normalize_ability_name(
-                        getattr(pokemon, "ability", None)
-                    )
-
-                    # pokemon.ability should be empty or match the singleton
-                    if not current_ability or current_ability == the_ability:
-                        result["ability"] = the_ability
-                        result["source"] = "deterministic_singleton"
-                        result["is_deterministic"] = True
-        except Exception:
-            pass
-
-    return result
-
-
-def ability_hard_blocks_move(
-    move, attacker, target, battle=None, config=None
-) -> tuple[bool, str]:
-    if not target or not move:
-        return False, ""
-    try:
-        # Use resolve_known_ability to get ability (supports
-        # singleton deduction).
-        resolution = resolve_known_ability(target, battle, config)
-        t_ability = resolution["ability"]
-        if not t_ability:
-            return False, ""
-
-        if attacker_ignores_target_ability(attacker, battle):
-            return False, ""
-
-        move_id = _extract_move_id(move)
-        m_type = get_effective_move_type(move, attacker, battle)
-
-        attacker_ability = _extract_ability(attacker)
-
-        # Grounded state is owned by the shared module so
-        # the bot wrapper does not duplicate the rules for
-        # Thousand Arrows, Gravity, Smack Down, and Ingrain.
-        grounded = _dm.resolve_extra_grounded(
-            move, target, battle=battle, move_id=move_id,
-        )
-
-        result = _dm.resolve_explicit_ability_interaction(
-            move, attacker, target,
-            target_ability=t_ability,
-            attacker_ability=attacker_ability,
-            move_id=move_id,
-            move_type=m_type,
-            extra_grounded=grounded,
-            defender_types=_extract_target_types(target),
-        )
-        if result.is_immune and not result.bypassed:
-            return True, result.reason
-    except Exception:
-        return False, ""
-    return False, ""
-
-
-def direct_known_absorb_blocks_move(
-    move, attacker, target, battle=None, order=None
-) -> tuple[bool, str]:
-    if not move or not target:
-        return False, ""
-    try:
-        # damaging move only
-        base_power = getattr(move, "base_power", 0)
-        if base_power <= 0:
-            return False, ""
-
-        # Do not call is_opponent_spread_move(move) without order context.
-        # Gate direct safety using order context.
-        if order is not None and is_opponent_spread_move(move, order):
-            return False, ""
-
-        # ALLOWLIST: protocol-revealed-only direct absorb check
-        blocks, reason = ability_hard_blocks_move(
-            move, attacker, target, battle, config=None
-        )
-        if blocks:
-            t_ability = get_known_ability(target, battle)
-            if t_ability in (
-                "waterabsorb",
-                "stormdrain",
-                "dryskin",
-                "voltabsorb",
-                "motordrive",
-                "lightningrod",
-                "flashfire",
-                "wellbakedbody",
-                "sapsipper",
-            ):
-                return True, reason
-    except Exception:
-        pass
-    return False, ""
-
-
-def ability_redirects_single_target_move(
-    move, intended_target, opponent_targets, attacker=None, battle=None
-) -> tuple[bool, str]:
-    if not move or not intended_target:
-        return False, ""
-    try:
-        if is_opponent_spread_move(move) or attacker_ignores_target_ability(
-            attacker, battle
-        ):
-            return False, ""
-        move_id = getattr(move, "id", "").lower()
-        m_type = ""
-        m_type_obj = getattr(move, "type", None)
-        if m_type_obj:
-            m_type = (
-                m_type_obj.name.upper()
-                if hasattr(m_type_obj, "name")
-                else str(m_type_obj).upper()
-            )
-
-        for opp in opponent_targets:
-            if opp and opp != intended_target and not getattr(opp, "fainted", False):
-                opp_ability = get_known_ability(opp, battle)
-                if not opp_ability:
-                    continue
-                if m_type == "WATER" and opp_ability == "stormdrain":
-                    return True, "redirected_by_stormdrain"
-                if m_type == "ELECTRIC" and opp_ability == "lightningrod":
-                    return True, "redirected_by_lightningrod"
-    except Exception:
-        pass
-    return False, ""
-
-
-def ally_ability_makes_safe(ally, move, battle=None) -> tuple[bool, str]:
-    if not ally or not move:
-        return False, ""
-    try:
-        ally_ab = get_known_ability(ally, battle)
-        if not ally_ab:
-            return False, ""
-        if ally_ab == "telepathy":
-            return True, "telepathy"
-
-        move_id = getattr(move, "id", "").lower()
-        m_type = ""
-        m_type_obj = getattr(move, "type", None)
-        if m_type_obj:
-            m_type = (
-                m_type_obj.name.upper()
-                if hasattr(m_type_obj, "name")
-                else str(m_type_obj).upper()
-            )
-
-        if (
-            ally_ab == "levitate"
-            and m_type == "GROUND"
-            and move_id != "thousandarrows"
-            and not is_gravity_active(battle)
-        ):
-            return True, "levitate"
-        if ally_ab == "eartheater" and m_type == "GROUND":
-            return True, "eartheater"
-        if ally_ab in ("waterabsorb", "stormdrain", "dryskin") and m_type == "WATER":
-            return True, ally_ab
-        if (
-            ally_ab in ("voltabsorb", "lightningrod", "motordrive")
-            and m_type == "ELECTRIC"
-        ):
-            return True, ally_ab
-        if ally_ab in ("flashfire", "wellbakedbody") and m_type == "FIRE":
-            return True, ally_ab
-        if ally_ab == "sapsipper" and m_type == "GRASS":
-            return True, "sapsipper"
-    except Exception:
-        pass
-    return False, ""
-
-
-def _ability_block_enabled(config, reason: str) -> bool:
-    if not config or not getattr(config, "enable_ability_hard_safety_only", False):
-        return False
-    if reason in (
-        "sound_into_soundproof",
-        "bullet_into_bulletproof",
-        "explosion_into_damp",
-    ):
-        return False
-    absorb_prefixes = ("water_into_", "electric_into_", "fire_into_", "grass_into_")
-    if reason.startswith(absorb_prefixes):
-        return bool(getattr(config, "ability_hard_safety_avoid_absorb", True))
-    return True
-
-
-def _order_action_key(order) -> tuple:
-    """Normalized key for comparing two SingleBattleOrder objects.
-
-    Returns (action_type, action_id, target) where action_type is 'move'
-    or 'switch', action_id is the move id or Pokemon species, and target
-    is the move target position (0 for switches).
-    """
-    if order is None:
-        return ("none", "", 0)
-    from poke_env.battle.double_battle import SingleBattleOrder
-
-    if isinstance(order, SingleBattleOrder):
-        inner = order.order
-        if inner is None:
-            return ("none", "", 0)
-        if hasattr(inner, "id"):
-            return ("move", inner.id, getattr(order, "move_target", 0))
-        elif hasattr(inner, "species"):
-            return ("switch", inner.species, 0)
-    return ("unknown", str(order) if order is not None else "", 0)
-
-
-def _legal_action_keys_for_slot(
-    valid_orders, slot_idx: int
-) -> list:
-    """V2l.1 — return a list of ``_order_action_key``
-    tuples for one slot of ``valid_orders``.
-
-    This is a tiny pure helper. The canonical
-    ``choose_move`` calls it so the audit logger
-    records the legal action keys for parity tests.
-    """
-    if not valid_orders or slot_idx >= len(valid_orders):
-        return []
-    out = []
-    for order in valid_orders[slot_idx] or []:
-        try:
-            out.append(_order_action_key(order))
-        except Exception:
-            continue
-    return out
-
-
-def _raw_score_map_for_slot(
-    slot_scores: dict, valid_orders, slot_idx: int
-) -> dict:
-    """V2l.1 — return a JSON-serializable raw score
-    map for one slot. Keys are action-key tuples
-    (canonical) and values are raw float scores
-    produced by ``score_action`` BEFORE any
-    runtime-specific metadata.
-    """
-    if not valid_orders or slot_idx >= len(valid_orders):
-        return {}
-    out = {}
-    for order in valid_orders[slot_idx] or []:
-        try:
-            key = _order_action_key(order)
-            out[key] = float(
-                slot_scores.get(id(order), 0.0) or 0.0
-            )
-        except Exception:
-            continue
-    return out
-
-
-def _safety_block_map_for_slot(
-    safety_blocked: dict, valid_orders, slot_idx: int
-) -> dict:
-    """V2l.1 — return a JSON-serializable safety block
-    map for one slot. Keys are action-key tuples and
-    values are bool. Built from the id-keyed
-    ``safety_blocked`` dict produced by
-    ``_compute_order_safety_blocks``.
-    """
-    if not valid_orders or slot_idx >= len(valid_orders):
-        return {}
-    out = {}
-    for order in valid_orders[slot_idx] or []:
-        try:
-            key = _order_action_key(order)
-            out[key] = bool(safety_blocked.get(id(order), False))
-        except Exception:
-            continue
-    return out
-
-
-def _final_action_keys_from_joint(
-    joint_order, slot_0_action: int = 0, slot_1_action: int = 1
-) -> list:
-    """V2l.1 — return the two final per-slot action
-    keys for a joint order. The list is index-aligned
-    with the slot order: [slot_0_key, slot_1_key].
-    """
-    if joint_order is None:
-        return [("none", "", 0), ("none", "", 0)]
-    first = getattr(joint_order, "first_order", None)
-    second = getattr(joint_order, "second_order", None)
-    return [
-        _order_action_key(first),
-        _order_action_key(second),
-    ]
-
-
-def _selected_joint_key(joint_order) -> tuple:
-    """V2l.1 — return a stable, JSON-serializable key
-    for the selected joint order. The key is the pair
-    of per-slot action keys.
-    """
-    if joint_order is None:
-        return (("none", "", 0), ("none", "", 0))
-    first = getattr(joint_order, "first_order", None)
-    second = getattr(joint_order, "second_order", None)
-    return (
-        _order_action_key(first),
-        _order_action_key(second),
-    )
-
-
-def classify_only_legal(
-    joint_orders, slot_idx, selected_order, safety_blocked=None
-) -> bool:
-    """Production helper: True when the selected blocked action has no
-    non-safety-blocked alternative for *slot_idx* across all joint orders.
-
-    Args:
-        joint_orders: list of joint orders
-        slot_idx: 0 or 1
-        selected_order: the actually selected order for this slot
-        safety_blocked: dict mapping id(order) -> True for safety-blocked
-            orders.  If None, treats no orders as blocked.
-
-    Returns True only when every alternative for this slot is also
-    safety-blocked (or there are no alternatives).  Two different blocked
-    Ground actions still count as no safe alternative.
-    """
-    if safety_blocked is None:
-        safety_blocked = {}
-
-    sel_key = _order_action_key(selected_order)
-    # If selected action is not blocked, only_legal is irrelevant
-    if not safety_blocked.get(id(selected_order), False):
-        return False
-
-    for jo in joint_orders:
-        order = jo.first_order if slot_idx == 0 else jo.second_order
-        if order is None:
-            continue
-        order_key = _order_action_key(order)
-        # Different action AND not safety-blocked => safe alternative exists
-        if order_key != sel_key and not safety_blocked.get(id(order), False):
-            return False
-
-    return True
-
-
-def _compute_order_safety_blocks(battle, config, valid_orders):
-    """Canonical safety precomputation for all valid orders.
-
-    Returns (_direct_absorb_blocked, _safety_blocked) dicts keyed by id(order).
-    Used by both actual choose_move selection and pure counterfactual selection.
-    """
-    _direct_absorb_blocked = {}
-    _direct_absorb_enabled = getattr(
-        config, "enable_ability_hard_safety_only", False
-    ) and getattr(config, "ability_hard_safety_direct_absorb_only", False)
-    if _direct_absorb_enabled:
-        for slot_idx, orders in enumerate(valid_orders):
-            for ord in orders:
-                if ord and hasattr(ord.order, "base_power"):
-                    t_pos = ord.move_target
-                    if t_pos in (1, 2):
-                        t_mon = battle.opponent_active_pokemon[t_pos - 1]
-                        a_mon = battle.active_pokemon[slot_idx]
-                        if t_mon and a_mon:
-                            if not is_opponent_spread_move(ord.order, ord):
-                                blocked, _ = direct_known_absorb_blocks_move(
-                                    ord.order, a_mon, t_mon, battle, ord
-                                )
-                                if blocked:
-                                    _direct_absorb_blocked[id(ord)] = True
-
-    _safety_blocked = {}
-    for slot_idx, orders in enumerate(valid_orders):
-        if not orders:
-            continue
-        active_mon = battle.active_pokemon[slot_idx]
-        if not active_mon:
-            continue
-        for ord in orders:
-            if ord and hasattr(ord.order, "base_power"):
-                move = ord.order
-                target_pos = ord.move_target
-                if target_pos in (1, 2):
-                    target_mon = battle.opponent_active_pokemon[target_pos - 1]
-                    if target_mon:
-                        base_power = getattr(move, "base_power", 0)
-                        category = getattr(move, "category", None)
-                        category_name = getattr(category, "name", "STATUS")
-
-                        is_blocked = False
-                        if category_name == "STATUS" or base_power == 0:
-                            if getattr(
-                                config, "enable_priority_field_hard_safety", False
-                            ):
-                                priority_res = evaluate_priority_move_legality(
-                                    move, active_mon, target_mon, battle, config
-                                )
-                                if priority_res["blocked"]:
-                                    is_blocked = True
-                        else:
-                            blocks = False
-                            reason = ""
-                            if getattr(
-                                config, "enable_ability_hard_safety_only", False
-                            ):
-                                blocks, reason = ability_hard_blocks_move(
-                                    move, active_mon, target_mon, battle, config=config
-                                )
-                            applies = blocks and _ability_block_enabled(config, reason)
-
-                            applies_direct = False
-                            if getattr(
-                                config, "enable_ability_hard_safety_only", False
-                            ) and getattr(
-                                config, "ability_hard_safety_direct_absorb_only", False
-                            ):
-                                if not is_opponent_spread_move(move, ord):
-                                    blocks_direct, _ = direct_known_absorb_blocks_move(
-                                        move, active_mon, target_mon, battle, ord
-                                    )
-                                    if blocks_direct:
-                                        applies_direct = True
-
-                            applies_priority = False
-                            if getattr(
-                                config, "enable_priority_field_hard_safety", False
-                            ):
-                                priority_res = evaluate_priority_move_legality(
-                                    move, active_mon, target_mon, battle, config
-                                )
-                                if priority_res["blocked"]:
-                                    applies_priority = True
-
-                            if applies or applies_direct or applies_priority:
-                                is_blocked = True
-
-                            if (
-                                not is_blocked
-                                and getattr(
-                                    config, "enable_ability_hard_safety_only", False
-                                )
-                                and getattr(
-                                    config,
-                                    "ability_hard_safety_avoid_redirection",
-                                    False,
-                                )
-                            ):
-                                redirects, red_reason = (
-                                    ability_redirects_single_target_move(
-                                        move,
-                                        target_mon,
-                                        battle.opponent_active_pokemon,
-                                        active_mon,
-                                        battle,
-                                    )
-                                )
-                                if redirects:
-                                    red_target = None
-                                    for opp in battle.opponent_active_pokemon:
-                                        if (
-                                            opp
-                                            and opp != target_mon
-                                            and not getattr(opp, "fainted", False)
-                                        ):
-                                            opp_ability = get_known_ability(opp, battle)
-                                            if opp_ability in (
-                                                "stormdrain",
-                                                "lightningrod",
-                                            ):
-                                                red_target = opp
-                                                break
-                                    if red_target:
-                                        blocks_red, reason_red = (
-                                            ability_hard_blocks_move(
-                                                move,
-                                                active_mon,
-                                                red_target,
-                                                battle,
-                                                config=config,
-                                            )
-                                        )
-                                        if blocks_red and _ability_block_enabled(
-                                            config, reason_red
-                                        ):
-                                            is_blocked = True
-
-                        if is_blocked:
-                            _safety_blocked[id(ord)] = True
-
-    # Phase 6.3.8: Support Move Target Hard Safety
-    _support_target_blocked = {}
-    _support_target_reasons = {}
-    if getattr(config, "enable_support_move_target_hard_safety", False):
-        for slot_idx, orders in enumerate(valid_orders):
-            if not orders:
-                continue
-            for ord_obj in orders:
-                if ord_obj and hasattr(ord_obj.order, "id"):
-                    blocked, reason = support_move_wrong_side_block(
-                        ord_obj, slot_idx, battle, config=config
-                    )
-                    if blocked:
-                        _support_target_blocked[id(ord_obj)] = True
-                        _support_target_reasons[id(ord_obj)] = reason
-
-    _ally_redirect_blocked = {}
-    _ally_redirect_blocked_meta = {}
-    if getattr(config, "enable_known_ally_redirection_hard_safety", False):
-        for slot_idx, orders in enumerate(valid_orders):
-            for ord in orders:
-                if (
-                    ord
-                    and hasattr(ord.order, "base_power")
-                    and getattr(ord.order, "base_power", 0) > 0
-                ):
-                    t_pos = ord.move_target
-                    if t_pos in (1, 2):
-                        ally_idx = 1 - slot_idx
-                        ally = (
-                            battle.active_pokemon[ally_idx]
-                            if ally_idx < len(battle.active_pokemon)
-                            else None
-                        )
-                        if ally and not getattr(ally, "fainted", False):
-                            redirects, reason = ally_redirects_our_single_target_move(
-                                ord.order, battle.active_pokemon[slot_idx], ally, battle
-                            )
-                            if redirects:
-                                oid = id(ord)
-                                _ally_redirect_blocked[oid] = True
-                                target_opp = None
-                                if len(battle.opponent_active_pokemon) > t_pos - 1:
-                                    target_opp = battle.opponent_active_pokemon[
-                                        t_pos - 1
-                                    ]
-                                ally_ab = get_known_ability(ally, battle) or ""
-                                _ally_redirect_blocked_meta[oid] = {
-                                    "move_id": getattr(ord.order, "id", ""),
-                                    "attacker_species": getattr(
-                                        battle.active_pokemon[slot_idx], "species", ""
-                                    ),
-                                    "target_species": getattr(target_opp, "species", "")
-                                    if target_opp
-                                    else "",
-                                    "ally_species": getattr(ally, "species", "")
-                                    if ally
-                                    else "",
-                                    "ally_ability": ally_ab,
-                                    "reason": reason,
-                                    "known_before_decision": bool(ally_ab),
-                                }
-
-    return (
-        _direct_absorb_blocked,
-        _safety_blocked,
-        _ally_redirect_blocked,
-        _ally_redirect_blocked_meta,
-        _support_target_blocked,
-        _support_target_reasons,
-    )
-
+# ponytail: Audit metadata assembly helper
+# extracted to doubles_engine.audit_metadata
+# (Phase Ponytail Refactor Step 7B). The shim
+# re-exports the assembly function so the
+# audit-dict construction at the
+# ``audit_logger.log_turn_decision`` call site
+# can delegate to a module function. Behavior
+# is preserved bit-for-bit.
+from doubles_engine.audit_metadata import (
+    assemble_v2l1_metadata,
+    assemble_partial_spread_state,
+    assemble_shared_engine_metadata,
+    assemble_switch_counterfactual_slot,
+)
+# ponytail: Dynamic-type absorb candidate
+# classification helper extracted to
+# doubles_engine.type_absorb (Phase Ponytail
+# Refactor Step 4B). The shim re-exports the
+# helper and the allowlist frozenset under
+# their original names so existing call sites
+# and tests keep working. Behavior is preserved
+# bit-for-bit.
+from doubles_engine.type_absorb import (
+    classify_dynamic_type_absorb_candidates,
+    _ALLOWED_DYNAMIC_ABSORB_REASONS,
+)
+
+# ponytail: Field state, weather, terrain, gravity,
+# and form/type consumption helpers extracted
+# to doubles_engine.field_state (Phase Ponytail
+# Refactor Step 4A). The shim re-exports the
+# helpers and module-level state under their
+# original names so existing call sites and
+# tests keep working. Behavior is preserved
+# bit-for-bit.
+from doubles_engine.field_state import (
+    _TYPE_CONSUMING_MOVES,
+    DYNAMIC_TYPE_MOVES,
+    _pokemon_forms,
+    _ident_to_obj,
+    _replay_cursors,
+    is_gravity_active,
+    get_max_type_threat,
+    _normalize_form_name,
+    _normalize_ident,
+    record_observed_form_change,
+    get_observed_form,
+    clear_observed_form_state,
+    _scan_replay_for_form_changes,
+    _scan_replay_for_type_consumption,
+    is_type_consumed,
+)
+
+# ponytail: Effective-move-type resolution
+# helpers extracted to doubles_engine.types
+# (Phase Ponytail Refactor Step 4A). The shim
+# re-exports the helpers under their original
+# names so existing call sites and tests keep
+# working. Behavior is preserved bit-for-bit.
+from doubles_engine.types import (
+    resolve_effective_move_type,
+    _get_declared_move_type,
+    get_effective_move_type,
+)
+
+# ponytail: Support-target intent classification and
+# wrong-side block helpers extracted to
+# doubles_engine.support_targets (Phase Ponytail
+# Refactor Step 3). The shim re-exports the
+# constants and helpers under their original
+# names so existing call sites and tests keep
+# working. Behavior is preserved bit-for-bit.
+from doubles_engine.support_targets import (
+    _SUPPORT_ALLY_BENEFICIAL_SINGLE,
+    _SUPPORT_ALLY_BENEFICIAL_SINGLE_REASON,
+    _SUPPORT_ALLY_BENEFICIAL_ALLIES,
+    _SUPPORT_ALLY_BENEFICIAL_ALLIES_REASON,
+    _SUPPORT_ALLY_BENEFICIAL_TEAM,
+    _SUPPORT_ALLY_BENEFICIAL_TEAM_REASON,
+    _SUPPORT_OPPONENT_DISRUPTIVE_SINGLE,
+    _SUPPORT_OPPONENT_DISRUPTIVE_REASON,
+    _SUPPORT_EITHER_MOVE_IDS,
+    _SUPPORT_EITHER_REASON,
+    _NARROW_ALLY_HEAL_MOVE_IDS,
+    _NARROW_ALLY_HEAL_REASON,
+    _POLLEN_PUFF_MOVE_ID,
+    classify_support_move_target_intent,
+    build_support_target_candidate_table,
+    build_narrow_ally_heal_candidate_table,
+    resolve_order_target_side,
+    support_move_wrong_side_block,
+    narrow_ally_heal_wrong_side_block,
+)
+
+# ponytail: Ability mechanics wrappers extracted to
+# doubles_engine.mechanics (Phase Ponytail Refactor
+# Step 2b). The shim re-exports them under their
+# original names so existing call sites and tests
+# keep working. Behavior is preserved bit-for-bit.
+from doubles_engine.mechanics import (
+    resolve_known_ability,
+    ability_hard_blocks_move,
+    direct_known_absorb_blocks_move,
+    ability_redirects_single_target_move,
+    ally_ability_makes_safe,
+    _ability_block_enabled,
+)
+
+# ponytail: action identity / legal-order telemetry
+# helpers extracted to doubles_engine.action_keys
+# (Phase Ponytail Refactor Step 1). The shim
+# re-exports them under their original private
+# names so existing call sites and tests keep
+# working. Behavior is preserved bit-for-bit.
+from doubles_engine.action_keys import (
+    _order_action_key,
+    _order_mechanic_label,
+    _order_action_key_with_mechanic,
+    _legal_action_keys_for_slot,
+    _legal_action_keys_with_mechanic_for_slot,
+    _raw_score_map_for_slot,
+    _raw_score_map_with_mechanic_for_slot,
+    _safety_block_map_for_slot,
+    _final_action_keys_from_joint,
+    _final_action_keys_with_mechanic_from_joint,
+    _selected_joint_key,
+    _selected_joint_key_with_mechanic,
+    classify_only_legal,
+    _augment_valid_orders_with_mega,
+)
+
+# ponytail: Canonical safety precomputation
+# helper extracted to doubles_engine.safety_blocks
+# (Phase Ponytail Refactor Step 5). The shim
+# re-exports the 8-tuple return function under
+# its original name so existing call sites and
+# tests keep working. Behavior is preserved
+# bit-for-bit, including narrow ally-heal
+# integration and ally-redirect integration.
+from doubles_engine.safety_blocks import (
+    _compute_order_safety_blocks,
+)
 
 def get_spread_target_effectiveness_with_ability(
     move, attacker, opponent_targets, config, battle=None
@@ -2919,1281 +1436,61 @@ def get_spread_target_effectiveness(
     }
 
 
-def evaluate_switch_candidate_type_safety(
-    candidate, opponent_actives, config=None
-) -> dict:
-    """Evaluate type safety of a switch candidate against visible opponents.
-
-    Uses only currently visible Pokemon types and HP. No species-based move
-    assumptions, random-set data, possible abilities, hidden moves, hidden
-    items, or unrevealed information.
-
-    For each opponent, calculates the maximum incoming multiplier among that
-    opponent visible types as a conservative STAB-type exposure signal.
-
-    Returns a dict with raw safety score, worst multiplier, per-opponent
-    worst multipliers, threat counts, double-threat boolean, opponent threat
-    type names, candidate HP fraction, and immunity/resistance counts.
-    """
-    result = {
-        "raw_safety_score": 0.0,
-        "worst_multiplier": 1.0,
-        "per_opponent_worst_multipliers": [],
-        "super_effective_threat_count": 0,
-        "quad_weak_threat_count": 0,
-        "resistant_threat_count": 0,
-        "immune_threat_count": 0,
-        "double_threat": False,
-        "opponent_threat_type_names": [],
-        "candidate_hp_fraction": 1.0,
-    }
-
-    if not candidate:
-        return result
-
-    # Get candidate types
-    cand_type_1 = getattr(candidate, "type_1", None)
-    cand_type_2 = getattr(candidate, "type_2", None)
-
-    # Get candidate HP fraction
-    hp_frac = getattr(candidate, "current_hp_fraction", 1.0)
-    if hp_frac is None:
-        hp_frac = 1.0
-    result["candidate_hp_fraction"] = hp_frac
-
-    # Get config penalties/bonuses
-    se_penalty = (
-        getattr(config, "switch_candidate_super_effective_penalty", 80.0)
-        if config
-        else 80.0
-    )
-    quad_penalty = (
-        getattr(config, "switch_candidate_quad_weak_penalty", 160.0)
-        if config
-        else 160.0
-    )
-    double_penalty = (
-        getattr(config, "switch_candidate_double_threat_penalty", 100.0)
-        if config
-        else 100.0
-    )
-    res_bonus = (
-        getattr(config, "switch_candidate_resistance_bonus", 20.0) if config else 20.0
-    )
-    imm_bonus = (
-        getattr(config, "switch_candidate_immunity_bonus", 30.0) if config else 30.0
-    )
-    low_hp_penalty = (
-        getattr(config, "switch_candidate_low_hp_penalty", 30.0) if config else 30.0
-    )
-
-    raw_score = 0.0
-    worst_mult = 1.0
-    se_count = 0
-    quad_count = 0
-    res_count = 0
-    imm_count = 0
-    threat_types = []
-    per_opp = []
-
-    if not opponent_actives:
-        result["raw_safety_score"] = raw_score
-        result["worst_multiplier"] = worst_mult
-        return result
-
-    for opp in opponent_actives:
-        if not opp:
-            per_opp.append(1.0)
-            continue
-
-        opp_type_1 = getattr(opp, "type_1", None)
-        opp_type_2 = getattr(opp, "type_2", None)
-
-        # Calculate max incoming multiplier from opponents  visible types
-        max_mult = 0.0
-        opp_best_type = None
-
-        for opp_type in (opp_type_1, opp_type_2):
-            if opp_type is None:
-                continue
-            try:
-                if cand_type_1 is not None:
-                    mult1 = candidate.damage_multiplier(opp_type)
-                    if mult1 > max_mult:
-                        max_mult = mult1
-                        opp_best_type = opp_type
-            except Exception:
-                if max_mult < 1.0:
-                    max_mult = 1.0
-
-        if max_mult == 0.0 and (opp_type_1 is None and opp_type_2 is None):
-            max_mult = 1.0
-        elif max_mult == 0.0 and cand_type_1 is None:
-            max_mult = 1.0
-
-        per_opp.append(max_mult)
-
-        if max_mult > worst_mult:
-            worst_mult = max_mult
-
-        # Classify using ONLY the maximum multiplier per opponent
-        if max_mult >= 4.0:
-            quad_count += 1
-            se_count += 1
-            if opp_best_type and opp_best_type.name.title() not in threat_types:
-                threat_types.append(opp_best_type.name.title())
-        elif max_mult >= 2.0:
-            se_count += 1
-            if opp_best_type and opp_best_type.name.title() not in threat_types:
-                threat_types.append(opp_best_type.name.title())
-        elif max_mult == 0.0:
-            imm_count += 1
-        elif max_mult <= 0.5:
-            res_count += 1
-
-    raw_score -= se_count * se_penalty
-    raw_score -= quad_count * quad_penalty
-    raw_score += res_count * res_bonus
-    raw_score += imm_count * imm_bonus
-
-    # Double threat: both opponents threaten super-effective
-    is_double_threat = se_count >= 2
-    if is_double_threat:
-        raw_score -= double_penalty
-
-    # Low HP penalty
-    if hp_frac <= 0.35:
-        raw_score -= low_hp_penalty * (1.0 - hp_frac)
-
-    result["raw_safety_score"] = raw_score
-    result["worst_multiplier"] = worst_mult
-    result["per_opponent_worst_multipliers"] = per_opp
-    result["super_effective_threat_count"] = se_count
-    result["quad_weak_threat_count"] = quad_count
-    result["resistant_threat_count"] = res_count
-    result["immune_threat_count"] = imm_count
-    result["double_threat"] = is_double_threat
-    result["opponent_threat_type_names"] = threat_types
-    result["candidate_hp_fraction"] = hp_frac
-
-    return result
-
-
-def evaluate_forced_switch_replacement_safety(
-    candidate, opponent_actives, battle=None, config=None
-) -> dict:
-    """Evaluate forced switch replacement safety for a single candidate.
-
-    Used ONLY for required replacement switches (after faint), NOT voluntary pivots.
-    Uses only visible opponent types, HP, and already-revealed moves.
-    Does NOT infer hidden moves, abilities, items, or species sets.
-
-    Returns dict with:
-      - score: float (higher is safer)
-      - max_threat_multiplier: float
-      - opponent_threat_count: int (opponents with SE threat)
-      - quad_weak_count: int
-      - resistance_count: int
-      - immunity_count: int
-      - low_hp_penalty_applied: bool
-      - reasons: list[str]
-    """
-    result = {
-        "score": 0.0,
-        "max_threat_multiplier": 1.0,
-        "opponent_threat_count": 0,
-        "quad_weak_count": 0,
-        "resistance_count": 0,
-        "immunity_count": 0,
-        "low_hp_penalty_applied": False,
-        "reasons": [],
-    }
-
-    if not candidate:
-        return result
-
-    # Config penalties/bonuses
-    se_penalty = (
-        getattr(config, "forced_switch_super_effective_penalty", 90.0)
-        if config
-        else 90.0
-    )
-    quad_penalty = (
-        getattr(config, "forced_switch_quad_weak_penalty", 180.0) if config else 180.0
-    )
-    double_penalty = (
-        getattr(config, "forced_switch_double_threat_penalty", 120.0)
-        if config
-        else 120.0
-    )
-    res_bonus = (
-        getattr(config, "forced_switch_resistance_bonus", 25.0) if config else 25.0
-    )
-    imm_bonus = (
-        getattr(config, "forced_switch_immunity_bonus", 35.0) if config else 35.0
-    )
-    low_hp_penalty = (
-        getattr(config, "forced_switch_low_hp_penalty", 30.0) if config else 30.0
-    )
-    fainted_penalty = (
-        getattr(config, "forced_switch_fainted_or_unavailable_penalty", 9999.0)
-        if config
-        else 9999.0
-    )
-
-    # Check fainted/unavailable
-    if getattr(candidate, "fainted", False):
-        result["score"] = -fainted_penalty
-        result["reasons"].append("fainted")
-        return result
-
-    hp_frac = getattr(candidate, "current_hp_fraction", 1.0)
-    if hp_frac is None:
-        hp_frac = 1.0
-
-    # Get candidate types
-    cand_type_1 = getattr(candidate, "type_1", None)
-    cand_type_2 = getattr(candidate, "type_2", None)
-
-    raw_score = 0.0
-    worst_mult = 1.0
-    se_count = 0
-    quad_count = 0
-    res_count = 0
-    imm_count = 0
-    threat_types = []
-
-    if not opponent_actives:
-        result["score"] = raw_score
-        result["max_threat_multiplier"] = worst_mult
-        return result
-
-    for opp in opponent_actives:
-        if not opp or getattr(opp, "fainted", False):
-            continue
-
-        opp_type_1 = getattr(opp, "type_1", None)
-        opp_type_2 = getattr(opp, "type_2", None)
-
-        # Calculate max incoming multiplier from opponents  visible types
-        max_mult = 0.0
-        opp_best_type = None
-
-        for opp_type in (opp_type_1, opp_type_2):
-            if opp_type is None:
-                continue
-            try:
-                if cand_type_1 is not None:
-                    mult = candidate.damage_multiplier(opp_type)
-                    if mult > max_mult:
-                        max_mult = mult
-                        opp_best_type = opp_type
-            except Exception:
-                if max_mult < 1.0:
-                    max_mult = 1.0
-
-        if max_mult == 0.0 and (opp_type_1 is None and opp_type_2 is None):
-            max_mult = 1.0
-        elif max_mult == 0.0 and cand_type_1 is None:
-            max_mult = 1.0
-
-        if max_mult > worst_mult:
-            worst_mult = max_mult
-
-        # Classify
-        if max_mult >= 4.0:
-            quad_count += 1
-            se_count += 1
-            if opp_best_type and opp_best_type.name.title() not in threat_types:
-                threat_types.append(opp_best_type.name.title())
-        elif max_mult >= 2.0:
-            se_count += 1
-            if opp_best_type and opp_best_type.name.title() not in threat_types:
-                threat_types.append(opp_best_type.name.title())
-        elif max_mult == 0.0:
-            imm_count += 1
-        elif max_mult <= 0.5:
-            res_count += 1
-
-    # Apply penalties and bonuses
-    raw_score -= se_count * se_penalty
-    raw_score -= quad_count * quad_penalty
-    raw_score += res_count * res_bonus
-    raw_score += imm_count * imm_bonus
-
-    # Double threat: both opponents threaten super-effective
-    is_double_threat = se_count >= 2
-    if is_double_threat:
-        raw_score -= double_penalty
-        result["reasons"].append("double_threat")
-
-    if quad_count > 0:
-        result["reasons"].append("quad_weak")
-
-    # Low HP penalty
-    if hp_frac <= 0.35:
-        raw_score -= low_hp_penalty * (1.0 - hp_frac)
-        result["low_hp_penalty_applied"] = True
-        result["reasons"].append("low_hp")
-
-    if se_count > 0:
-        result["reasons"].append("super_effective_threat")
-
-    result["score"] = raw_score
-    result["max_threat_multiplier"] = worst_mult
-    result["opponent_threat_count"] = se_count
-    result["quad_weak_count"] = quad_count
-    result["resistance_count"] = res_count
-    result["immunity_count"] = imm_count
-
-    return result
-
-
-def evaluate_voluntary_switch_quality(
-    active,
-    candidate,
-    slot_idx,
-    battle,
-    best_stay_score,
-    config,
-    player=None,
-) -> dict:
-    """Evaluate voluntary (non-forced) switch quality for a candidate.
-
-    Computes risk metrics for the active mon vs the candidate against
-    visible opponent types.  Returns a dict that the caller can use to
-    adjust switch scores.
-
-    Uses only visible information (type_1, type_2, current_hp_fraction).
-    Does NOT modify any state -- the caller is responsible for applying
-    score_adjustment.
-    """
-    result = {
-        "eligible": True,
-        "active_risk": 0.0,
-        "candidate_risk": 0.0,
-        "risk_reduction": 0.0,
-        "best_stay_score": best_stay_score,
-        "tempo_penalty": 0.0,
-        "candidate_penalty": 0.0,
-        "repeat_switch_penalty": 0.0,
-        "sacrifice_preserve_bench_value": 0.0,
-        "score_adjustment": 0.0,
-        "candidate_double_threat": False,
-        "candidate_quad_weak": False,
-        "candidate_low_hp": False,
-        "active_low_hp": False,
-        "active_has_useful_action": False,
-        "active_has_high_value_action": False,
-        "switch_improves_position": False,
-        "sacrifice_preferred": False,
-        "reason_codes": [],
-    }
-
-    if active is None or candidate is None:
-        result["eligible"] = False
-        result["reason_codes"].append("missing_pokemon")
-        return result
-
-    if slot_idx < len(battle.force_switch) and battle.force_switch[slot_idx]:
-        result["eligible"] = False
-        result["reason_codes"].append("forced_switch")
-        return result
-
-    tempo_penalty = (
-        getattr(config, "voluntary_switch_tempo_penalty", 35.0) if config else 35.0
-    )
-    unsafe_penalty = (
-        getattr(config, "voluntary_switch_unsafe_candidate_penalty", 120.0)
-        if config
-        else 120.0
-    )
-    quad_penalty = (
-        getattr(config, "voluntary_switch_quad_weak_penalty", 180.0)
-        if config
-        else 180.0
-    )
-    double_penalty = (
-        getattr(config, "voluntary_switch_double_threat_penalty", 160.0)
-        if config
-        else 160.0
-    )
-    low_hp_cand_penalty = (
-        getattr(config, "voluntary_switch_low_hp_candidate_penalty", 35.0)
-        if config
-        else 35.0
-    )
-    repeat_penalty = (
-        getattr(config, "voluntary_switch_repeat_penalty", 80.0) if config else 80.0
-    )
-    min_risk_reduction = (
-        getattr(config, "voluntary_switch_min_risk_reduction", 1.0) if config else 1.0
-    )
-    sacrifice_hp_threshold = (
-        getattr(config, "voluntary_switch_sacrifice_hp_threshold", 0.15)
-        if config
-        else 0.15
-    )
-    useful_action_threshold = (
-        getattr(config, "voluntary_switch_useful_action_threshold", 40.0)
-        if config
-        else 40.0
-    )
-    high_value_threshold = (
-        getattr(config, "voluntary_switch_high_value_action_threshold", 120.0)
-        if config
-        else 120.0
-    )
-    preserve_bench_bonus = (
-        getattr(config, "voluntary_switch_sacrifice_preserve_bench_bonus", 70.0)
-        if config
-        else 70.0
-    )
-
-    opponent_actives = getattr(battle, "opponent_active_pokemon", [])
-    opponent_actives = [
-        opp for opp in opponent_actives if opp and not getattr(opp, "fainted", False)
-    ]
-
-    active_type_1 = getattr(active, "type_1", None)
-    active_type_2 = getattr(active, "type_2", None)
-    cand_type_1 = getattr(candidate, "type_1", None)
-    cand_type_2 = getattr(candidate, "type_2", None)
-
-    active_hp = getattr(active, "current_hp_fraction", 1.0) or 1.0
-    candidate_hp = getattr(candidate, "current_hp_fraction", 1.0) or 1.0
-
-    # --- Active risk: worst-case max incoming multiplier ---
-    active_risk = 0.0
-    for opp in opponent_actives:
-        opp_type_1 = getattr(opp, "type_1", None)
-        opp_type_2 = getattr(opp, "type_2", None)
-        max_mult = 0.0
-        for opp_type in (opp_type_1, opp_type_2):
-            if opp_type is None:
-                continue
-            try:
-                if active_type_1 is not None:
-                    mult = active.damage_multiplier(opp_type)
-                    if mult > max_mult:
-                        max_mult = mult
-            except Exception:
-                if max_mult < 1.0:
-                    max_mult = 1.0
-        if max_mult == 0.0 and opp_type_1 is None and opp_type_2 is None:
-            max_mult = 1.0
-        elif max_mult == 0.0 and active_type_1 is None:
-            max_mult = 1.0
-        if max_mult > active_risk:
-            active_risk = max_mult
-    result["active_risk"] = active_risk
-
-    # --- Candidate risk + threat classification ---
-    candidate_risk = 0.0
-    se_count = 0
-    quad_count = 0
-    for opp in opponent_actives:
-        opp_type_1 = getattr(opp, "type_1", None)
-        opp_type_2 = getattr(opp, "type_2", None)
-        max_mult = 0.0
-        for opp_type in (opp_type_1, opp_type_2):
-            if opp_type is None:
-                continue
-            try:
-                if cand_type_1 is not None:
-                    mult = candidate.damage_multiplier(opp_type)
-                    if mult > max_mult:
-                        max_mult = mult
-            except Exception:
-                if max_mult < 1.0:
-                    max_mult = 1.0
-        if max_mult == 0.0 and opp_type_1 is None and opp_type_2 is None:
-            max_mult = 1.0
-        elif max_mult == 0.0 and cand_type_1 is None:
-            max_mult = 1.0
-        if max_mult > candidate_risk:
-            candidate_risk = max_mult
-        if max_mult >= 4.0:
-            quad_count += 1
-            se_count += 1
-        elif max_mult >= 2.0:
-            se_count += 1
-    result["candidate_risk"] = candidate_risk
-
-    is_double_threat = se_count >= 2
-    result["candidate_double_threat"] = is_double_threat
-    result["candidate_quad_weak"] = quad_count > 0
-
-    # --- Risk reduction ---
-    risk_reduction = active_risk - candidate_risk
-    result["risk_reduction"] = risk_reduction
-
-    # --- HP state ---
-    active_low_hp = active_hp <= sacrifice_hp_threshold
-    result["active_low_hp"] = active_low_hp
-    candidate_low_hp = candidate_hp <= 0.35
-    result["candidate_low_hp"] = candidate_low_hp
-
-    # --- Action availability (inferred from best_stay_score) ---
-    active_has_useful_action = best_stay_score > useful_action_threshold
-    active_has_high_value_action = best_stay_score > high_value_threshold
-    result["active_has_useful_action"] = active_has_useful_action
-    result["active_has_high_value_action"] = active_has_high_value_action
-
-    # --- Position assessment ---
-    switch_improves_position = risk_reduction > min_risk_reduction
-    result["switch_improves_position"] = switch_improves_position
-
-    # --- Tempo penalty (always applied for voluntary switches) ---
-    result["tempo_penalty"] = tempo_penalty
-
-    # --- Candidate penalty ---
-    cand_penalty = 0.0
-    cand_penalty += se_count * unsafe_penalty
-    cand_penalty += quad_count * quad_penalty
-    if is_double_threat:
-        cand_penalty += double_penalty
-    if candidate_low_hp:
-        cand_penalty += low_hp_cand_penalty * (1.0 - candidate_hp)
-        result["reason_codes"].append("candidate_low_hp")
-    if quad_count > 0:
-        result["reason_codes"].append("candidate_quad_weak")
-    if is_double_threat:
-        result["reason_codes"].append("candidate_double_threat")
-    if se_count > 0:
-        result["reason_codes"].append("candidate_unsafe")
-    result["candidate_penalty"] = cand_penalty
-
-    # --- Repeat switch penalty (computed by caller, passed via player) ---
-    repeat_switch_penalty = 0.0
-    result["repeat_switch_penalty"] = repeat_switch_penalty
-
-    # --- Sacrifice preserve bench value ---
-    sacrifice_value = 0.0
-    if active_low_hp and not candidate_low_hp:
-        sacrifice_value = preserve_bench_bonus
-        result["reason_codes"].append("sacrifice_preserve_bench")
-    result["sacrifice_preserve_bench_value"] = sacrifice_value
-
-    # --- Sacrifice preferred ---
-    sacrifice_preferred = (
-        active_low_hp and not active_has_useful_action and not switch_improves_position
-    )
-    result["sacrifice_preferred"] = sacrifice_preferred
-    if sacrifice_preferred:
-        result["reason_codes"].append("sacrifice_preferred")
-
-    # --- Risk reduction bonus ---
-    risk_reduction_bonus = 0.0
-    if risk_reduction > 0:
-        risk_reduction_bonus = risk_reduction * 30.0
-        result["reason_codes"].append("risk_reduction_bonus")
-
-    # --- Score adjustment (positive = penalty against the switch) ---
-    score_adjustment = (
-        tempo_penalty - risk_reduction_bonus + cand_penalty + repeat_switch_penalty
-    )
-    result["score_adjustment"] = score_adjustment
-
-    return result
-
-
-def summarize_negative_boosts(pokemon) -> dict:
-    """Summarize current revealed boost stages for diagnostic purposes.
-
-    Records negative stages from the Pokemons current boosts only.
-    Does NOT alter scores -- diagnostic-only for Phase 6.4.2.
-    """
-    result = {
-        "total_negative_stages": 0,
-        "lowest_stage": 0,
-        "offensive_negative_stages": 0,  # atk, spa
-        "defensive_negative_stages": 0,  # def, spd
-        "speed_negative_stage": 0,
-        "severe_negative_boost": False,
-        "was_switch": False,
-    }
-
-    if not pokemon:
-        return result
-
-    boosts = getattr(pokemon, "boosts", None)
-    if not boosts or not isinstance(boosts, dict):
-        return result
-
-    total_neg = 0
-    lowest = 0
-    offensive_neg = 0
-    defensive_neg = 0
-    speed_neg = 0
-
-    for stat in ("atk", "spa"):
-        val = boosts.get(stat, 0)
-        if val < 0:
-            offensive_neg += abs(val)
-            total_neg += abs(val)
-            lowest = min(lowest, val)
-
-    for stat in ("def", "spd"):
-        val = boosts.get(stat, 0)
-        if val < 0:
-            defensive_neg += abs(val)
-            total_neg += abs(val)
-            lowest = min(lowest, val)
-
-    spe_val = boosts.get("spe", 0)
-    if spe_val < 0:
-        speed_neg = abs(spe_val)
-        total_neg += abs(spe_val)
-        lowest = min(lowest, spe_val)
-
-    result["total_negative_stages"] = total_neg
-    result["lowest_stage"] = lowest
-    result["offensive_negative_stages"] = offensive_neg
-    result["defensive_negative_stages"] = defensive_neg
-    result["speed_negative_stage"] = speed_neg
-    result["severe_negative_boost"] = lowest <= -3
-
-    return result
-
-
-def classify_stat_drop_severity(boosts: dict, config, orders_slot: list) -> dict:
-    """Classify stat-drop severity using config thresholds and available moves.
-
-    Diagnostic-only.  Does NOT alter scores.  Uses only visible boosts and
-    available move categories -- never infers from species.
-
-    Returns dict with:
-      - severe: bool (any category meets its threshold)
-      - categories: list of "offensive"/"defensive"/"speed" strings
-      - offensive: bool
-      - defensive: bool
-      - speed: bool
-    """
-    result = {
-        "severe": False,
-        "categories": [],
-        "offensive": False,
-        "defensive": False,
-        "speed": False,
-    }
-    if not config or not getattr(config, "enable_stat_drop_switch_diagnostics", False):
-        return result
-    if not boosts or not isinstance(boosts, dict):
-        return result
-
-    off_thresh = getattr(config, "stat_drop_offensive_stage_threshold", -2)
-    def_thresh = getattr(config, "stat_drop_defensive_stage_threshold", -2)
-    spd_thresh = getattr(config, "stat_drop_speed_stage_threshold", -2)
-
-    # Offensive: check if any available damaging move uses the dropped stat
-    has_physical = False
-    has_special = False
-    for o in orders_slot or []:
-        if (
-            o
-            and getattr(o, "order", None) is not None
-            and getattr(getattr(o, "order", None), "base_power", 0) > 0
-        ):
-            cat = getattr(o.order, "category", None)
-            cat_name = getattr(cat, "name", "STATUS")
-            if cat_name == "PHYSICAL" and getattr(o.order, "base_power", 0) > 0:
-                has_physical = True
-            elif cat_name == "SPECIAL" and getattr(o.order, "base_power", 0) > 0:
-                has_special = True
-
-    atk_val = boosts.get("atk", 0)
-    spa_val = boosts.get("spa", 0)
-    if (has_physical and atk_val <= off_thresh) or (
-        has_special and spa_val <= off_thresh
-    ):
-        result["offensive"] = True
-        result["categories"].append("offensive")
-
-    # Defensive
-    def_val = boosts.get("def", 0)
-    spd_val = boosts.get("spd", 0)
-    if def_val <= def_thresh or spd_val <= def_thresh:
-        result["defensive"] = True
-        result["categories"].append("defensive")
-
-    # Speed
-    spe_val = boosts.get("spe", 0)
-    if spe_val <= spd_thresh:
-        result["speed"] = True
-        result["categories"].append("speed")
-
-    result["severe"] = len(result["categories"]) > 0
-    return result
-
-
-def evaluate_stat_drop_switch_pressure(
-    active_mon, orders_slot, battle, config, player=None
-) -> dict:
-    result = {
-        "should_consider_switch": False,
-        "categories": [],
-        "offensive_drop": False,
-        "defensive_drop": False,
-        "speed_drop": False,
-        "productive_action_available": False,
-        "best_non_switch_score": 0.0,
-        "switch_available": False,
-        "active_hp_fraction": 0.0,
-        "reasons": [],
-        "stay_penalty": 0.0,
-        "threshold_source": "",
-    }
-
-    if not active_mon or not config:
-        return result
-    if not getattr(config, "enable_stat_drop_switch_scoring", False):
-        result["reasons"].append("scoring_disabled")
-        return result
-
-    boosts = getattr(active_mon, "boosts", None)
-    if not boosts or not isinstance(boosts, dict):
-        result["reasons"].append("no_boosts")
-        return result
-
-    off_thresh = getattr(config, "stat_drop_switch_offensive_stage_threshold", -1)
-    def_thresh = getattr(config, "stat_drop_switch_defensive_stage_threshold", -2)
-    spd_thresh = getattr(config, "stat_drop_switch_speed_stage_threshold", -2)
-
-    has_physical = False
-    has_special = False
-    for o in orders_slot or []:
-        order_obj = getattr(o, "order", None)
-        if order_obj is None:
-            continue
-        if getattr(order_obj, "base_power", 0) > 0:
-            cat = getattr(order_obj, "category", None)
-            cat_name = getattr(cat, "name", "STATUS")
-            if cat_name == "PHYSICAL":
-                has_physical = True
-            elif cat_name == "SPECIAL":
-                has_special = True
-
-    atk_val = boosts.get("atk", 0)
-    spa_val = boosts.get("spa", 0)
-    def_val = boosts.get("def", 0)
-    spd_val = boosts.get("spd", 0)
-    spe_val = boosts.get("spe", 0)
-
-    threshold_sources = []
-    if (has_physical and atk_val <= off_thresh) or (
-        has_special and spa_val <= off_thresh
-    ):
-        result["offensive_drop"] = True
-        result["categories"].append("offensive")
-        threshold_sources.append(f"offensive_{off_thresh}")
-    if def_val <= def_thresh or spd_val <= def_thresh:
-        result["defensive_drop"] = True
-        result["categories"].append("defensive")
-        threshold_sources.append(f"defensive_{def_thresh}")
-    if spe_val <= spd_thresh:
-        result["speed_drop"] = True
-        result["categories"].append("speed")
-        threshold_sources.append(f"speed_{spd_thresh}")
-
-    if not result["categories"]:
-        result["reasons"].append("no_severe_drop")
-        return result
-
-    if len(threshold_sources) >= 2:
-        result["threshold_source"] = "mixed"
-    elif threshold_sources:
-        result["threshold_source"] = threshold_sources[0]
-
-    active_hp = getattr(active_mon, "current_hp_fraction", 1.0) or 1.0
-    result["active_hp_fraction"] = active_hp
-    if active_hp < config.stat_drop_switch_low_hp_block_threshold:
-        result["reasons"].append("active_hp_below_low_hp_block")
-        return result
-
-    switch_count = 0
-    has_protect = False
-    has_damaging = False
-    for o in orders_slot or []:
-        if not o:
-            continue
-        order_obj = getattr(o, "order", None)
-        if order_obj is None:
-            continue
-        if getattr(order_obj, "species", None):
-            switch_count += 1
-            continue
-        base_pw = getattr(order_obj, "base_power", 0)
-        if base_pw > 0:
-            has_damaging = True
-        move_id = getattr(order_obj, "id", "").lower()
-        if move_id in (
-            "protect",
-            "detect",
-            "spikyshield",
-            "kingsshield",
-            "banefulbunker",
-            "silktrap",
-        ):
-            has_protect = True
-
-    result["switch_available"] = switch_count > 0
-    if not result["switch_available"]:
-        result["reasons"].append("no_legal_switch")
-        return result
-
-    productive = False
-    if player and battle and has_damaging:
-        for o in orders_slot or []:
-            if not o:
-                continue
-            order_obj = getattr(o, "order", None)
-            if order_obj is None:
-                continue
-            if getattr(order_obj, "base_power", 0) <= 0:
-                continue
-            target_pos = getattr(o, "move_target", None)
-            if target_pos in (1, 2):
-                opps = getattr(battle, "opponent_active_pokemon", [])
-                if opps and len(opps) > target_pos - 1:
-                    target_opp = opps[target_pos - 1]
-                    if target_opp and not getattr(target_opp, "fainted", False):
-                        try:
-                            if player.check_move_will_ko(
-                                o.order, active_mon, target_opp, battle, config=config
-                            ):
-                                productive = True
-                                result["reasons"].append("ko_action_available")
-                                break
-                            dmg = player.get_expected_damage(
-                                o.order, active_mon, target_opp, battle, config=config
-                            )
-                            opp_max = player.estimate_opponent_max_hp(target_opp)
-                            frac = getattr(
-                                config, "stat_drop_meaningful_damage_fraction", 0.25
-                            )
-                            if opp_max > 0 and dmg / max(1.0, opp_max) >= frac:
-                                productive = True
-                                result["reasons"].append("meaningful_damage_available")
-                                break
-                        except Exception:
-                            pass
-    if has_protect:
-        productive = True
-        result["reasons"].append("protect_available")
-
-    result["productive_action_available"] = productive
-    if productive:
-        result["reasons"].append("productive_action_suppresses_pressure")
-        return result
-
-    result["should_consider_switch"] = True
-
-    penalty = 0.0
-    if result["offensive_drop"]:
-        penalty += config.stat_drop_switch_offensive_penalty
-        result["reasons"].append("offensive_drop_penalty")
-    if result["defensive_drop"]:
-        penalty += config.stat_drop_switch_defensive_penalty
-        result["reasons"].append("defensive_drop_penalty")
-    if result["speed_drop"]:
-        penalty += config.stat_drop_switch_speed_penalty
-        result["reasons"].append("speed_drop_penalty")
-
-    if active_hp < config.stat_drop_switch_min_active_hp:
-        penalty = penalty * 0.5
-        result["reasons"].append("low_hp_penalty_halved")
-
-    result["stay_penalty"] = penalty + config.stat_drop_switch_unproductive_bonus
-    result["reasons"].append("unproductive_stay_pressure")
-
-    return result
-
-
-def get_revealed_damaging_moves(opponent) -> list:
-    """Get revealed damaging moves from an opponent.
-
-    Uses only opponent.moves.values() -- never infers from species.
-    """
-    result = []
-    if not opponent:
-        return result
-    moves = getattr(opponent, "moves", None)
-    if not moves:
-        return result
-    for move in moves.values():
-        try:
-            if move is None:
-                continue
-            base_power = getattr(move, "base_power", 0)
-            if not base_power or base_power <= 0:
-                continue
-            cat = getattr(move, "category", None)
-            cat_name = getattr(cat, "name", "STATUS") if cat else "STATUS"
-            if cat_name == "STATUS":
-                continue
-            result.append(move)
-        except Exception:
-            continue
-    return result
-
-
-def evaluate_revealed_move_incoming_risk(move, opponent, defender, battle=None) -> dict:
-    """Evaluate incoming risk of a revealed move against a defender.
-
-    Uses defender.damage_multiplier(move) for combined dual-type calculation.
-    """
-    result = {
-        "type_multiplier": 1.0,
-        "base_power": 0,
-        "accuracy": 1.0,
-        "stab": False,
-        "priority": 0,
-        "is_spread": False,
-        "incoming_pressure": 0.0,
-        "classification": "neutral",
-        "likely_ko_pressure": False,
-    }
-    if not move or not defender:
-        return result
-
-    try:
-        base_power = getattr(move, "base_power", 0)
-        result["base_power"] = base_power
-
-        accuracy = getattr(move, "accuracy", None)
-        if accuracy is None:
-            result["accuracy"] = 1.0
-        else:
-            result["accuracy"] = accuracy / 100.0 if accuracy > 1 else float(accuracy)
-
-        priority = getattr(move, "priority", 0)
-        result["priority"] = priority
-
-        target_type = getattr(move, "target", "")
-        result["is_spread"] = target_type in ("allAdjacent", "allAdjacentFoes", "all")
-
-        # Calculate type multiplier using defender.damage_multiplier
-        mult = 1.0
-        try:
-            mult = defender.damage_multiplier(move)
-        except Exception:
-            try:
-                move_type = getattr(move, "type", None)
-                if move_type:
-                    mult = defender.damage_multiplier(move_type)
-            except Exception:
-                mult = 1.0
-
-        result["type_multiplier"] = mult
-
-        # Check STAB based only on visible opponent types
-        move_type = getattr(move, "type", None)
-        if move_type and opponent:
-            # Normalize move_type to string for comparison
-            if hasattr(move_type, "name"):
-                move_type_str = move_type.name
-            else:
-                move_type_str = str(move_type)
-            opp_types = getattr(opponent, "types", [])
-            if opp_types:
-                for ot in opp_types:
-                    ot_str = ot.name if hasattr(ot, "name") else str(ot)
-                    if ot_str.upper() == move_type_str.upper():
-                        result["stab"] = True
-                        break
-
-        # Classification
-        if mult == 0.0:
-            result["classification"] = "immune"
-        elif mult <= 0.5:
-            result["classification"] = "resisted"
-        elif mult < 1.0:
-            result["classification"] = "resisted"
-        elif mult == 1.0:
-            result["classification"] = "neutral"
-        elif mult < 4.0:
-            result["classification"] = "super-effective"
-        else:
-            result["classification"] = "quad-effective"
-
-        # Rough incoming pressure score
-        stab_mult = 1.5 if result["stab"] else 1.0
-        incoming_pressure = base_power * mult * stab_mult * result["accuracy"]
-        if priority > 0:
-            incoming_pressure *= 1.0 + priority * 0.3
-        result["incoming_pressure"] = incoming_pressure
-
-        # Likely KO pressure: quad-effective or super-effective with high power
-        if mult >= 4.0:
-            result["likely_ko_pressure"] = True
-        elif mult >= 2.0 and base_power >= 70:
-            result["likely_ko_pressure"] = True
-
-    except Exception:
-        pass
-
-    return result
-
-
-def estimate_revealed_move_target_likelihood(
-    move, opponent, our_actives, battle=None
-) -> dict:
-    """Estimate how likely the opponent is to target each of our actives.
-
-    Returns per-slot target likelihood weights.
-    """
-    result = {
-        "slot_0_weight": 0.0,
-        "slot_1_weight": 0.0,
-        "is_spread": False,
-        "threatening_slots": [],
-    }
-
-    if not move or not our_actives:
-        return result
-
-    target_type = getattr(move, "target", "")
-    result["is_spread"] = target_type in ("allAdjacent", "allAdjacentFoes", "all")
-
-    risks = []
-    for slot_idx in range(2):
-        active = our_actives[slot_idx] if slot_idx < len(our_actives) else None
-        if not active:
-            risks.append(0.0)
-            continue
-        risk_info = evaluate_revealed_move_incoming_risk(move, opponent, active, battle)
-        risks.append(risk_info["incoming_pressure"])
-
-    if result["is_spread"]:
-        # Spread move: both slots get full weight
-        for slot_idx in range(2):
-            if risks[slot_idx] > 0:
-                result[f"slot_{slot_idx}_weight"] = 1.0
-                result["threatening_slots"].append(slot_idx)
-    else:
-        # Single-target move: prefer the more vulnerable active
-        max_risk = max(risks) if risks else 0.0
-        if max_risk > 0:
-            config = None  # Will use defaults
-            likely_w = 1.0
-            tied_w = 0.5
-            for slot_idx in range(2):
-                if risks[slot_idx] == max_risk and max_risk > 0:
-                    result[f"slot_{slot_idx}_weight"] = likely_w
-                    result["threatening_slots"].append(slot_idx)
-                elif risks[slot_idx] > 0 and risks[slot_idx] == max_risk:
-                    result[f"slot_{slot_idx}_weight"] = tied_w
-                    result["threatening_slots"].append(slot_idx)
-
-    return result
-
-
-def summarize_revealed_move_threats(
-    active, active_idx, opponent_actives, our_actives, battle=None
-) -> dict:
-    """Summarize revealed move threats against an active Pokemon."""
-    result = {
-        "threatening_opponents": [],
-        "revealed_move_ids": [],
-        "revealed_move_types": [],
-        "target_likelihood_weights": [],
-        "active_multipliers": [],
-        "priority_moves": [],
-        "spread_moves": [],
-        "max_pressure": 0.0,
-        "combined_pressure": 0.0,
-        "likely_lethal": False,
-        "super_effective_threat": False,
-        "no_threat_reason": "",
-    }
-
-    if not active or not opponent_actives:
-        result["no_threat_reason"] = "no_active_or_opponents"
-        return result
-
-    has_revealed = False
-    for opp in opponent_actives:
-        if not opp:
-            continue
-        revealed = get_revealed_damaging_moves(opp)
-        if not revealed:
-            continue
-        has_revealed = True
-        opp_species = getattr(opp, "species", "unknown")
-        result["threatening_opponents"].append(opp_species)
-
-        for move in revealed:
-            risk = evaluate_revealed_move_incoming_risk(move, opp, active, battle)
-            if risk["incoming_pressure"] <= 0:
-                continue
-
-            move_id = getattr(move, "id", "unknown")
-            move_type_obj = getattr(move, "type", None)
-            move_type = (
-                getattr(move_type_obj, "name", str(move_type_obj))
-                if move_type_obj
-                else "unknown"
-            )
-
-            target_likelihood = estimate_revealed_move_target_likelihood(
-                move, opp, our_actives, battle
-            )
-
-            result["revealed_move_ids"].append(move_id)
-            result["revealed_move_types"].append(move_type)
-            result["target_likelihood_weights"].append(target_likelihood)
-            result["active_multipliers"].append(risk["type_multiplier"])
-            if risk["priority"] > 0:
-                result["priority_moves"].append(move_id)
-            if risk["is_spread"]:
-                result["spread_moves"].append(move_id)
-
-            if risk["incoming_pressure"] > result["max_pressure"]:
-                result["max_pressure"] = risk["incoming_pressure"]
-            result["combined_pressure"] += risk["incoming_pressure"]
-
-            if risk["likely_ko_pressure"]:
-                result["likely_lethal"] = True
-            if risk["classification"] in ("super-effective", "quad-effective"):
-                result["super_effective_threat"] = True
-
-    if not has_revealed:
-        result["no_threat_reason"] = "no_revealed_damaging_moves"
-
-    return result
-
-
-def evaluate_revealed_move_switch_interception(
-    active, candidate, active_idx, battle=None
-) -> dict:
-    """Evaluate whether switching a candidate in would intercept revealed threats."""
-    result = {
-        "active_risk": 0.0,
-        "candidate_risk": 0.0,
-        "risk_reduction": 0.0,
-        "fractional_risk_reduction": 0.0,
-        "moves_resisted": [],
-        "moves_made_immune": [],
-        "moves_more_dangerous": [],
-        "likely_lethal": False,
-        "super_effective_threat": False,
-        "candidate_hp": 1.0,
-        "interception_valid": False,
-        "rejection_reason": "",
-        "proposed_score_bonus": 0.0,
-    }
-
-    if not active or not candidate or not battle:
-        result["rejection_reason"] = "missing_active_or_candidate"
-        return result
-
-    # Check candidate HP
-    candidate_hp = getattr(candidate, "current_hp_fraction", 1.0)
-    if candidate_hp is None:
-        candidate_hp = 1.0
-    result["candidate_hp"] = candidate_hp
-
-    # Get opponent actives
-    opp_actives = [opp for opp in battle.opponent_active_pokemon if opp]
-    if not opp_actives:
-        result["rejection_reason"] = "no_opponent_actives"
-        return result
-
-    # Evaluate threats from each opponent
-    total_active_risk = 0.0
-    total_candidate_risk = 0.0
-    any_threat = False
-
-    for opp in opp_actives:
-        revealed = get_revealed_damaging_moves(opp)
-        for move in revealed:
-            active_risk_info = evaluate_revealed_move_incoming_risk(
-                move, opp, active, battle
-            )
-            candidate_risk_info = evaluate_revealed_move_incoming_risk(
-                move, opp, candidate, battle
-            )
-
-            active_mult = active_risk_info["type_multiplier"]
-            candidate_mult = candidate_risk_info["type_multiplier"]
-            pressure = active_risk_info["incoming_pressure"]
-
-            if pressure <= 0:
-                continue
-
-            any_threat = True
-            total_active_risk += pressure
-            total_candidate_risk += candidate_risk_info["incoming_pressure"]
-
-            move_id = getattr(move, "id", "unknown")
-
-            if candidate_mult == 0.0 and active_mult > 0:
-                result["moves_made_immune"].append(move_id)
-            elif candidate_mult < active_mult:
-                result["moves_resisted"].append(move_id)
-            elif candidate_mult > active_mult:
-                result["moves_more_dangerous"].append(move_id)
-
-            # Track lethal and super-effective threats
-            if active_risk_info.get("likely_ko_pressure"):
-                result["likely_lethal"] = True
-            if active_risk_info.get("classification") in (
-                "super-effective",
-                "quad-effective",
-            ):
-                result["super_effective_threat"] = True
-
-    result["active_risk"] = total_active_risk
-    result["candidate_risk"] = total_candidate_risk
-
-    if total_active_risk > 0:
-        result["risk_reduction"] = total_active_risk - total_candidate_risk
-        result["fractional_risk_reduction"] = (
-            total_active_risk - total_candidate_risk
-        ) / total_active_risk
-
-    if not any_threat:
-        result["rejection_reason"] = "no_revealed_threats"
-        return result
-
-    # Check rejection conditions
-    config = DoublesDamageAwareConfig()
-
-    if candidate_hp < config.revealed_switch_min_candidate_hp:
-        result["rejection_reason"] = "candidate_hp_below_minimum"
-        return result
-
-    if result["fractional_risk_reduction"] < config.revealed_switch_min_risk_reduction:
-        result["rejection_reason"] = "insufficient_risk_reduction"
-        return result
-
-    # Check if candidate is exposed to severe threats from other opponent
-    other_opps = [opp for opp in battle.opponent_active_pokemon if opp]
-    for opp in other_opps:
-        revealed = get_revealed_damaging_moves(opp)
-        for move in revealed:
-            cand_risk = evaluate_revealed_move_incoming_risk(
-                move, opp, candidate, battle
-            )
-            if (
-                cand_risk["type_multiplier"] >= 2.0
-                and cand_risk["incoming_pressure"] > 0
-            ):
-                if cand_risk["incoming_pressure"] >= total_active_risk * 0.8:
-                    result["rejection_reason"] = "worse_other_threat"
-                    return result
-
-    # Interception is valid
-    result["interception_valid"] = True
-    bonus = result["risk_reduction"] * 30.0
-    if result["moves_made_immune"]:
-        bonus += 40.0
-    if result["likely_lethal"]:
-        bonus += 60.0
-    result["proposed_score_bonus"] = min(bonus, 200.0)
-    return result
-
+# ponytail: Switch candidate type safety
+# helper extracted to doubles_engine.switch_safety
+# (Phase Ponytail Refactor Step 6B). The shim
+# re-exports the helper under its original name
+# so existing call sites and tests keep working.
+# Behavior is preserved bit-for-bit.
+from doubles_engine.switch_safety import (
+    evaluate_switch_candidate_type_safety,
+)
+
+# ponytail: Forced switch replacement safety
+# helper extracted to doubles_engine.forced_switch
+# (Phase Ponytail Refactor Step 6A). The shim
+# re-exports the helper under its original name
+# so existing call sites and tests keep working.
+# Behavior is preserved bit-for-bit.
+from doubles_engine.forced_switch import (
+    evaluate_forced_switch_replacement_safety,
+)
+
+# ponytail: Voluntary switch quality helper
+# extracted to doubles_engine.voluntary_switch
+# (Phase Ponytail Refactor Step 6E). The shim
+# re-exports the helper under its original name
+# so existing call sites and tests keep working.
+# Behavior is preserved bit-for-bit.
+from doubles_engine.voluntary_switch import (
+    evaluate_voluntary_switch_quality,
+)
+
+# ponytail: Stat-drop scoring and switch-pressure
+# helpers extracted to doubles_engine.stat_drops
+# (Phase Ponytail Refactor Step 6D). The shim
+# re-exports the helpers under their original
+# names so existing call sites and tests keep
+# working. Behavior is preserved bit-for-bit.
+from doubles_engine.stat_drops import (
+    summarize_negative_boosts,
+    classify_stat_drop_severity,
+    evaluate_stat_drop_switch_pressure,
+)
+
+# ponytail: Revealed-move switch interception
+# helpers extracted to doubles_engine.revealed_switch
+# (Phase Ponytail Refactor Step 6C). The shim
+# re-exports the helpers under their original
+# names so existing call sites and tests keep
+# working. Behavior is preserved bit-for-bit.
+from doubles_engine.revealed_switch import (
+    get_revealed_damaging_moves,
+    evaluate_revealed_move_incoming_risk,
+    estimate_revealed_move_target_likelihood,
+    summarize_revealed_move_threats,
+    evaluate_revealed_move_switch_interception,
+)
 
 def select_best_joint_from_score_maps(
     battle,
@@ -4546,6 +1843,13 @@ class DoublesDamageAwarePlayer(Player):
         self._v2l1_safety_blocks_slot1 = {}
         self._v2l1_selected_joint_key = None
         self._v2l1_final_keys = []
+        # Phase BI-1: V4a mechanic-aware audit attrs.
+        # Populated per turn right before the audit
+        # call. Data-assembly only; no scoring change.
+        self._v4a_legal_keys_slot0 = []
+        self._v4a_legal_keys_slot1 = []
+        self._v4a_selected_joint_key = None
+        self._v4a_final_keys = []
         # ``self.config = ...`` MUST come after the
         # V2l attribute initialization, otherwise the
         # config setter would overwrite them.
@@ -4777,6 +2081,7 @@ class DoublesDamageAwarePlayer(Player):
         _safety_blocked: dict,
         _ally_redirect_blocked: dict = None,
         _support_target_blocked: dict = None,
+        _narrow_blocked: dict = None,
     ) -> list:
         """Canonical pure-capable joint scoring and ranking.
 
@@ -4811,6 +2116,9 @@ class DoublesDamageAwarePlayer(Player):
             st_map = _support_target_blocked or {}
             first_st_blocked = st_map.get(id(first), False) if first else False
             second_st_blocked = st_map.get(id(second), False) if second else False
+            nb_map = _narrow_blocked or {}
+            first_nb_blocked = nb_map.get(id(first), False) if first else False
+            second_nb_blocked = nb_map.get(id(second), False) if second else False
             either_blocked = (
                 first_blocked
                 or second_blocked
@@ -4820,6 +2128,8 @@ class DoublesDamageAwarePlayer(Player):
                 or second_ar_blocked
                 or first_st_blocked
                 or second_st_blocked
+                or first_nb_blocked
+                or second_nb_blocked
             )
 
             if not either_blocked:
@@ -5049,6 +2359,8 @@ class DoublesDamageAwarePlayer(Player):
                 or second_ar_blocked
                 or first_st_blocked
                 or second_st_blocked
+                or first_nb_blocked
+                or second_nb_blocked
             ):
                 joint_score -= config.safety_block_joint_penalty
 
@@ -8680,6 +5992,44 @@ class DoublesDamageAwarePlayer(Player):
                                 active_idx
                             ] = True
 
+            # Phase BI-3D / BI-3M: opt-in Mega bonus for
+            # damaging moves. The total bonus is
+            # ``config.mega_damaging_bonus +
+            # config.mega_intent_bonus`` (defaults
+            # 1e-3 + 1.0 = 1.001). The bonus is additive
+            # and gated by both the
+            # ``enable_mega_evolution`` config flag and
+            # the underlying ``Move.base_power > 0``.
+            # Status moves (base_power == 0) never get
+            # the bonus. Non-Mega orders never get the
+            # bonus. Default OFF (config flag False)
+            # preserves bit-for-bit pre-BI-3D behavior.
+            # Setting ``mega_intent_bonus=0.0`` restores
+            # the BI-3D pure tie-breaker behavior.
+            if (
+                getattr(self.config, "enable_mega_evolution", False)
+                and getattr(order, "mega", False)
+            ):
+                try:
+                    inner = getattr(order, "order", None)
+                    base_power = getattr(inner, "base_power", 0) or 0
+                except Exception:
+                    base_power = 0
+                if base_power > 0:
+                    score += float(
+                        getattr(
+                            self.config,
+                            "mega_damaging_bonus",
+                            1e-3,
+                        )
+                    ) + float(
+                        getattr(
+                            self.config,
+                            "mega_intent_bonus",
+                            1.0,
+                        )
+                    )
+
             return max(score, 0.0)
 
         return 0.0
@@ -8828,6 +6178,8 @@ class DoublesDamageAwarePlayer(Player):
                 _ally_redirect_blocked_meta,
                 _support_target_blocked,
                 _support_target_reasons,
+                _narrow_blocked,
+                _narrow_reasons,
             ) = _compute_order_safety_blocks(battle, config, valid_orders)
 
             # 4. Switch candidate type safety ranking
@@ -8883,6 +6235,7 @@ class DoublesDamageAwarePlayer(Player):
                 _safety_blocked,
                 _ally_redirect_blocked,
                 _support_target_blocked=_support_target_blocked,
+                _narrow_blocked=_narrow_blocked,
             )
             return scored_joint_orders[0]
         finally:
@@ -8919,6 +6272,11 @@ class DoublesDamageAwarePlayer(Player):
         self._v2l1_safety_blocks_slot1 = {}
         self._v2l1_selected_joint_key = None
         self._v2l1_final_keys = []
+        # Phase BI-1: clear V4a per-turn snapshot.
+        self._v4a_legal_keys_slot0 = []
+        self._v4a_legal_keys_slot1 = []
+        self._v4a_selected_joint_key = None
+        self._v4a_final_keys = []
 
         # Phase 6.3.7f: Scan replay for form change events before scoring
         _scan_replay_for_form_changes(battle)
@@ -9134,7 +6492,9 @@ class DoublesDamageAwarePlayer(Player):
                 else:
                     self.opponent_active_turns[battle_tag][key] = (1, current_turn)
 
-        self._current_valid_orders = battle.valid_orders
+        self._current_valid_orders = _augment_valid_orders_with_mega(
+            battle, battle.valid_orders, self.config
+        )
         valid_orders = self._current_valid_orders
         # V2l.1 — capture per-slot legal action keys.
         # The canonical engine uses ``_order_action_key``
@@ -9366,6 +6726,8 @@ class DoublesDamageAwarePlayer(Player):
             _ally_redirect_blocked_meta,
             _support_target_blocked,
             _support_target_reasons,
+            _narrow_blocked,
+            _narrow_reasons,
         ) = _compute_order_safety_blocks(battle, self.config, valid_orders)
 
         # Phase 6.4: Switch candidate type safety ranking
@@ -9724,6 +7086,7 @@ class DoublesDamageAwarePlayer(Player):
             _safety_blocked,
             _ally_redirect_blocked,
             _support_target_blocked=_support_target_blocked,
+            _narrow_blocked=_narrow_blocked,
         )
         _joint_order_count = len(scored_joint_orders)
         best_joint, best_score, best_score_1, best_score_2 = scored_joint_orders[0]
@@ -13147,6 +10510,10 @@ class DoublesDamageAwarePlayer(Player):
             _vsw_active_species = ["", ""]
             _vsw_active_hp = [0.0, 0.0]
             _vsw_best_stay = [0.0, 0.0]
+            # Phase BI-2D: capture the non-switch action key
+            # whose score equals _vsw_best_stay[_si]. Set
+            # inside the existing best-stay loop below.
+            _vsw_best_stay_action = [None, None]
             _vsw_sel_active_risk = [0.0, 0.0]
             _vsw_sel_cand_risk = [0.0, 0.0]
             _vsw_sel_risk_red = [0.0, 0.0]
@@ -13181,6 +10548,16 @@ class DoublesDamageAwarePlayer(Player):
                         )
                         if sc > _best:
                             _best = sc
+                            # Phase BI-2D: observational capture
+                            # of the action key whose score
+                            # equals _vsw_best_stay. No
+                            # comparison or scoring change.
+                            try:
+                                _vsw_best_stay_action[_si] = (
+                                    _order_action_key(_o)
+                                )
+                            except Exception:
+                                _vsw_best_stay_action[_si] = None
                 _vsw_best_stay[_si] = _best
                 _ar = 0.0
                 if _sel_row:
@@ -13260,6 +10637,33 @@ class DoublesDamageAwarePlayer(Player):
                 _final_action_keys_from_joint(best_joint)
             )
 
+            # Phase BI-1 audit-completeness: compute
+            # V4a mechanic-aware audit fields. These are
+            # data-assembly only (no scoring change). The
+            # helpers already exist in
+            # ``doubles_engine.action_keys``. For
+            # ``best_joint`` (a joint order), the
+            # mechanic label is derived from the per-slot
+            # orders via ``_order_mechanic_label``.
+            self._v4a_legal_keys_slot0 = (
+                _legal_action_keys_with_mechanic_for_slot(
+                    valid_orders, 0
+                )
+            )
+            self._v4a_legal_keys_slot1 = (
+                _legal_action_keys_with_mechanic_for_slot(
+                    valid_orders, 1
+                )
+            )
+            self._v4a_selected_joint_key = (
+                _selected_joint_key_with_mechanic(best_joint)
+            )
+            self._v4a_final_keys = (
+                _final_action_keys_with_mechanic_from_joint(
+                    best_joint
+                )
+            )
+
             self.audit_logger.log_turn_decision(
                 battle_tag=battle_tag,
                 turn=current_turn,
@@ -13286,54 +10690,23 @@ class DoublesDamageAwarePlayer(Player):
                 selected_action_target_position=selected_action_target_position,
                 selected_action_species=selected_action_species,
                 selected_action_only_legal=selected_action_only_legal,
-                partial_immune_spread_selected=[
-                    self.partial_immune_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[0],
-                    self.partial_immune_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[1],
-                ],
-                partial_ability_immune_spread_selected=[
-                    self.partial_ability_immune_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[0],
-                    self.partial_ability_immune_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[1],
-                ],
-                efficient_partial_spread_selected=[
-                    self.efficient_partial_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[0],
-                    self.efficient_partial_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[1],
-                ],
-                inefficient_partial_spread_selected=[
-                    self.inefficient_partial_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[0],
-                    self.inefficient_partial_spread_by_battle.setdefault(
-                        battle_tag, {0: False, 1: False}
-                    )[1],
-                ],
-                immune_target_species=[
-                    self.immune_target_species_by_battle.setdefault(
-                        battle_tag, {0: [], 1: []}
-                    )[0],
-                    self.immune_target_species_by_battle.setdefault(
-                        battle_tag, {0: [], 1: []}
-                    )[1],
-                ],
-                damaged_target_species=[
-                    self.damaged_target_species_by_battle.setdefault(
-                        battle_tag, {0: [], 1: []}
-                    )[0],
-                    self.damaged_target_species_by_battle.setdefault(
-                        battle_tag, {0: [], 1: []}
-                    )[1],
-                ],
+                # Phase 6.4 partial-spread audit readout
+                # (Phase Ponytail Refactor Step 7D). The
+                # repeated ``setdefault`` + index pattern
+                # is delegated to
+                # ``doubles_engine.audit_metadata.assemble_partial_spread_state``.
+                # Behavior preserved bit-for-bit, including
+                # the per-battle ``setdefault`` mutation
+                # semantics.
+                **assemble_partial_spread_state(
+                    battle_tag,
+                    self.partial_immune_spread_by_battle,
+                    self.partial_ability_immune_spread_by_battle,
+                    self.efficient_partial_spread_by_battle,
+                    self.inefficient_partial_spread_by_battle,
+                    self.immune_target_species_by_battle,
+                    self.damaged_target_species_by_battle,
+                ),
                 best_single_target_alternative=[
                     self.best_single_alternative_by_battle.setdefault(
                         battle_tag, {0: "", 1: ""}
@@ -14014,6 +11387,67 @@ class DoublesDamageAwarePlayer(Player):
                 support_target_safe_alternative_target_position_slot1=_sup_safe_alt_target_position[1],
                 support_target_wrong_side_selected_slot0=_sup_wrong_side_selected[0],
                 support_target_wrong_side_selected_slot1=_sup_wrong_side_selected[1],
+                # Phase BI-2D: compact switch counterfactual
+                # sub-dict. Built from existing _vsw_*
+                # locals (no new scoring, no candidate
+                # table persistence). Slot 0 and slot 1
+                # each carry chosen/best-switch/best-non-
+                # switch/counterfactual/delta/reason.
+                switch_counterfactual={
+                    "slot0": assemble_switch_counterfactual_slot(
+                        slot_idx=0,
+                        voluntary_switch_candidate_table=(
+                            _voluntary_switch_candidate_tables.get(0, [])
+                        ),
+                        selected_action_key=_vsw_selected_actions[0]
+                        if len(_vsw_selected_actions) > 0
+                        else "",
+                        counterfactual_action_key=_vsw_counterfactual_actions[0]
+                        if len(_vsw_counterfactual_actions) > 0
+                        else ("", "", 0),
+                        best_stay_score=_vsw_best_stay[0]
+                        if len(_vsw_best_stay) > 0
+                        else 0.0,
+                        best_stay_action_key=_vsw_best_stay_action[0]
+                        if len(_vsw_best_stay_action) > 0
+                        else None,
+                        selection_changed=(
+                            _vsw_selection_changed[0]
+                            if len(_vsw_selection_changed) > 0
+                            else False
+                        ),
+                        reason_codes=_vsw_reason_codes[0]
+                        if len(_vsw_reason_codes) > 0
+                        else [],
+                    ),
+                    "slot1": assemble_switch_counterfactual_slot(
+                        slot_idx=1,
+                        voluntary_switch_candidate_table=(
+                            _voluntary_switch_candidate_tables.get(1, [])
+                        ),
+                        selected_action_key=_vsw_selected_actions[1]
+                        if len(_vsw_selected_actions) > 1
+                        else "",
+                        counterfactual_action_key=_vsw_counterfactual_actions[1]
+                        if len(_vsw_counterfactual_actions) > 1
+                        else ("", "", 0),
+                        best_stay_score=_vsw_best_stay[1]
+                        if len(_vsw_best_stay) > 1
+                        else 0.0,
+                        best_stay_action_key=_vsw_best_stay_action[1]
+                        if len(_vsw_best_stay_action) > 1
+                        else None,
+                        selection_changed=(
+                            _vsw_selection_changed[1]
+                            if len(_vsw_selection_changed) > 1
+                            else False
+                        ),
+                        reason_codes=_vsw_reason_codes[1]
+                        if len(_vsw_reason_codes) > 1
+                        else [],
+                    ),
+                    "joint_selection_changed": _vsw_joint_selection_changed,
+                },
                 # Phase 6.4.9: Voluntary switch quality fields
                 voluntary_switch_decision_eligible=[
                     bool(_voluntary_switch_candidate_tables.get(0, [])),
@@ -14066,114 +11500,106 @@ class DoublesDamageAwarePlayer(Player):
                 voluntary_switch_best_stay_score=_vsw_best_stay,
                 voluntary_switch_selected_active_risk=_vsw_sel_active_risk,
                 voluntary_switch_selected_candidate_risk=_vsw_sel_cand_risk,
-                voluntary_switch_selected_risk_reduction=_vsw_sel_risk_red,
-                voluntary_switch_selected_score_adjustment=_vsw_sel_score_adj,
-                voluntary_switch_reason_codes=_vsw_reason_codes,
-                # V2l.1 — ``shared_engine_used`` is
-                # execution-derived. It is True only if
-                # this ``choose_move`` invocation set
-                # a fresh, non-empty invocation id. A
-                # legacy caller that does not flow
-                # through ``choose_move`` will not have
-                # an id and will report
-                # ``shared_engine_used=False``. This
-                # is the proof bit the parity inspector
-                # checks.
-                runtime_mode=getattr(
-                    self, "_runtime_mode", "random_doubles"
-                ),
-                concrete_player_class=getattr(
-                    self, "_concrete_player_class",
-                    type(self).__name__
-                ),
-                shared_engine_used=bool(
-                    getattr(
-                        self, "_v2l1_invocation_id", None
-                    )
-                    and getattr(
-                        self, "_v2l1_invocation_status", None
-                    ) == "completed"
-                ),
-                shared_engine_owner=(
-                    "bot_doubles_damage_aware.DoublesDamageAwarePlayer"
-                ),
-                shared_engine_invocation_id=getattr(
-                    self, "_v2l1_invocation_id", None
-                ),
-                shared_engine_invocation_status=getattr(
-                    self, "_v2l1_invocation_status", None
-                ),
+                 voluntary_switch_selected_risk_reduction=_vsw_sel_risk_red,
+                 voluntary_switch_selected_score_adjustment=_vsw_sel_score_adj,
+                 voluntary_switch_reason_codes=_vsw_reason_codes,
+                 # V2l.1 — shared-engine identity,
+                 # invocation, and preview metadata.
+                 # The packaging is delegated to
+                 # ``doubles_engine.audit_metadata.assemble_shared_engine_metadata``
+                 # (Phase Ponytail Refactor Step 7E).
+                 # Behavior preserved bit-for-bit, including
+                 # the ``shared_engine_used`` derivation
+                 # (True only when
+                 # ``v2l1_invocation_id`` is non-empty AND
+                 # ``v2l1_invocation_status == "completed"``)
+                 # and the constant
+                 # ``shared_engine_owner`` string.
+                 **assemble_shared_engine_metadata(
+                     runtime_mode=getattr(
+                         self, "_runtime_mode", "random_doubles"
+                     ),
+                     concrete_player_class=getattr(
+                         self,
+                         "_concrete_player_class",
+                         type(self).__name__,
+                     ),
+                     v2l1_invocation_id=getattr(
+                         self, "_v2l1_invocation_id", None
+                     ),
+                     v2l1_invocation_status=getattr(
+                         self, "_v2l1_invocation_status", None
+                     ),
+                     selected_four=getattr(
+                         self, "_selected_four", None
+                     ),
+                     lead_2=getattr(self, "_lead_2", None),
+                     back_2=getattr(self, "_back_2", None),
+                     preview_policy=getattr(
+                         self, "_preview_policy", None
+                     ),
+                 ),
                 # V2l.1 — per-decision execution-derived
                 # parity fields. These are read from the
                 # live player attributes that the
                 # ``choose_move`` body writes right
-                # before this call.
-                v2l1_legal_action_keys_slot0=list(
-                    getattr(
+                # before this call. The packaging is
+                # delegated to ``doubles_engine.audit_metadata``
+                # (Phase Ponytail Refactor Step 7B).
+                **assemble_v2l1_metadata(
+                    v2l1_legal_keys_slot0=getattr(
                         self, "_v2l1_legal_keys_slot0", []
-                    )
-                ),
-                v2l1_legal_action_keys_slot1=list(
-                    getattr(
+                    ),
+                    v2l1_legal_keys_slot1=getattr(
                         self, "_v2l1_legal_keys_slot1", []
-                    )
-                ),
-                v2l1_raw_scores_slot0=dict(
-                    self._v2l1_action_key_to_str_map(
-                        getattr(
-                            self,
-                            "_v2l1_raw_scores_slot0",
-                            {},
-                        )
-                    )
-                ),
-                v2l1_raw_scores_slot1=dict(
-                    self._v2l1_action_key_to_str_map(
-                        getattr(
-                            self,
-                            "_v2l1_raw_scores_slot1",
-                            {},
-                        )
-                    )
-                ),
-                v2l1_safety_blocks_slot0=dict(
-                    self._v2l1_action_key_to_str_map(
-                        getattr(
-                            self,
-                            "_v2l1_safety_blocks_slot0",
-                            {},
-                        )
-                    )
-                ),
-                v2l1_safety_blocks_slot1=dict(
-                    self._v2l1_action_key_to_str_map(
-                        getattr(
-                            self,
-                            "_v2l1_safety_blocks_slot1",
-                            {},
-                        )
-                    )
-                ),
-                v2l1_selected_joint_key=(
-                    self._v2l1_joint_key_to_str(
-                        getattr(
-                            self,
-                            "_v2l1_selected_joint_key",
-                            None,
-                        )
-                    )
-                ),
-                v2l1_final_action_keys=[
-                    self._v2l1_action_key_to_str(k)
-                    for k in getattr(
+                    ),
+                    v2l1_raw_scores_slot0=getattr(
+                        self, "_v2l1_raw_scores_slot0", {}
+                    ),
+                    v2l1_raw_scores_slot1=getattr(
+                        self, "_v2l1_raw_scores_slot1", {}
+                    ),
+                    v2l1_safety_blocks_slot0=getattr(
+                        self,
+                        "_v2l1_safety_blocks_slot0",
+                        {},
+                    ),
+                    v2l1_safety_blocks_slot1=getattr(
+                        self,
+                        "_v2l1_safety_blocks_slot1",
+                        {},
+                    ),
+                    v2l1_selected_joint_key=getattr(
+                        self, "_v2l1_selected_joint_key", None
+                    ),
+                    v2l1_final_keys=getattr(
                         self, "_v2l1_final_keys", []
-                    )
-                ],
-                selected_four=getattr(self, "_selected_four", None),
-                lead_2=getattr(self, "_lead_2", None),
-                back_2=getattr(self, "_back_2", None),
-                preview_policy=getattr(
-                    self, "_preview_policy", None
+                    ),
+                ),
+                # Phase BI-1: V4a mechanic-aware audit
+                # kwargs. Read from the per-turn snapshot
+                # attrs populated right before this call.
+                # The audit logger writes them to
+                # ``turn_data`` but currently the live
+                # JSONL only persists a subset (see
+                # logger ``_build_live_decision_event``).
+                # No scoring or action selection change.
+                # Note: V4a raw_scores dicts are not
+                # passed because their 4-tuple keys
+                # cannot be JSON-serialized. Legal keys
+                # and final keys are passed as lists of
+                # 4-tuples (JSON-serializable).
+                v4a_legal_action_keys_slot0=getattr(
+                    self, "_v4a_legal_keys_slot0", []
+                ),
+                v4a_legal_action_keys_slot1=getattr(
+                    self, "_v4a_legal_keys_slot1", []
+                ),
+                v4a_selected_joint_key=getattr(
+                    self, "_v4a_selected_joint_key", None
+                ),
+                v4a_final_action_keys=getattr(
+                    self, "_v4a_final_keys", []
                 ),
             )
 
@@ -14186,40 +11612,41 @@ class DoublesDamageAwarePlayer(Player):
         the audit logger can persist action keys
         without storing non-serializable
         ``BattleOrder`` objects.
+
+        ponytail: thin shim that delegates to
+        ``doubles_engine.audit_metadata.v2l1_action_key_to_str``.
+        Behavior preserved bit-for-bit.
         """
-        if not isinstance(action_key, tuple) or not action_key:
-            return str(action_key)
-        return "|".join(str(x) for x in action_key)
+        from doubles_engine.audit_metadata import (
+            v2l1_action_key_to_str as _impl,
+        )
+        return _impl(action_key)
 
     @classmethod
     def _v2l1_action_key_to_str_map(cls, d: dict) -> dict:
         """V2l.1 — map every key in ``d`` to a string
         for JSON serialization.
+
+        ponytail: thin shim that delegates to
+        ``doubles_engine.audit_metadata.v2l1_action_key_to_str_map``.
         """
-        out = {}
-        for k, v in (d or {}).items():
-            try:
-                out[cls._v2l1_action_key_to_str(k)] = v
-            except Exception:
-                continue
-        return out
+        from doubles_engine.audit_metadata import (
+            v2l1_action_key_to_str_map as _impl,
+        )
+        return _impl(d)
 
     @classmethod
     def _v2l1_joint_key_to_str(cls, joint_key) -> Optional[str]:
         """V2l.1 — convert a joint key tuple pair into
         a single string for JSON serialization.
+
+        ponytail: thin shim that delegates to
+        ``doubles_engine.audit_metadata.v2l1_joint_key_to_str``.
         """
-        if not joint_key:
-            return None
-        if not isinstance(joint_key, tuple):
-            return str(joint_key)
-        if len(joint_key) != 2:
-            return str(joint_key)
-        return (
-            cls._v2l1_action_key_to_str(joint_key[0])
-            + ";"
-            + cls._v2l1_action_key_to_str(joint_key[1])
+        from doubles_engine.audit_metadata import (
+            v2l1_joint_key_to_str as _impl,
         )
+        return _impl(joint_key)
 
     def _battle_finished_callback(self, battle: AbstractBattle):
         clear_observed_form_state(getattr(battle, "battle_tag", ""))

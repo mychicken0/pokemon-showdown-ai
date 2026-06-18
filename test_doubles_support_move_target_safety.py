@@ -327,7 +327,7 @@ class TestComputeOrderSafetyBlocks(unittest.TestCase):
         battle = _make_battle()
         move = _make_move_mock("healpulse", base_power=0, category="STATUS")
         order = _make_order(move, target=1)
-        _, _, _, _, support_blocked, _ = _compute_order_safety_blocks(
+        _, _, _, _, support_blocked, _, _, _ = _compute_order_safety_blocks(
             battle, config, [[order], []]
         )
         self.assertIn(id(order), support_blocked)
@@ -338,7 +338,7 @@ class TestComputeOrderSafetyBlocks(unittest.TestCase):
         battle = _make_battle()
         move = _make_move_mock("healpulse", base_power=0, category="STATUS")
         order = _make_order(move, target=-2)
-        _, _, _, _, support_blocked, _ = _compute_order_safety_blocks(
+        _, _, _, _, support_blocked, _, _, _ = _compute_order_safety_blocks(
             battle, config, [[order], []]
         )
         self.assertNotIn(id(order), support_blocked)

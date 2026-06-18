@@ -2512,7 +2512,7 @@ class TestGroupGTargetSwitchBenchParity(unittest.TestCase):
         )
         self.assertEqual(result_rd, result_vgc)
         # All 6 returned dicts are empty.
-        self.assertEqual(len(result_rd), 6)
+        self.assertEqual(len(result_rd), 8)
         for d in result_rd:
             self.assertEqual(d, {})
 

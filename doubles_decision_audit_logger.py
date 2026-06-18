@@ -25,6 +25,20 @@ class DoublesDecisionAuditLogger:
         self.pending_turns = {}      # maps battle_tag -> turn_dict
         self.completed_turns = {}    # maps battle_tag -> list of turn_dicts
         self.battle_configs = {}     # maps battle_tag -> config (first seen)
+        # Phase BI-3K.3: per-battle arm metadata. Set by the
+        # runner before each battle so persisted rows can
+        # distinguish treatment vs baseline and record whether
+        # Mega was enabled. Map: battle_tag -> dict.
+        self._battle_arm_meta = {}
+        # Phase BI-3K.7: context-based battle metadata. Set
+        # by the runner via ``set_current_battle_meta``
+        # before each battle. ``save_battle`` reads and
+        # clears this on each call, so a single shared
+        # logger can be used across battles without
+        # relying on battle_tag lookup (which fails when
+        # the runner's tag differs from the poke-env
+        # server-assigned tag).
+        self._current_battle_meta = {}
         self._benchmark_arm = benchmark_arm
         self._singleton_safety_enabled = singleton_safety_enabled
         self._priority_safety_enabled = priority_safety_enabled
@@ -156,6 +170,157 @@ class DoublesDecisionAuditLogger:
             # The visualizer is observational. Logging failure must never affect a battle.
             self._live_stream_failed = True
 
+    @staticmethod
+    def _build_compact_state_snapshot(battle, battle_tag=None):
+        """Phase BI-2B: Compact per-turn state snapshot for
+        persisted JSONL. Uses only visible/current battle
+        state (no hidden info). Returns a JSON-safe dict
+        of primitives; missing attributes use safe
+        defaults (None, []). Caller may include this
+        in turn_data and live events.
+        """
+        snap = {
+            "turn": None,
+            "battle_tag": str(battle_tag) if battle_tag is not None else None,
+            "our_active_species": [None, None],
+            "opp_active_species": [None, None],
+            "our_active_hp_fraction": [None, None],
+            "opp_active_hp_fraction": [None, None],
+            "our_active_types": [[], []],
+            "opp_active_types": [[], []],
+            "weather": None,
+            "fields": [],
+            "side_conditions": [],
+            "opponent_side_conditions": [],
+        }
+        if battle is None:
+            return snap
+        try:
+            snap["turn"] = int(getattr(battle, "turn", None)) if getattr(battle, "turn", None) is not None else None
+        except (TypeError, ValueError):
+            snap["turn"] = None
+        our_active = list(getattr(battle, "active_pokemon", []) or [])
+        opp_active = list(getattr(battle, "opponent_active_pokemon", []) or [])
+        for slot_index, pokemon in enumerate(our_active[:2]):
+            snap["our_active_species"][slot_index] = DoublesDecisionAuditLogger._safe_species(pokemon)
+            snap["our_active_hp_fraction"][slot_index] = DoublesDecisionAuditLogger._safe_hp_fraction(pokemon)
+            snap["our_active_types"][slot_index] = DoublesDecisionAuditLogger._safe_types(pokemon)
+        for slot_index, pokemon in enumerate(opp_active[:2]):
+            snap["opp_active_species"][slot_index] = DoublesDecisionAuditLogger._safe_species(pokemon)
+            snap["opp_active_hp_fraction"][slot_index] = DoublesDecisionAuditLogger._safe_hp_fraction(pokemon)
+            snap["opp_active_types"][slot_index] = DoublesDecisionAuditLogger._safe_types(pokemon)
+        snap["weather"] = DoublesDecisionAuditLogger._enum_keys(battle, "weather")
+        snap["fields"] = DoublesDecisionAuditLogger._enum_keys(battle, "fields")
+        snap["side_conditions"] = DoublesDecisionAuditLogger._enum_keys(battle, "side_conditions")
+        snap["opponent_side_conditions"] = DoublesDecisionAuditLogger._enum_keys(
+            battle, "opponent_side_conditions"
+        )
+        return snap
+
+    @staticmethod
+    def _safe_species(pokemon):
+        if pokemon is None:
+            return None
+        try:
+            sp = getattr(pokemon, "species", None)
+        except Exception:
+            sp = None
+        if sp is None or sp == "":
+            try:
+                sp = getattr(pokemon, "name", None)
+            except Exception:
+                sp = None
+        if sp is None or sp == "":
+            return None
+        try:
+            return str(sp)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _safe_hp_fraction(pokemon):
+        if pokemon is None:
+            return None
+        frac = getattr(pokemon, "current_hp_fraction", None)
+        if frac is None:
+            frac = getattr(pokemon, "hp_fraction", None)
+        if frac is None:
+            cur = getattr(pokemon, "current_hp", None)
+            mx = getattr(pokemon, "max_hp", None)
+            if cur is not None and mx:
+                try:
+                    frac = float(cur) / float(mx)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    frac = None
+        if frac is None:
+            return None
+        try:
+            return float(frac)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _safe_types(pokemon):
+        if pokemon is None:
+            return []
+        out = []
+        try:
+            types = getattr(pokemon, "types", None)
+        except Exception:
+            types = None
+        if types is None:
+            try:
+                t1 = getattr(pokemon, "type_1", None)
+                t2 = getattr(pokemon, "type_2", None)
+                types = [t for t in (t1, t2) if t is not None]
+            except Exception:
+                types = []
+        if not types:
+            return []
+        for t in types:
+            if t is None:
+                continue
+            try:
+                name = getattr(t, "name", None)
+            except Exception:
+                name = None
+            if name is None:
+                try:
+                    name = str(t)
+                except Exception:
+                    name = None
+            if name:
+                out.append(str(name).lower())
+        return out
+
+    @staticmethod
+    def _enum_keys(battle, attr):
+        try:
+            obj = getattr(battle, attr, None)
+        except Exception:
+            return [] if attr != "weather" else None
+        if obj is None:
+            return [] if attr != "weather" else None
+        if isinstance(obj, dict):
+            keys = []
+            for k in obj.keys():
+                try:
+                    name = getattr(k, "name", None)
+                except Exception:
+                    name = None
+                if name is None:
+                    try:
+                        name = str(k)
+                    except Exception:
+                        name = None
+                if name:
+                    keys.append(str(name).lower())
+            return keys
+        try:
+            return [str(getattr(k, "name", str(k))).lower() for k in obj]
+        except Exception:
+            return [] if attr != "weather" else None
+
     def _build_live_decision_event(self, battle_tag, turn_data):
         slots = [turn_data.get("slot_0") or {}, turn_data.get("slot_1") or {}]
         flags = {
@@ -170,6 +335,37 @@ class DoublesDecisionAuditLogger:
         }
         for key in ("partial_immune_spread_selected", "partial_ability_immune_spread_selected"):
             flags[key] = any(bool(slot.get(key)) for slot in slots)
+        # Phase BI-1: V4a audit telemetry. Compact form
+        # so JSONL rows stay small.
+        v4a = {
+            "v4a_selected_joint_key": turn_data.get("v4a_selected_joint_key"),
+            "v4a_final_action_keys": turn_data.get("v4a_final_action_keys") or [],
+        }
+        v4a_legal = turn_data.get("v4a_legal_action_keys_slot0")
+        if v4a_legal is not None:
+            v4a["v4a_legal_action_keys_slot0"] = v4a_legal
+        v4a_legal_1 = turn_data.get("v4a_legal_action_keys_slot1")
+        if v4a_legal_1 is not None:
+            v4a["v4a_legal_action_keys_slot1"] = v4a_legal_1
+        # Phase BI-1: voluntary switch telemetry.
+        vsw = {
+            "voluntary_switch_decision_eligible": turn_data.get(
+                "voluntary_switch_decision_eligible"
+            )
+            or [False, False],
+            "voluntary_switch_selected": turn_data.get(
+                "voluntary_switch_selected"
+            )
+            or [False, False],
+            "voluntary_switch_candidate_count": turn_data.get(
+                "voluntary_switch_candidate_count"
+            )
+            or [0, 0],
+            "voluntary_switch_selected_species": turn_data.get(
+                "voluntary_switch_selected_species"
+            )
+            or ["", ""],
+        }
         return {
             "event": "decision",
             "battle_tag": str(battle_tag),
@@ -184,6 +380,10 @@ class DoublesDecisionAuditLogger:
             "score_gap_selected_best_alt": turn_data.get("score_gap_selected_best_alt"),
             "total_legal_joint_orders": turn_data.get("total_legal_joint_orders"),
             "flags": flags,
+            "v4a": v4a,
+            "voluntary_switch": vsw,
+            "switch_counterfactual": turn_data.get("switch_counterfactual") or {},
+            "state_snapshot": turn_data.get("state_snapshot") or {},
             "slot_0": self._compact_slot(turn_data.get("slot_0"), self._LIVE_SLOT_KEYS),
             "slot_1": self._compact_slot(turn_data.get("slot_1"), self._LIVE_SLOT_KEYS),
         }
@@ -606,6 +806,16 @@ class DoublesDecisionAuditLogger:
         v2l1_safety_blocks_slot1=None,
         v2l1_selected_joint_key=None,
         v2l1_final_action_keys=None,
+        # Phase V4a — RL/debug action identity.
+        # These preserve one-per-side battle mechanic
+        # variants such as Mega, Z-Move, Dynamax, and
+        # Terastallize beside the older V2l.1 fields.
+        v4a_legal_action_keys_slot0=None,
+        v4a_legal_action_keys_slot1=None,
+        v4a_raw_scores_slot0=None,
+        v4a_raw_scores_slot1=None,
+        v4a_selected_joint_key=None,
+        v4a_final_action_keys=None,
         # Phase 6.3.8b — Support Move Target Hard Safety.
         # ``support_target_candidates`` is the full
         # per-turn candidate table produced by the
@@ -647,6 +857,54 @@ class DoublesDecisionAuditLogger:
         support_target_safe_alternative_target_position_slot1=None,
         support_target_wrong_side_selected_slot0=None,
         support_target_wrong_side_selected_slot1=None,
+        # Phase 6.3.8d: Narrow ally-heal
+        # candidate table. Same shape as
+        # ``support_target_candidates`` (a list
+        # of dicts). Includes every narrow-allowlist
+        # order encountered on this turn, with
+        # ``blocked`` and ``block_reason`` filled
+        # by ``narrow_ally_heal_wrong_side_block``.
+        narrow_ally_heal_candidates=None,
+        # Phase 6.3.8d: Narrow ally-heal wrong-side
+        # hard safety. Same mirror pattern as
+        # ``support_target_*_slotN`` so the
+        # inspector and analyzer can read
+        # narrow-side decisions without iterating
+        # the candidate list. The fields are
+        # ``narrow_ally_heal_candidate`` (boolean:
+        # did the engine generate a narrow
+        # candidate this turn), the per-slot
+        # ``narrow_ally_heal_blocked``,
+        # ``narrow_ally_heal_selected``,
+        # ``narrow_ally_heal_avoided``,
+        # ``narrow_ally_heal_only_legal``, plus
+        # the diagnostic move_id / intended_side /
+        # actual_side / target_position /
+        # target_species / reason / classification_source
+        # mirrors.
+        narrow_ally_heal_candidate=None,
+        narrow_ally_heal_candidate_blocked_slot0=None,
+        narrow_ally_heal_candidate_blocked_slot1=None,
+        narrow_ally_heal_selected_slot0=None,
+        narrow_ally_heal_selected_slot1=None,
+        narrow_ally_heal_avoided_slot0=None,
+        narrow_ally_heal_avoided_slot1=None,
+        narrow_ally_heal_only_legal_slot0=None,
+        narrow_ally_heal_only_legal_slot1=None,
+        narrow_ally_heal_move_id_slot0=None,
+        narrow_ally_heal_move_id_slot1=None,
+        narrow_ally_heal_intended_side_slot0=None,
+        narrow_ally_heal_intended_side_slot1=None,
+        narrow_ally_heal_actual_side_slot0=None,
+        narrow_ally_heal_actual_side_slot1=None,
+        narrow_ally_heal_target_position_slot0=None,
+        narrow_ally_heal_target_position_slot1=None,
+        narrow_ally_heal_target_species_slot0=None,
+        narrow_ally_heal_target_species_slot1=None,
+        narrow_ally_heal_block_reason_slot0=None,
+        narrow_ally_heal_block_reason_slot1=None,
+        narrow_ally_heal_classification_source_slot0=None,
+        narrow_ally_heal_classification_source_slot1=None,
         # Phase 6.3.8b — Per-slot selected-action
         # structured metadata (kind / move id / target
         # position / species / only-legal). These are
@@ -654,12 +912,32 @@ class DoublesDecisionAuditLogger:
         # and benchmark use. The audit logger was
         # previously dropping them via ``**kwargs``;
         # the inspector and benchmark read them
-        # directly off each slot's dict.
+        # directamente off each slot's dict.
         selected_action_kind=None,
         selected_action_move_id=None,
         selected_action_target_position=None,
         selected_action_species=None,
         selected_action_only_legal=None,
+        selected_action_mechanic=None,
+        # Phase 6.4.10c.1: VSW candidate and raw
+        # switch order counts per slot.
+        voluntary_switch_raw_switch_order_count=None,
+        voluntary_switch_candidate_count=None,
+        # Phase BI-1: voluntary switch eligibility /
+        # selection / species telemetry. The bot's
+        # audit call has always passed these as kwargs;
+        # adding them to the signature prevents them
+        # from being dropped via **kwargs and lets us
+        # write them to turn_data and the live JSONL.
+        voluntary_switch_decision_eligible=None,
+        voluntary_switch_selected=None,
+        voluntary_switch_selected_species=None,
+        # Phase BI-2D: compact per-slot switch
+        # counterfactual sub-dict. The bot assembles
+        # this from existing _vsw_* locals; the logger
+        # stores it as-is and projects it into the
+        # live decision event.
+        switch_counterfactual=None,
         **kwargs,
     ):
 
@@ -833,6 +1111,9 @@ class DoublesDecisionAuditLogger:
 
         turn_data = {
             "turn": int(turn),
+            "state_snapshot": self._build_compact_state_snapshot(
+                battle, battle_tag
+            ),
             "our_active": [
                 {"species": active_1.species, "hp": float(active_1.current_hp_fraction)} if (active_1 and active_1.current_hp_fraction is not None) else None,
                 {"species": active_2.species, "hp": float(active_2.current_hp_fraction)} if (active_2 and active_2.current_hp_fraction is not None) else None
@@ -898,6 +1179,9 @@ class DoublesDecisionAuditLogger:
                 ),
                 "selected_action_only_legal": (
                     (selected_action_only_legal or [False, False])[0]
+                ),
+                "selected_action_mechanic": (
+                    (selected_action_mechanic or ["", ""])[0]
                 ),
                 "expected_damage": float(expected_damages[0]) if expected_damages[0] is not None else None,
                 "expected_ko": bool(expected_kos[0]) if expected_kos[0] is not None else None,
@@ -1200,6 +1484,9 @@ class DoublesDecisionAuditLogger:
                 "selected_action_only_legal": (
                     (selected_action_only_legal or [False, False])[1]
                 ),
+                "selected_action_mechanic": (
+                    (selected_action_mechanic or ["", ""])[1]
+                ),
                 "expected_damage": float(expected_damages[1]) if expected_damages[1] is not None else None,
                 "expected_ko": bool(expected_kos[1]) if expected_kos[1] is not None else None,
                 "target_hp_before": float(target_hps[1]) if target_hps[1] is not None else None,
@@ -1488,7 +1775,53 @@ class DoublesDecisionAuditLogger:
                 "opponent_ability_error": None,
                 "opponent_ground_into_levitate": None,
                 "opponent_type_immune_move_selected": False,
-            }
+            },
+            # Phase 6.4.10c.1: VSW candidate and raw
+            # switch order counts per slot. The
+            # analyzer computes extraction mismatch
+            # as raw != cand.
+            "voluntary_switch_raw_switch_order_count": (
+                list(voluntary_switch_raw_switch_order_count)
+                if voluntary_switch_raw_switch_order_count is not None
+                else [0, 0]
+            ),
+            "voluntary_switch_candidate_count": (
+                list(voluntary_switch_candidate_count)
+                if voluntary_switch_candidate_count is not None
+                else [0, 0]
+            ),
+            # Phase BI-1: VSW eligibility / selection /
+            # species telemetry. Previously dropped via
+            # **kwargs. Compact form: per-slot list
+            # (slot 0, slot 1) where applicable, scalar
+            # where the bot emits a scalar.
+            "voluntary_switch_decision_eligible": (
+                list(voluntary_switch_decision_eligible)
+                if voluntary_switch_decision_eligible is not None
+                else [False, False]
+            ),
+            "voluntary_switch_selected": (
+                list(voluntary_switch_selected)
+                if voluntary_switch_selected is not None
+                else [False, False]
+            ),
+            "voluntary_switch_selected_species": (
+                list(voluntary_switch_selected_species)
+                if voluntary_switch_selected_species is not None
+                else ["", ""]
+            ),
+            # Phase BI-2D: compact per-slot switch
+            # counterfactual sub-dict. Stored as-is
+            # from the bot's assembled payload. The
+            # helper assembles JSON-safe primitives
+            # already; we keep None as a safe default
+            # so existing call sites that omit the
+            # kwarg continue to work.
+            "switch_counterfactual": (
+                switch_counterfactual
+                if switch_counterfactual is not None
+                else None
+            ),
 
         }
 
@@ -1561,6 +1894,24 @@ class DoublesDecisionAuditLogger:
         )
         turn_data["v2l1_final_action_keys"] = (
             v2l1_final_action_keys
+        )
+        turn_data["v4a_legal_action_keys_slot0"] = (
+            v4a_legal_action_keys_slot0
+        )
+        turn_data["v4a_legal_action_keys_slot1"] = (
+            v4a_legal_action_keys_slot1
+        )
+        turn_data["v4a_raw_scores_slot0"] = (
+            v4a_raw_scores_slot0
+        )
+        turn_data["v4a_raw_scores_slot1"] = (
+            v4a_raw_scores_slot1
+        )
+        turn_data["v4a_selected_joint_key"] = (
+            v4a_selected_joint_key
+        )
+        turn_data["v4a_final_action_keys"] = (
+            v4a_final_action_keys
         )
         # Phase 6.3.8b — Support Move Target Hard Safety
         # audit fields. The full candidate table is
@@ -1644,9 +1995,71 @@ class DoublesDecisionAuditLogger:
         }
         for _k, _v in _per_slot_support_keys.items():
             turn_data[_k] = _v
+        # Phase 6.3.8d: Narrow ally-heal wrong-side
+        # per-slot mirrors. Same pattern as the
+        # broad support-target fields above.
+        _narrow_per_slot_keys = {
+            "narrow_ally_heal_candidate":
+                narrow_ally_heal_candidate,
+            "narrow_ally_heal_candidate_blocked_slot0":
+                narrow_ally_heal_candidate_blocked_slot0,
+            "narrow_ally_heal_candidate_blocked_slot1":
+                narrow_ally_heal_candidate_blocked_slot1,
+            "narrow_ally_heal_selected_slot0":
+                narrow_ally_heal_selected_slot0,
+            "narrow_ally_heal_selected_slot1":
+                narrow_ally_heal_selected_slot1,
+            "narrow_ally_heal_avoided_slot0":
+                narrow_ally_heal_avoided_slot0,
+            "narrow_ally_heal_avoided_slot1":
+                narrow_ally_heal_avoided_slot1,
+            "narrow_ally_heal_only_legal_slot0":
+                narrow_ally_heal_only_legal_slot0,
+            "narrow_ally_heal_only_legal_slot1":
+                narrow_ally_heal_only_legal_slot1,
+            "narrow_ally_heal_move_id_slot0":
+                narrow_ally_heal_move_id_slot0,
+            "narrow_ally_heal_move_id_slot1":
+                narrow_ally_heal_move_id_slot1,
+            "narrow_ally_heal_intended_side_slot0":
+                narrow_ally_heal_intended_side_slot0,
+            "narrow_ally_heal_intended_side_slot1":
+                narrow_ally_heal_intended_side_slot1,
+            "narrow_ally_heal_actual_side_slot0":
+                narrow_ally_heal_actual_side_slot0,
+            "narrow_ally_heal_actual_side_slot1":
+                narrow_ally_heal_actual_side_slot1,
+            "narrow_ally_heal_target_position_slot0":
+                narrow_ally_heal_target_position_slot0,
+            "narrow_ally_heal_target_position_slot1":
+                narrow_ally_heal_target_position_slot1,
+            "narrow_ally_heal_target_species_slot0":
+                narrow_ally_heal_target_species_slot0,
+            "narrow_ally_heal_target_species_slot1":
+                narrow_ally_heal_target_species_slot1,
+            "narrow_ally_heal_block_reason_slot0":
+                narrow_ally_heal_block_reason_slot0,
+            "narrow_ally_heal_block_reason_slot1":
+                narrow_ally_heal_block_reason_slot1,
+            "narrow_ally_heal_classification_source_slot0":
+                narrow_ally_heal_classification_source_slot0,
+            "narrow_ally_heal_classification_source_slot1":
+                narrow_ally_heal_classification_source_slot1,
+        }
+        for _k, _v in _narrow_per_slot_keys.items():
+            turn_data[_k] = _v
+        # Phase 6.3.8d: Persist the full narrow
+        # candidate table for analyzer inspection.
+        # The broad support_target_candidates is
+        # also persisted; we mirror that pattern.
+        turn_data["narrow_ally_heal_candidates"] = (
+            list(narrow_ally_heal_candidates)
+            if narrow_ally_heal_candidates is not None
+            else []
+        )
         # Per-slot flat fields for the inspector
         # (which reads e.g.
-        # ``support_target_selected`` directly off the
+        # ``support_target_selected`` directamente off the
         # slot). We forward the per-slot mirror to
         # each slot_0 / slot_1 dict.
         for _slot_key, _slot_idx in (("slot_0", 0), ("slot_1", 1)):
@@ -1731,6 +2144,64 @@ class DoublesDecisionAuditLogger:
             _slot["support_target_wrong_side_selected"] = (
                 turn_data.get(
                     f"support_target_wrong_side_selected_slot{_slot_idx}"
+                )
+            )
+            # Phase 6.3.8d: Narrow ally-heal wrong-side
+            # per-slot mirror. Same key naming as the
+            # broad support-target fields.
+            _slot["narrow_ally_heal_candidate_blocked"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_candidate_blocked_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_selected"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_selected_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_avoided"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_avoided_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_only_legal"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_only_legal_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_move_id"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_move_id_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_intended_side"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_intended_side_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_actual_side"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_actual_side_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_target_position"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_target_position_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_target_species"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_target_species_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_reason"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_block_reason_slot{_slot_idx}"
+                )
+            )
+            _slot["narrow_ally_heal_classification_source"] = (
+                turn_data.get(
+                    f"narrow_ally_heal_classification_source_slot{_slot_idx}"
                 )
             )
             turn_data[_slot_key] = _slot
@@ -2018,6 +2489,48 @@ class DoublesDecisionAuditLogger:
         self.completed_turns.setdefault(battle_tag, []).append(pending)
         self._append_live_event(self._build_live_outcome_event(battle_tag, pending))
 
+    def set_battle_arm(
+        self, battle_tag, benchmark_arm, enable_mega_evolution,
+        treatment_side="",
+    ):
+        """Phase BI-3K.3: record per-battle arm metadata.
+
+        The runner calls this before each battle starts so the
+        persisted audit row can distinguish treatment vs baseline
+        and verify Mega config assignment per side. The
+        metadata is popped and persisted when ``save_battle``
+        fires.
+        """
+        self._battle_arm_meta[str(battle_tag)] = {
+            "benchmark_arm": str(benchmark_arm),
+            "enable_mega_evolution": bool(enable_mega_evolution),
+            "treatment_side": str(treatment_side),
+        }
+
+    def set_current_battle_meta(
+        self, benchmark_arm, enable_mega_evolution,
+        treatment_side, player_side, player_name,
+    ):
+        """Phase BI-3K.7: context-based battle metadata.
+
+        The runner calls this before each battle starts.
+        Unlike ``set_battle_arm`` (which keys by
+        ``battle_tag``), this method sets a single
+        "current" metadata context that ``save_battle``
+        reads and clears. This avoids the battle_tag
+        mismatch between the runner's tag and the
+        poke-env server-assigned tag. The runner calls
+        this for BOTH the treatment and baseline
+        loggers before each battle.
+        """
+        self._current_battle_meta = {
+            "benchmark_arm": str(benchmark_arm),
+            "enable_mega_evolution": bool(enable_mega_evolution),
+            "treatment_side": str(treatment_side),
+            "player_side": str(player_side),
+            "player_name": str(player_name),
+        }
+
     def save_battle(self, battle_tag, winner, battle):
         """
         Finalize and save the battle record with top-level metadata.
@@ -2037,14 +2550,35 @@ class DoublesDecisionAuditLogger:
             singleton_enabled = self._singleton_safety_enabled
             priority_enabled = self._priority_safety_enabled
 
+        # Phase BI-3K.7: prefer context-based metadata
+        # (set by runner via set_current_battle_meta),
+        # fall back to per-battle-tag metadata from
+        # set_battle_arm. Pop the context after read
+        # so the next save_battle call starts clean.
+        ctx_meta = self._current_battle_meta
+        self._current_battle_meta = {}
+        arm_meta = self._battle_arm_meta.pop(battle_tag, {})
+        merged = {**arm_meta, **ctx_meta}
+        mega_enabled = bool(merged.get("enable_mega_evolution", False))
+        benchmark_arm = str(
+            merged.get("benchmark_arm", self._benchmark_arm)
+        )
+        treatment_side = str(merged.get("treatment_side", ""))
+        player_side = str(merged.get("player_side", ""))
+        player_name = str(merged.get("player_name", ""))
+
         battle_record = {
             "battle_tag": str(battle_tag),
             "winner": str(winner),
             "won": bool(won),
             "total_turns": int(getattr(battle, "turn", 0)),
-            "benchmark_arm": self._benchmark_arm,
+            "benchmark_arm": benchmark_arm,
             "singleton_safety_enabled": singleton_enabled,
             "priority_safety_enabled": priority_enabled,
+            "enable_mega_evolution": mega_enabled,
+            "treatment_side": treatment_side,
+            "player_side": player_side,
+            "player_name": player_name,
             "audit_turns": turns
         }
 
@@ -2056,5 +2590,9 @@ class DoublesDecisionAuditLogger:
             "winner": str(winner),
             "won": bool(won),
             "total_turns": int(getattr(battle, "turn", 0)),
-            "benchmark_arm": self._benchmark_arm,
+            "benchmark_arm": benchmark_arm,
+            "enable_mega_evolution": mega_enabled,
+            "treatment_side": treatment_side,
+            "player_side": player_side,
+            "player_name": player_name,
         })
