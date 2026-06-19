@@ -61,6 +61,153 @@ def _hp_bucket(hp_fraction: Optional[float]) -> str:
     return "75-100"
 
 
+# Phase ANALYZER-1: attribution parser. Action keys come
+# in pipe-delimited form like "switch|sneasler|0" or
+# "move|rockslide|0". This helper extracts the
+# structured pieces so the analyzer can label them
+# clearly in mirror-match cases.
+def _parse_action_key(
+    key: Optional[Any],
+) -> Dict[str, Optional[str]]:
+    """Parse an action key into structured fields.
+
+    Returns a dict with:
+      - raw: the original key (or None)
+      - category: "switch" / "move" / "unknown"
+      - species_or_move: the species (for switch) or
+        move id (for move)
+      - target: the target slot (string or None)
+      - switch_target: the species when category is
+        "switch", else None
+      - is_switch: bool
+    """
+    out: Dict[str, Optional[str]] = {
+        "raw": str(key) if key is not None else None,
+        "category": None,
+        "species_or_move": None,
+        "target": None,
+        "switch_target": None,
+        "is_switch": False,
+    }
+    if key is None:
+        out["category"] = "unknown"
+        return out
+    if not isinstance(key, str):
+        out["category"] = "unknown"
+        return out
+    parts = key.split("|")
+    if len(parts) < 2:
+        out["category"] = "unknown"
+        return out
+    kind = parts[0].strip().lower()
+    if kind == "switch":
+        out["category"] = "switch"
+        out["is_switch"] = True
+        out["species_or_move"] = parts[1].strip().lower()
+        out["switch_target"] = out["species_or_move"]
+        if len(parts) >= 3:
+            out["target"] = parts[2].strip()
+    elif kind == "move":
+        out["category"] = "move"
+        out["is_switch"] = False
+        out["species_or_move"] = parts[1].strip().lower()
+        if len(parts) >= 3:
+            out["target"] = parts[2].strip()
+    else:
+        out["category"] = "unknown"
+    return out
+
+
+def _attribution_labels(
+    state_snapshot: Dict[str, Any],
+    slot_idx: int,
+) -> Dict[str, Optional[str]]:
+    """Extract clear attribution labels for our active
+    and opponent active at the given slot index.
+
+    Returns dict with:
+      - our_active_slot0 / our_active_slot1
+      - opp_active_slot0 / opp_active_slot1
+      - our_active (the slot-specific one)
+      - opp_active (the slot-specific one)
+    """
+    ss = state_snapshot or {}
+    our_list = ss.get("our_active_species", []) or []
+    opp_list = ss.get("opp_active_species", []) or []
+    our0 = str(our_list[0]).lower() if len(our_list) > 0 else None
+    our1 = str(our_list[1]).lower() if len(our_list) > 1 else None
+    opp0 = str(opp_list[0]).lower() if len(opp_list) > 0 else None
+    opp1 = str(opp_list[1]).lower() if len(opp_list) > 1 else None
+    out: Dict[str, Optional[str]] = {
+        "our_active_slot0": our0,
+        "our_active_slot1": our1,
+        "opp_active_slot0": opp0,
+        "opp_active_slot1": opp1,
+        "our_active": our0 if slot_idx == 0 else our1,
+        "opp_active": opp0 if slot_idx == 0 else opp1,
+    }
+    return out
+
+
+def _build_attribution(
+    state_snapshot: Dict[str, Any],
+    slot_idx: int,
+    chosen_action_key: Optional[str],
+    best_switch_action_key: Optional[str],
+    best_non_switch_action_key: Optional[str],
+) -> Dict[str, Any]:
+    """Build a clean attribution dict for a turn slot.
+
+    Includes:
+      - our_active / opp_active (slot-specific)
+      - our_active_slot0 / our_active_slot1 /
+        opp_active_slot0 / opp_active_slot1
+      - selected_action_key + parsed selected_*
+      - best_switch_action_key + parsed best_switch_*
+      - best_non_switch_action_key + parsed
+        best_non_switch_*
+      - mirror_match_with_opp_active: bool — True if
+        our_switch_target species == opp_active
+        species at the same slot
+    """
+    labels = _attribution_labels(state_snapshot, slot_idx)
+    sel = _parse_action_key(chosen_action_key)
+    bs = _parse_action_key(best_switch_action_key)
+    bns = _parse_action_key(best_non_switch_action_key)
+    mirror = False
+    if (
+        bs.get("switch_target")
+        and labels.get("opp_active")
+        and bs["switch_target"] == labels["opp_active"]
+    ):
+        mirror = True
+    out = {
+        **labels,
+        "selected_action_key": chosen_action_key,
+        "selected_category": sel.get("category"),
+        "selected_species_or_move": sel.get(
+            "species_or_move"
+        ),
+        "selected_target": sel.get("target"),
+        "selected_is_switch": bool(sel.get("is_switch")),
+        "best_switch_action_key": best_switch_action_key,
+        "best_switch_target": bs.get("switch_target"),
+        "best_switch_target_raw": (
+            bs.get("species_or_move")
+            if bs.get("category") == "switch" else None
+        ),
+        "best_switch_category": bs.get("category"),
+        "best_non_switch_action_key": (
+            best_non_switch_action_key
+        ),
+        "best_non_switch_move": bns.get("species_or_move"),
+        "best_non_switch_target": bns.get("target"),
+        "best_non_switch_category": bns.get("category"),
+        "mirror_match_with_opp_active": mirror,
+    }
+    return out
+
+
 def _load_audit(path: str) -> List[Dict[str, Any]]:
     """Phase SWITCH-2: load a JSONL file, skipping malformed lines."""
     rows: List[Dict[str, Any]] = []
@@ -197,6 +344,12 @@ def _collect_slot_data(
                 # Suspicious: switch chosen with most negative delta
                 if (slot0.get("chosen_is_switch")
                         and delta is not None and delta < 0):
+                    attr = _build_attribution(
+                        ss, 0,
+                        slot0.get("chosen_action_key"),
+                        slot0.get("best_switch_action_key"),
+                        slot0.get("best_non_switch_action_key"),
+                    )
                     top_suspicious.append({
                         "battle_tag": battle_tag,
                         "arm": arm,
@@ -206,12 +359,22 @@ def _collect_slot_data(
                         "best_switch": slot0.get(
                             "best_switch_action_key"
                         ),
+                        "best_non_switch": slot0.get(
+                            "best_non_switch_action_key"
+                        ),
                         "delta": delta,
                         "kind": "switch_with_negative_delta",
+                        "attribution": attr,
                     })
                 # Suspicious: stay chosen with positive delta
                 if (not slot0.get("chosen_is_switch")
                         and delta is not None and delta > 0):
+                    attr = _build_attribution(
+                        ss, 0,
+                        slot0.get("chosen_action_key"),
+                        slot0.get("best_switch_action_key"),
+                        slot0.get("best_non_switch_action_key"),
+                    )
                     top_suspicious.append({
                         "battle_tag": battle_tag,
                         "arm": arm,
@@ -221,8 +384,12 @@ def _collect_slot_data(
                         "best_switch": slot0.get(
                             "best_switch_action_key"
                         ),
+                        "best_non_switch": slot0.get(
+                            "best_non_switch_action_key"
+                        ),
                         "delta": delta,
                         "kind": "stay_with_positive_delta",
+                        "attribution": attr,
                     })
             else:
                 quality["no_best_switch"] += 1
@@ -266,6 +433,12 @@ def _collect_slot_data(
                     state["opp_species"][opp_species_list[1]] += 1
                 if (slot1.get("chosen_is_switch")
                         and delta is not None and delta < 0):
+                    attr = _build_attribution(
+                        ss, 1,
+                        slot1.get("chosen_action_key"),
+                        slot1.get("best_switch_action_key"),
+                        slot1.get("best_non_switch_action_key"),
+                    )
                     top_suspicious.append({
                         "battle_tag": battle_tag,
                         "arm": arm,
@@ -274,12 +447,22 @@ def _collect_slot_data(
                         "chosen": slot1.get("chosen_action_key"),
                         "best_switch": slot1.get(
                             "best_switch_action_key"
+                        ),
+                        "best_non_switch": slot1.get(
+                            "best_non_switch_action_key"
                         ),
                         "delta": delta,
                         "kind": "switch_with_negative_delta",
+                        "attribution": attr,
                     })
                 if (not slot1.get("chosen_is_switch")
                         and delta is not None and delta > 0):
+                    attr = _build_attribution(
+                        ss, 1,
+                        slot1.get("chosen_action_key"),
+                        slot1.get("best_switch_action_key"),
+                        slot1.get("best_non_switch_action_key"),
+                    )
                     top_suspicious.append({
                         "battle_tag": battle_tag,
                         "arm": arm,
@@ -289,8 +472,12 @@ def _collect_slot_data(
                         "best_switch": slot1.get(
                             "best_switch_action_key"
                         ),
+                        "best_non_switch": slot1.get(
+                            "best_non_switch_action_key"
+                        ),
                         "delta": delta,
                         "kind": "stay_with_positive_delta",
+                        "attribution": attr,
                     })
             else:
                 quality["no_best_switch"] += 1
@@ -531,18 +718,42 @@ def _write_markdown(
     if not sorted_susp:
         lines.append("No suspicious turns found.")
     else:
-        lines.append("| battle | arm | turn | slot | kind | chosen | best_switch | delta |")
-        lines.append("|---|---|---|---|---|---|---|---|")
+        # Phase ANALYZER-1: attribution columns. The
+        # `our_active` / `opp_active` / `best_switch_target`
+        # columns are now first-class; readers can see at
+        # a glance whether the switch target is from our
+        # bench or matches an opponent active.
+        lines.append(
+            "| battle | arm | turn | slot | kind | "
+            "our_active | opp_active | chosen | "
+            "best_switch_target | best_non_switch | "
+            "delta | mirror |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
         for s in sorted_susp:
+            attr = s.get("attribution", {}) or {}
+            our_a = attr.get("our_active") or "-"
+            opp_a = attr.get("opp_active") or "-"
+            bs_t = (
+                attr.get("best_switch_target") or "-"
+            )
+            bns = s.get("best_non_switch") or "-"
+            mirror = (
+                "Y" if attr.get(
+                    "mirror_match_with_opp_active"
+                ) else ""
+            )
             lines.append(
                 f"| {s.get('battle_tag', '?')} | "
                 f"{s.get('arm', '?')} | "
                 f"{s.get('turn', '?')} | "
                 f"{s.get('slot', '?')} | "
                 f"{s.get('kind', '?')} | "
+                f"`{our_a}` | `{opp_a}` | "
                 f"`{s.get('chosen', '?')}` | "
-                f"`{s.get('best_switch', '?')}` | "
-                f"{s.get('delta', 0):.2f} |"
+                f"`{bs_t}` | `{bns}` | "
+                f"{s.get('delta', 0):.2f} | "
+                f"{mirror} |"
             )
     lines.append("")
     lines.append("## Per-battle summary")

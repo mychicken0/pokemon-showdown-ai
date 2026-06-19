@@ -496,5 +496,316 @@ class TestAnalyzerCLI(unittest.TestCase):
             self.assertTrue(os.path.exists(json_path))
 
 
+class TestAttributionParser(unittest.TestCase):
+    """Phase ANALYZER-1: action-key attribution parsing
+    and mirror-match labeling. Pure unit tests.
+    """
+
+    def setUp(self):
+        from analyze_doubles_switch_per_turn import (
+            _attribution_labels,
+            _build_attribution,
+            _parse_action_key,
+        )
+        self.parse = _parse_action_key
+        self.labels = _attribution_labels
+        self.build = _build_attribution
+
+    def test_parse_switch_action_target_species(self):
+        p = self.parse("switch|sneasler|0")
+        self.assertEqual(p["category"], "switch")
+        self.assertEqual(p["switch_target"], "sneasler")
+        self.assertEqual(p["species_or_move"], "sneasler")
+        self.assertEqual(p["target"], "0")
+        self.assertTrue(p["is_switch"])
+
+    def test_parse_move_action_not_switch_target(self):
+        p = self.parse("move|rockslide|0")
+        self.assertEqual(p["category"], "move")
+        self.assertIsNone(p["switch_target"])
+        self.assertEqual(p["species_or_move"], "rockslide")
+        self.assertEqual(p["target"], "0")
+        self.assertFalse(p["is_switch"])
+
+    def test_parse_handles_none(self):
+        p = self.parse(None)
+        self.assertEqual(p["category"], "unknown")
+        self.assertIsNone(p["switch_target"])
+        self.assertFalse(p["is_switch"])
+
+    def test_parse_handles_short_key(self):
+        p = self.parse("unknown")
+        self.assertEqual(p["category"], "unknown")
+
+    def test_parse_handles_non_string(self):
+        p = self.parse(42)
+        self.assertEqual(p["category"], "unknown")
+
+    def test_attribution_labels_slot0(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        a = self.labels(ss, 0)
+        self.assertEqual(a["our_active"], "tyranitar")
+        self.assertEqual(a["opp_active"], "sneasler")
+        self.assertEqual(a["our_active_slot0"], "tyranitar")
+        self.assertEqual(a["our_active_slot1"], "incineroar")
+        self.assertEqual(a["opp_active_slot0"], "sneasler")
+        self.assertEqual(a["opp_active_slot1"], "garchomp")
+
+    def test_attribution_labels_slot1(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        a = self.labels(ss, 1)
+        self.assertEqual(a["our_active"], "incineroar")
+        self.assertEqual(a["opp_active"], "garchomp")
+
+    def test_attribution_labels_missing_species(self):
+        ss = {}
+        a = self.labels(ss, 0)
+        self.assertIsNone(a["our_active"])
+        self.assertIsNone(a["opp_active"])
+
+
+class TestMirrorMatchAttribution(unittest.TestCase):
+    """Phase ANALYZER-1: mirror-match case where
+    our_switch_target species == opp_active species.
+    The analyzer must label them differently to avoid
+    reader confusion.
+    """
+
+    def setUp(self):
+        from analyze_doubles_switch_per_turn import (
+            _build_attribution,
+        )
+        self.build = _build_attribution
+
+    def test_mirror_match_detected(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        a = self.build(
+            ss, 0,
+            "move|rockslide|0",
+            "switch|sneasler|0",
+            "move|rockslide|0",
+        )
+        # Best switch target == opp active slot0.
+        self.assertEqual(
+            a["best_switch_target"], "sneasler"
+        )
+        self.assertEqual(a["opp_active"], "sneasler")
+        self.assertTrue(a["mirror_match_with_opp_active"])
+
+    def test_mirror_match_not_detected_when_different(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["garchomp", "sneasler"],
+        }
+        a = self.build(
+            ss, 0,
+            "move|rockslide|0",
+            "switch|sneasler|0",
+            "move|rockslide|0",
+        )
+        # Best switch target sneasler != opp slot0 garchomp.
+        self.assertFalse(a["mirror_match_with_opp_active"])
+
+    def test_mirror_match_labeling_distinct(self):
+        """The attribution fields must label our_switch_target
+        separately from opp_active. Even when species match,
+        the labels are different (one is our bench candidate,
+        the other is opponent active).
+        """
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        a = self.build(
+            ss, 0,
+            None,
+            "switch|sneasler|0",
+            None,
+        )
+        # best_switch_target is the parsed switch target.
+        self.assertEqual(a["best_switch_target"], "sneasler")
+        # opp_active is the parsed opp slot0.
+        self.assertEqual(a["opp_active"], "sneasler")
+        # The keys are distinct so consumers can tell them
+        # apart.
+        self.assertIn("best_switch_target", a)
+        self.assertIn("opp_active", a)
+        self.assertNotEqual(
+            list(a.keys()).index("best_switch_target"),
+            list(a.keys()).index("opp_active"),
+        )
+
+
+class TestBackwardsCompat(unittest.TestCase):
+    """Phase ANALYZER-1: old JSON keys preserved, new
+    fields added.
+    """
+
+    def setUp(self):
+        from analyze_doubles_switch_per_turn import (
+            _build_attribution,
+            _collect_slot_data,
+            _parse_action_key,
+        )
+        self.build = _build_attribution
+        self.collect = _collect_slot_data
+        self.parse = _parse_action_key
+
+    def test_old_keys_preserved_in_top_suspicious(self):
+        """The existing ``chosen``, ``best_switch``,
+        ``delta``, ``kind`` keys must remain.
+        """
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        turn = {
+            "turn": 4,
+            "state_snapshot": ss,
+            "switch_counterfactual": {
+                "slot0": {
+                    "chosen_is_switch": False,
+                    "chosen_action_key": "move|rockslide|0",
+                    "best_switch_action_key": "switch|sneasler|0",
+                    "best_non_switch_action_key": "move|rockslide|0",
+                    "switch_vs_non_switch_delta": 92.4,
+                    "reason_codes": [],
+                }
+            },
+        }
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "audit_turns": [turn],
+        }
+        out = self.collect([row])
+        susp = out["top_suspicious"]
+        self.assertEqual(len(susp), 1)
+        s = susp[0]
+        # Old keys.
+        for k in (
+            "battle_tag", "arm", "turn", "slot", "kind",
+            "chosen", "best_switch", "delta",
+        ):
+            self.assertIn(k, s)
+        # New key.
+        self.assertIn("attribution", s)
+        # best_non_switch also added.
+        self.assertIn("best_non_switch", s)
+
+    def test_new_attribution_fields_present(self):
+        """New fields our_active, opp_active,
+        best_switch_target must appear in
+        top_suspicious[*].attribution.
+        """
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        turn = {
+            "turn": 4,
+            "state_snapshot": ss,
+            "switch_counterfactual": {
+                "slot0": {
+                    "chosen_is_switch": False,
+                    "chosen_action_key": "move|rockslide|0",
+                    "best_switch_action_key": "switch|sneasler|0",
+                    "best_non_switch_action_key": "move|rockslide|0",
+                    "switch_vs_non_switch_delta": 92.4,
+                    "reason_codes": [],
+                }
+            },
+        }
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "audit_turns": [turn],
+        }
+        out = self.collect([row])
+        s = out["top_suspicious"][0]
+        attr = s["attribution"]
+        for k in (
+            "our_active", "opp_active",
+            "our_active_slot0", "our_active_slot1",
+            "opp_active_slot0", "opp_active_slot1",
+            "best_switch_target", "best_switch_target_raw",
+            "selected_action_key", "mirror_match_with_opp_active",
+        ):
+            self.assertIn(k, attr)
+
+
+class TestMarkdownAttributionColumns(unittest.TestCase):
+    """Phase ANALYZER-1: markdown table includes
+    attribution columns.
+    """
+
+    def setUp(self):
+        from analyze_doubles_switch_per_turn import (
+            _write_markdown,
+        )
+        self.write_md = _write_markdown
+
+    def test_markdown_includes_attribution_columns(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        turn = {
+            "turn": 4,
+            "state_snapshot": ss,
+            "switch_counterfactual": {
+                "slot0": {
+                    "chosen_is_switch": False,
+                    "chosen_action_key": "move|rockslide|0",
+                    "best_switch_action_key": "switch|sneasler|0",
+                    "best_non_switch_action_key": "move|rockslide|0",
+                    "switch_vs_non_switch_delta": 92.4,
+                    "reason_codes": [],
+                }
+            },
+        }
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "audit_turns": [turn],
+        }
+        from analyze_doubles_switch_per_turn import (
+            _collect_slot_data,
+            _delta_summary,
+        )
+        data = _collect_slot_data([row])
+        d_summ = _delta_summary(
+            [s["delta"] for s in data["top_suspicious"]]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = os.path.join(tmp, "out.md")
+            self.write_md(
+                ["test.jsonl"], data, d_summ, 5, md_path
+            )
+            with open(md_path) as f:
+                content = f.read()
+        # Required columns per spec.
+        for col in (
+            "our_active", "opp_active",
+            "best_switch_target", "best_non_switch",
+        ):
+            self.assertIn(col, content)
+        # Old columns preserved.
+        self.assertIn("chosen", content)
+        self.assertIn("delta", content)
+
+
 if __name__ == "__main__":
     unittest.main()
