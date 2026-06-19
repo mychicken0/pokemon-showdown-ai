@@ -1232,6 +1232,58 @@ def choose_four_from_six(
             seed=seed
         )
 
+    elif policy == "learned_preview_v3d1":
+        # Phase PREVIEW-5: averaged perceptron trained on
+        # the V3c balanced VGC dataset with V3b + V3d.1
+        # features (30 features total). Opt-in only.
+        # Default matchup_top4_v3 is unchanged. No model
+        # artifact exists yet; this branch is inert unless
+        # the model file is created by an explicit
+        # training run.
+        from vgc2026_phaseV3a_learn_preview import (
+            choose_plan_with_scorer,
+            load_model,
+        )
+        from vgc2026_phaseV3d1_train import (
+            V3D1_MODEL_PATH,
+            V3D1_SCHEMA_VERSION,
+        )
+        import os as _os_v3d1
+        if not _os_v3d1.path.isfile(V3D1_MODEL_PATH):
+            raise FileNotFoundError(
+                f"learned_preview_v3d1 model not found at "
+                f"{V3D1_MODEL_PATH}. Train with "
+                f"vgc2026_phaseV3d1_train.py first."
+            )
+        model = load_model(V3D1_MODEL_PATH)
+        schema_version = (
+            model.get("metadata", {}).get("schema_version")
+        )
+        if schema_version != V3D1_SCHEMA_VERSION:
+            raise ValueError(
+                f"Incompatible schema version: "
+                f"{schema_version!r}. Expected "
+                f"{V3D1_SCHEMA_VERSION!r}."
+            )
+        weights = model["weights"]
+        bias = model["bias"]
+        feature_names = model["feature_names"]
+        chosen, lead_2, back_2 = choose_plan_with_scorer(
+            our_team,
+            opponent_team,
+            weights,
+            bias,
+            feature_names,
+        )
+        return PreviewResult(
+            chosen_4=list(chosen),
+            lead_2=list(lead_2),
+            back_2=list(back_2),
+            scores=[],
+            policy="learned_preview_v3d1",
+            seed=seed
+        )
+
     else:
         raise ValueError(f"Unknown policy: {policy}")
 

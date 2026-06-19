@@ -27,6 +27,202 @@ from doubles_battle_logger import DoublesBattleLogger
 from doubles_decision_audit_logger import DoublesDecisionAuditLogger
 
 
+
+
+# Phase BEHAVIOR-12: Helper to check if an action is an
+# attack (non-Protect, non-switch, non-pass) for the
+# expected-faint penalty.
+_PROTECT_LIKE_MOVE_IDS_B12 = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "banefulbunker", "silktrap", "burningbulwark",
+    "obstruct", "maxguard",
+})
+
+
+def _is_attack_action_under_expected_faint(order):
+    """Phase BEHAVIOR-12: check if an action is a
+    non-Protect, non-switch, non-pass action.
+
+    Used to gate the expected-faint attack penalty.
+    Returns True for attack moves only.
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    move_id = getattr(inner, "id", "")
+    if not move_id:
+        return False
+    if move_id.lower() == "pass":
+        return False
+    # Switch action has a pokemon attribute, not id.
+    if hasattr(inner, "pokemon"):
+        return False
+    # Protect-like action.
+    if move_id.lower() in _PROTECT_LIKE_MOVE_IDS_B12:
+        return False
+    return True
+
+
+def _is_protect_like_action(order):
+    """Phase BEHAVIOR-15: True iff the order's move is
+    a protect-like action. Reuses the same move-id
+    frozenset as BEHAVIOR-12.
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    move_id = getattr(inner, "id", "")
+    if not move_id:
+        return False
+    return move_id.lower() in _PROTECT_LIKE_MOVE_IDS_B12
+
+
+def _is_switch_action(order):
+    """Phase BEHAVIOR-15: True iff the order is a
+    switch action (a SingleBattleOrder whose .order
+    is a Pokemon).
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    return hasattr(inner, "pokemon")
+
+
+def _apply_piecewise_expected_faint_to_slot(
+    slot_scores,
+    slot_orders,
+    expected_faint,
+    config,
+):
+    """Phase BEHAVIOR-15: apply piecewise expected-faint
+    attack penalty to a single slot's score map.
+
+    Mutates slot_scores in place. Source of attack_lead
+    is the same map (slot_scores) that drives final
+    selection and audit, so the post-adjustment map is
+    what _compute_joint_scores and v2l1_raw_scores see.
+
+    No-op if:
+    - enable_speed_priority_piecewise_expected_faint_policy
+      is False
+    - enable_speed_priority_awareness is False
+    - expected_faint is False
+
+    Otherwise:
+    - protect_score = max score of protect-like actions
+    - best_attack = max score of non-Protect, non-switch,
+      non-pass actions
+    - lead = best_attack - protect_score
+    - select penalty from configured bands
+    - subtract penalty from every attack action in slot
+
+    Note: when this helper runs (gated by
+    enable_speed_priority_piecewise_expected_faint_policy=True),
+    the BEHAVIOR-12 flat penalty in score_action is
+    skipped, so this is the only adjustment applied
+    to attack scores in the slot.
+    """
+    if not expected_faint:
+        return
+    if not getattr(
+        config, "enable_speed_priority_awareness", True
+    ):
+        return
+    if not getattr(
+        config,
+        "enable_speed_priority_piecewise_expected_faint_policy",
+        False,
+    ):
+        return
+    if not slot_orders or not slot_scores:
+        return
+    # Find protect_score and best_attack.
+    protect_score = None
+    best_attack = None
+    for order in slot_orders:
+        score = slot_scores.get(id(order))
+        if score is None:
+            continue
+        if _is_protect_like_action(order):
+            if protect_score is None or score > protect_score:
+                protect_score = score
+            continue
+        if _is_switch_action(order):
+            continue
+        if not _is_attack_action_under_expected_faint(order):
+            # pass or unknown — not an attack target
+            continue
+        if best_attack is None or score > best_attack:
+            best_attack = score
+    if protect_score is None or best_attack is None:
+        return
+    lead = best_attack - protect_score
+    # Select penalty by band (first match wins).
+    high_thr = float(
+        getattr(
+            config,
+            "speed_priority_expected_faint_attack_lead_high",
+            500.0,
+        )
+    )
+    mid_thr = float(
+        getattr(
+            config,
+            "speed_priority_expected_faint_attack_lead_mid",
+            250.0,
+        )
+    )
+    low_thr = float(
+        getattr(
+            config,
+            "speed_priority_expected_faint_attack_lead_low",
+            100.0,
+        )
+    )
+    if lead > high_thr:
+        penalty = float(
+            getattr(
+                config,
+                "speed_priority_expected_faint_penalty_high_lead",
+                0.0,
+            )
+        )
+    elif lead > mid_thr:
+        penalty = float(
+            getattr(
+                config,
+                "speed_priority_expected_faint_penalty_mid_lead",
+                75.0,
+            )
+        )
+    elif lead > low_thr:
+        penalty = float(
+            getattr(
+                config,
+                "speed_priority_expected_faint_penalty_low_lead",
+                200.0,
+            )
+        )
+    else:
+        penalty = float(
+            getattr(
+                config,
+                "speed_priority_expected_faint_penalty_close_lead",
+                250.0,
+            )
+        )
+    if penalty <= 0.0:
+        return
+    # Apply to attack actions in this slot.
+    for order in slot_orders:
+        if not _is_attack_action_under_expected_faint(order):
+            continue
+        sid = id(order)
+        if sid in slot_scores:
+            slot_scores[sid] = slot_scores[sid] - penalty
+
+
+
 @dataclass
 class DoublesDamageAwareConfig:
     # Phase 5: Meta-Aware Opponent Modeling (old, disabled by default)
@@ -152,6 +348,46 @@ class DoublesDamageAwareConfig:
     speed_priority_attack_penalty_low: float = 25.0
     speed_priority_attack_penalty_high: float = 45.0
     speed_priority_use_scaled_penalty: bool = True
+    # Phase BEHAVIOR-11: Expected-faint Protect bonus.
+    # Applied when the active slot is expected to faint
+    # before moving and Protect is a legal candidate.
+    # This is in addition to the existing is_threatened
+    # bonus. Set to 0.0 to disable (pre-fix behavior).
+    speed_priority_protect_bonus_under_expected_faint: float = 200.0
+    # Phase BEHAVIOR-12: Expected-faint attack penalty.
+    # Applied to non-Protect, non-switch, non-pass actions
+    # when the active slot is expected to faint before
+    # moving. Set to 0.0 to disable.
+    speed_priority_expected_faint_attack_penalty: float = 75.0
+    # Phase BEHAVIOR-16: Expected-faint Protect baseline
+    # floor. When the active slot is expected to faint
+    # before moving AND the candidate is a Protect-like
+    # action AND the current Protect score is below the
+    # floor, the score is raised to the floor (max-style,
+    # not additive). This gives Protect a viable score
+    # even when the older is_threatened branch did not
+    # activate, so the piecewise attack penalty has
+    # something to compete with. Set to 0.0 to disable
+    # (revert to pre-BEHAVIOR-16 branch behavior).
+    speed_priority_expected_faint_protect_score_floor: float = 240.0
+    # Phase BEHAVIOR-15: opt-in piecewise expected-faint
+    # attack penalty. When True, the penalty depends on
+    # the slot's (best_attack - protect) attack_lead and
+    # replaces the BEHAVIOR-12 flat 75.0 only if the
+    # legacy single-knob above is 0.0. Default OFF.
+    enable_speed_priority_piecewise_expected_faint_policy: bool = False
+    # Phase BEHAVIOR-15: piecewise band thresholds on
+    # attack_lead = best_attack_score - protect_score
+    # in the same slot. The first matching band wins.
+    speed_priority_expected_faint_attack_lead_high: float = 500.0
+    speed_priority_expected_faint_attack_lead_mid: float = 250.0
+    speed_priority_expected_faint_attack_lead_low: float = 100.0
+    # Phase BEHAVIOR-15: per-band penalty. Each is
+    # independently disable-able by setting to 0.0.
+    speed_priority_expected_faint_penalty_high_lead: float = 0.0
+    speed_priority_expected_faint_penalty_mid_lead: float = 75.0
+    speed_priority_expected_faint_penalty_low_lead: float = 200.0
+    speed_priority_expected_faint_penalty_close_lead: float = 250.0
 
     # Phase 6.3: Ability Hard Safety Only
     enable_ability_hard_safety_only: bool = True
@@ -1960,6 +2196,15 @@ class DoublesDamageAwarePlayer(Player):
         self._speed_priority_switch_bonus_applied = {}
         self._protected_due_to_speed_priority = {}
         self._expected_to_faint_before_moving = {}
+        # Phase BEHAVIOR-17: per-turn diagnostic for the
+        # Protect floor path audit. Populated in
+        # score_action (the wrapper) for every Protect-
+        # like action. Read at the end of choose_move
+        # and passed to the audit logger. Reset at the
+        # start of each choose_move call. Keyed by
+        # battle_tag -> slot_idx -> list of action-level
+        # debug dicts.
+        self._b17_protect_floor_debug = {}
         self._order_aware_overkill_penalty_applied = {}
 
         # Phase 6.3 tracking state (per battle tag)
@@ -2938,8 +3183,29 @@ class DoublesDamageAwarePlayer(Player):
                 if opp.species not in result["faster_opponents"]:
                     result["faster_opponents"].append(opp.species)
 
-                if not (is_protect or is_switch) and candidate_priority == 0:
-                    result["faint_before_moving"] = True
+                # Phase BEHAVIOR-18: candidate-independent
+                # expected-faint (speed-threat branch).
+                # The flag describes the active-slot state,
+                # not the candidate action type. If the slot
+                # is speed-threatened, faint_before_moving is
+                # True regardless of whether the candidate is
+                # Protect, switch, or attack. The downstream
+                # BEHAVIOR-16 Protect floor and BEHAVIOR-12/15
+                # attack penalties still gate on their own
+                # action-type checks, so Protect/switch are
+                # not affected.
+                #
+                # Note: in real poke-env, Protect has
+                # priority=4 and switch has priority=6, so
+                # the original ``candidate_priority == 0``
+                # check would still exclude Protect and
+                # switch. The equivalent smallest safe
+                # implementation removes BOTH the
+                # ``is_protect or is_switch`` gating AND
+                # the ``candidate_priority == 0`` check,
+                # so the flag fires whenever the slot is
+                # speed-threatened.
+                result["faint_before_moving"] = True
 
                 # Compute confidence for speed threat -- use max multiplier across both opponent types
                 max_threat = get_max_type_threat(our_active, opp, battle)
@@ -2969,8 +3235,15 @@ class DoublesDamageAwarePlayer(Player):
                 for m_id, m in getattr(opp, "moves", {}).items():
                     opp_max_prio = max(opp_max_prio, self.get_move_priority(m))
 
-                if not (is_protect or is_switch) and candidate_priority <= opp_max_prio:
-                    result["faint_before_moving"] = True
+                # Phase BEHAVIOR-18: candidate-independent
+                # expected-faint (priority branch). Same
+                # rationale as the speed-threat branch
+                # above: the flag describes the slot
+                # state, not the candidate action type.
+                # The flag fires whenever the slot is
+                # priority-threatened, regardless of the
+                # candidate's priority.
+                result["faint_before_moving"] = True
 
                 # Compute confidence for priority threat -- use max multiplier
                 max_prio_threat = get_max_type_threat(our_active, opp, battle)
@@ -3019,6 +3292,79 @@ class DoublesDamageAwarePlayer(Player):
                 ):
                     return True
         return False
+
+    def _build_b17_protect_floor_debug_for_turn(
+        self, battle_tag, valid_orders
+    ):
+        """Phase BEHAVIOR-17: aggregate the per-action
+        Protect floor diagnostic into a per-turn,
+        per-slot JSON-safe dict.
+
+        Returns an empty dict if no Protect-like actions
+        were scored in this turn.
+
+        The per-action debug is populated by score_action
+        (the wrapper) for every Protect-like action,
+        regardless of whether the floor conditions are
+        met. This aggregation reads that dict and
+        computes:
+
+        - expected_faint: from the first action's
+          recorded flag (all actions in the slot share
+          the same expected_faint value at scoring time)
+        - protect_like_keys: pipe-joined list of
+          order_key strings
+        - protect_score_before_floor: best pre-floor
+          score across all Protect-like actions
+        - protect_score_after_floor: best post-floor
+          score
+        - floor_applied: True iff any action had
+          floor_applied=True
+        - floor_value: the configured floor
+        - selected_action_key: the selected joint key
+          for this slot (from v2l1_selected_joint_key)
+        - action_count: number of Protect-like actions
+          scored
+        """
+        per_action = self._b17_protect_floor_debug.get(
+            battle_tag, {}
+        )
+        if not per_action:
+            return {}
+        sel_joint = getattr(self, "_v2l1_selected_joint_key", None) or ""
+        if not isinstance(sel_joint, str):
+            sel_joint = ""
+        sel_keys = sel_joint.split(";") if sel_joint else ["", ""]
+        out = {}
+        for slot_idx in (0, 1):
+            actions = per_action.get(slot_idx, [])
+            if not actions:
+                continue
+            keys = [a["order_key"] for a in actions]
+            pre_vals = [a["pre_floor_score"] for a in actions]
+            post_vals = [a["post_floor_score"] for a in actions]
+            any_applied = any(a["floor_applied"] for a in actions)
+            expected_faint = actions[0]["expected_faint"]
+            floor_value = actions[0]["floor_value"]
+            out["slot{}".format(slot_idx)] = {
+                "expected_faint": bool(expected_faint),
+                "protect_like_keys": keys,
+                "protect_score_before_floor": (
+                    max(pre_vals) if pre_vals else None
+                ),
+                "protect_score_after_floor": (
+                    max(post_vals) if post_vals else None
+                ),
+                "floor_applied": bool(any_applied),
+                "floor_value": float(floor_value),
+                "action_count": len(actions),
+                "selected_action_key": (
+                    sel_keys[slot_idx]
+                    if slot_idx < len(sel_keys)
+                    else ""
+                ),
+            }
+        return out
 
     def has_legal_protect_like_action(
         self, active, battle, slot_index=None, valid_orders=None
@@ -4031,7 +4377,7 @@ class DoublesDamageAwarePlayer(Player):
             self._active_config_override = config
 
         try:
-            return self._score_action_impl(
+            score = self._score_action_impl(
                 order,
                 active_idx,
                 battle,
@@ -4039,6 +4385,121 @@ class DoublesDamageAwarePlayer(Player):
                 is_selected=is_selected,
                 in_spread_check=in_spread_check,
             )
+            # Phase BEHAVIOR-12: Expected-faint attack penalty.
+            # Applied to non-Protect, non-switch, non-pass
+            # actions when the active slot is expected to
+            # faint before moving. Set config to 0.0 to disable.
+            # Phase BEHAVIOR-15: when
+            # enable_speed_priority_piecewise_expected_faint_policy
+            # is True, the piecewise penalty replaces this
+            # flat one and is applied later at the slot-score-
+            # map level (see choose_move seam).
+            if (
+                getattr(
+                    self.config,
+                    "enable_speed_priority_awareness",
+                    True,
+                )
+                and getattr(
+                    self.config,
+                    "speed_priority_expected_faint_attack_penalty",
+                    75.0,
+                )
+                > 0.0
+                and not getattr(
+                    self.config,
+                    "enable_speed_priority_piecewise_expected_faint_policy",
+                    False,
+                )
+                and self._expected_to_faint_before_moving.get(
+                    getattr(battle, "battle_tag", ""), {}
+                ).get(active_idx, False)
+                and _is_attack_action_under_expected_faint(order)
+            ):
+                score -= float(
+                    self.config.speed_priority_expected_faint_attack_penalty
+                )
+            # Phase BEHAVIOR-16: Expected-faint Protect
+            # baseline floor. Applied as max(score, floor)
+            # so it never reduces an existing higher
+            # Protect score. Only triggers for Protect-like
+            # candidates in slots with
+            # expected_to_faint_before_moving=True. Does
+            # NOT apply to attack, switch, pass, or
+            # support moves. Independent of the BEHAVIOR-12
+            # flat attack penalty and the BEHAVIOR-15
+            # piecewise attack penalty.
+            _pre_floor_score = score
+            _floor_conditions_met = (
+                getattr(
+                    self.config,
+                    "enable_speed_priority_awareness",
+                    True,
+                )
+                and float(
+                    getattr(
+                        self.config,
+                        "speed_priority_expected_faint_protect_score_floor",
+                        240.0,
+                    )
+                )
+                > 0.0
+                and self._expected_to_faint_before_moving.get(
+                    getattr(battle, "battle_tag", ""), {}
+                ).get(active_idx, False)
+                and _is_protect_like_action(order)
+            )
+            if _floor_conditions_met:
+                floor = float(
+                    self.config
+                    .speed_priority_expected_faint_protect_score_floor
+                )
+                if score < floor:
+                    score = floor
+            # Phase BEHAVIOR-17: per-action Protect floor
+            # diagnostic. Record the pre-floor and post-
+            # floor scores for every Protect-like action,
+            # regardless of whether the floor conditions
+            # are met. This is read-only instrumentation;
+            # it does not change scoring.
+            if _is_protect_like_action(order):
+                _bt = getattr(battle, "battle_tag", "")
+                _ef = self._expected_to_faint_before_moving.get(
+                    _bt, {}
+                ).get(active_idx, False)
+                _sp = getattr(
+                    self.config,
+                    "enable_speed_priority_awareness",
+                    True,
+                )
+                _fv = float(
+                    getattr(
+                        self.config,
+                        "speed_priority_expected_faint_protect_score_floor",
+                        240.0,
+                    )
+                )
+                _applied = bool(
+                    _floor_conditions_met and _pre_floor_score < _fv
+                )
+                _inner = getattr(order, "order", None)
+                _mid = getattr(_inner, "id", "?")
+                _tgt = getattr(order, "move_target", 0)
+                _ok = "move|{}|{}".format(_mid, _tgt)
+                if _bt not in self._b17_protect_floor_debug:
+                    self._b17_protect_floor_debug[_bt] = {0: [], 1: []}
+                if active_idx not in self._b17_protect_floor_debug[_bt]:
+                    self._b17_protect_floor_debug[_bt][active_idx] = []
+                self._b17_protect_floor_debug[_bt][active_idx].append({
+                    "expected_faint": _ef,
+                    "pre_floor_score": _pre_floor_score,
+                    "post_floor_score": score,
+                    "floor_applied": _applied,
+                    "floor_value": _fv,
+                    "sp_enabled": _sp,
+                    "order_key": _ok,
+                })
+            return score
         finally:
             self._pure_scoring_mode = old_pure
             self._active_config_override = old_override
@@ -4251,9 +4712,35 @@ class DoublesDamageAwarePlayer(Player):
             self._priority_opponents[battle_tag][active_idx] = threat_info[
                 "priority_opponents"
             ]
-            self._expected_to_faint_before_moving[battle_tag][active_idx] = threat_info[
-                "faint_before_moving"
-            ]
+
+        # Phase BEHAVIOR-18: expected_to_faint_before_moving
+        # is now set for EVERY scored order, not just the
+        # selected one. This is required for the
+        # BEHAVIOR-16 Protect floor to work: the floor
+        # checks expected_to_faint_before_moving at
+        # score_action time, but the selected action is
+        # only known AFTER joint scoring. Previously
+        # the flag was only set when is_selected=True,
+        # so non-selected Protect orders never saw the
+        # expected-faint state and the floor never
+        # applied. The other speed-priority flags
+        # (_speed_priority_threatened, _faster_opponents,
+        # _priority_opponents) remain gated by
+        # is_selected because they are used for
+        # audit/display only, not for scoring.
+        active_opps_for_ef = [
+            opp for opp in battle.opponent_active_pokemon if opp
+        ]
+        threat_info_for_ef = self.estimate_speed_priority_threat(
+            active_mon, active_opps_for_ef, battle, order
+        )
+        if battle_tag not in self._expected_to_faint_before_moving:
+            self._expected_to_faint_before_moving[battle_tag] = {
+                0: False, 1: False
+            }
+        self._expected_to_faint_before_moving[battle_tag][active_idx] = (
+            threat_info_for_ef["faint_before_moving"]
+        )
 
         # Move orders
         if isinstance(order.order, Move):
@@ -4384,6 +4871,24 @@ class DoublesDamageAwarePlayer(Player):
                                 self._protected_due_to_speed_priority[battle_tag][
                                     active_idx
                                 ] = True
+                    # Phase BEHAVIOR-11: Expected-faint Protect
+                    # bonus. Applied in addition to the
+                    # is_threatened bonus when the active slot
+                    # is expected to faint before moving.
+                    # Does not change existing audit flag
+                    # semantics (is_threatened bonus path is
+                    # unchanged). The new bonus is reflected
+                    # in the base_protect score only.
+                    if (
+                        self.config.enable_speed_priority_awareness
+                        and self.config.speed_priority_protect_bonus_under_expected_faint > 0.0
+                        and self._expected_to_faint_before_moving.get(
+                            battle_tag, {}
+                        ).get(active_idx, False)
+                    ):
+                        base_protect += (
+                            self.config.speed_priority_protect_bonus_under_expected_faint
+                        )
 
                     if self.config.enable_protect_threat_refinement:
                         max_threat = 0.0
@@ -6224,6 +6729,36 @@ class DoublesDamageAwarePlayer(Player):
                             else:
                                 slot_1_scores[sid] = new_score
 
+            # 4b. Phase BEHAVIOR-15: opt-in piecewise
+            # expected-faint attack penalty. Applied
+            # to slot_*_scores AFTER all per-candidate
+            # scoring adjustments, BEFORE
+            # _compute_joint_scores. The same map drives
+            # both final selection and v2l1_raw_scores
+            # audit, so the adjustment reaches both.
+            if getattr(
+                config,
+                "enable_speed_priority_piecewise_expected_faint_policy",
+                False,
+            ):
+                _ef_map = self._expected_to_faint_before_moving.get(
+                    getattr(battle, "battle_tag", ""), {}
+                )
+                if valid_orders and len(valid_orders) > 0:
+                    _apply_piecewise_expected_faint_to_slot(
+                        slot_0_scores,
+                        valid_orders[0],
+                        _ef_map.get(0, False),
+                        config,
+                    )
+                if valid_orders and len(valid_orders) > 1:
+                    _apply_piecewise_expected_faint_to_slot(
+                        slot_1_scores,
+                        valid_orders[1],
+                        _ef_map.get(1, False),
+                        config,
+                    )
+
             # 5. Canonical joint scoring
             scored_joint_orders = self._compute_joint_scores(
                 battle,
@@ -6246,6 +6781,16 @@ class DoublesDamageAwarePlayer(Player):
     def choose_move(self, battle: AbstractBattle) -> BattleOrder:
         if not isinstance(battle, DoubleBattle):
             return self.choose_random_move(battle)
+
+        # Phase BEHAVIOR-17: reset the per-turn Protect
+        # floor diagnostic for this battle_tag. The dict
+        # is repopulated by score_action (the wrapper)
+        # for every Protect-like action in this turn.
+        _bt0 = getattr(battle, "battle_tag", "")
+        if _bt0 and _bt0 in self._b17_protect_floor_debug:
+            # Clear per-slot lists but keep the entry so
+            # we know the battle was processed.
+            self._b17_protect_floor_debug[_bt0] = {0: [], 1: []}
 
         # V2l.1 — execution-derived invocation marker.
         # The canonical engine writes a fresh, non-empty
@@ -10747,6 +11292,17 @@ class DoublesDamageAwarePlayer(Player):
                         battle_tag, {0: False, 1: False}
                     )[1],
                 ],
+                # Phase BEHAVIOR-17: per-turn Protect
+                # floor diagnostic. Aggregated from the
+                # per-action debug dict populated by
+                # score_action. JSON-safe: only strings,
+                # numbers, booleans, and lists of
+                # primitives.
+                speed_priority_protect_floor_debug=(
+                    self._build_b17_protect_floor_debug_for_turn(
+                        battle_tag, valid_orders
+                    )
+                ),
                 speed_priority_switch_bonus_applied=[
                     self._speed_priority_switch_bonus_applied.setdefault(
                         battle_tag, {0: False, 1: False}

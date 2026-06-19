@@ -290,6 +290,7 @@ async def run_one_battle(
     account_prefix: str = ACCOUNT_PREFIX,
     account_run_id: str = "",
     enable_mega_evolution: bool = False,
+    enable_behavior_15_piecewise: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -371,6 +372,27 @@ async def run_one_battle(
     treatment_config = build_treatment_player_config(
         is_treatment, enable_mega_evolution
     )
+    # Phase BEHAVIOR-15: opt-in piecewise. Only
+    # applied to the treatment arm when the CLI
+    # flag is set. Default OFF keeps production
+    # scoring unchanged.
+    if is_treatment and enable_behavior_15_piecewise:
+        from bot_doubles_damage_aware import (
+            DoublesDamageAwareConfig,
+        )
+        piecewise_cfg = DoublesDamageAwareConfig(
+            enable_speed_priority_piecewise_expected_faint_policy=True
+        )
+        if treatment_config is None:
+            treatment_config = piecewise_cfg
+        else:
+            # Merge piecewise into existing treatment_config.
+            treatment_config = DoublesDamageAwareConfig(
+                **{
+                    **treatment_config.__dict__,
+                    "enable_speed_priority_piecewise_expected_faint_policy": True,
+                }
+            )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
     # completely BEFORE constructing either player. Each
     # side must call ControlledTeamPreviewPlayer(...) exactly
@@ -604,6 +626,17 @@ def main():
         ),
     )
     parser.add_argument(
+        "--enable-behavior-15-piecewise", action="store_true",
+        help=(
+            "Phase BEHAVIOR-15 probe: enable opt-in "
+            "piecewise expected-faint attack penalty "
+            "on the treatment arm. Default OFF. Does "
+            "NOT change the global "
+            "DoublesDamageAwareConfig default; only "
+            "the treatment-arm instance in this probe."
+        ),
+    )
+    parser.add_argument(
         "--audit-decisions", action="store_true",
         help=(
             "Phase BI-3F-1 probe: attach a "
@@ -720,6 +753,7 @@ def main():
                 account_prefix=args.account_prefix,
                 account_run_id=account_run_id,
                 enable_mega_evolution=args.enable_mega_evolution,
+                enable_behavior_15_piecewise=args.enable_behavior_15_piecewise,
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )
@@ -732,6 +766,7 @@ def main():
                 account_prefix=args.account_prefix,
                 account_run_id=account_run_id,
                 enable_mega_evolution=args.enable_mega_evolution,
+                enable_behavior_15_piecewise=args.enable_behavior_15_piecewise,
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )

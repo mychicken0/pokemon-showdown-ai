@@ -158,6 +158,8 @@ class DoublesDecisionAuditLogger:
         slot = slot if isinstance(slot, dict) else {}
         return {key: slot.get(key) for key in keys if key in slot}
 
+
+
     def _append_live_event(self, event):
         if not self.live_event_filepath or self._live_stream_failed:
             return
@@ -347,6 +349,34 @@ class DoublesDecisionAuditLogger:
         v4a_legal_1 = turn_data.get("v4a_legal_action_keys_slot1")
         if v4a_legal_1 is not None:
             v4a["v4a_legal_action_keys_slot1"] = v4a_legal_1
+        # Phase BEHAVIOR-9: speed-priority score-diff
+        # debug subdict (compact, only present when
+        # computed).
+        sp_score_debug = {}
+        for _s in (0, 1):
+            _p = turn_data.get(f"speed_priority_protect_score_slot{_s}")
+            _a = turn_data.get(f"speed_priority_best_attack_score_slot{_s}")
+            _d = turn_data.get(f"speed_priority_score_diff_slot{_s}")
+            if _p is not None:
+                sp_score_debug.setdefault("protect_score", []).append(_p)
+            elif "protect_score" in sp_score_debug:
+                sp_score_debug["protect_score"].append(None)
+            else:
+                pass
+            if _a is not None:
+                sp_score_debug.setdefault("best_attack_score", []).append(_a)
+            elif "best_attack_score" in sp_score_debug:
+                sp_score_debug["best_attack_score"].append(None)
+            else:
+                pass
+            if _d is not None:
+                sp_score_debug.setdefault("score_diff", []).append(_d)
+            elif "score_diff" in sp_score_debug:
+                sp_score_debug["score_diff"].append(None)
+            else:
+                pass
+        if sp_score_debug:
+            v4a["speed_priority_score_debug"] = sp_score_debug
         # Phase BI-1: voluntary switch telemetry.
         vsw = {
             "voluntary_switch_decision_eligible": turn_data.get(
@@ -512,6 +542,10 @@ class DoublesDecisionAuditLogger:
         order_aware_overkill_penalty_applied=None,
         expected_to_faint_before_moving=None,
         protected_due_to_speed_priority=None,
+        # Phase BEHAVIOR-17: per-turn Protect floor
+        # diagnostic. JSON-safe dict with per-slot
+        # pre/post floor scores and floor_applied flag.
+        speed_priority_protect_floor_debug=None,
         protect_like_available=None,
         switch_available=None,
         only_conditional_priority=None,
@@ -806,6 +840,15 @@ class DoublesDecisionAuditLogger:
         v2l1_safety_blocks_slot1=None,
         v2l1_selected_joint_key=None,
         v2l1_final_action_keys=None,
+        # Phase BEHAVIOR-9: speed-priority score-diff
+        # debug fields. Computed by the logger from the
+        # v2l1_raw_scores; no new scoring is done.
+        speed_priority_protect_score_slot0=None,
+        speed_priority_protect_score_slot1=None,
+        speed_priority_best_attack_score_slot0=None,
+        speed_priority_best_attack_score_slot1=None,
+        speed_priority_score_diff_slot0=None,
+        speed_priority_score_diff_slot1=None,
         # Phase V4a — RL/debug action identity.
         # These preserve one-per-side battle mechanic
         # variants such as Mega, Z-Move, Dynamax, and
@@ -1883,6 +1926,28 @@ class DoublesDecisionAuditLogger:
         turn_data["v2l1_raw_scores_slot1"] = (
             v2l1_raw_scores_slot1
         )
+        # Phase BEHAVIOR-9: compute and persist
+        # speed-priority score-diff debug fields from
+        # the v2l1_raw_scores. No new scoring is done.
+        for _slot_idx, _raw_key in (
+            (0, "v2l1_raw_scores_slot0"),
+            (1, "v2l1_raw_scores_slot1"),
+        ):
+            _p, _a, _d = _compute_slot_score_diff(
+                turn_data.get(_raw_key)
+            )
+            if _p is not None:
+                turn_data[
+                    f"speed_priority_protect_score_slot{_slot_idx}"
+                ] = _p
+            if _a is not None:
+                turn_data[
+                    f"speed_priority_best_attack_score_slot{_slot_idx}"
+                ] = _a
+            if _d is not None:
+                turn_data[
+                    f"speed_priority_score_diff_slot{_slot_idx}"
+                ] = _d
         turn_data["v2l1_safety_blocks_slot0"] = (
             v2l1_safety_blocks_slot0
         )
@@ -2048,6 +2113,102 @@ class DoublesDecisionAuditLogger:
         }
         for _k, _v in _narrow_per_slot_keys.items():
             turn_data[_k] = _v
+        # Phase BEHAVIOR-3: Persist speed-priority threat
+        # fields at the top level so the turn-level
+        # analyzer can read them. Shapes:
+        # - speed_priority_threatened: [slot0_bool, slot1_bool]
+        # - faster_opponents: [slot0_list, slot1_list] (species)
+        # - priority_opponents: [slot0_list, slot1_list] (species)
+        # - expected_to_faint_before_moving: [slot0_bool, slot1_bool]
+        # - protected_due_to_speed_priority: [slot0_bool, slot1_bool]
+        # - speed_priority_protect_bonus_applied: [slot0_bool, slot1_bool]
+        # - speed_priority_attack_penalty_applied: [slot0_bool, slot1_bool]
+        # - speed_priority_switch_bonus_applied: [slot0_bool, slot1_bool]
+        # - target_used_protect: [slot0_bool, slot1_bool]
+        # No hidden info: species names only, no
+        # abilities/items/EVs/nature.
+        if speed_priority_threatened is not None:
+            turn_data["speed_priority_threatened"] = [
+                bool(speed_priority_threatened[0])
+                if len(speed_priority_threatened) > 0
+                else False,
+                bool(speed_priority_threatened[1])
+                if len(speed_priority_threatened) > 1
+                else False,
+            ]
+        if faster_opponents is not None:
+            turn_data["faster_opponents"] = [
+                list(faster_opponents[0])
+                if (len(faster_opponents) > 0
+                    and faster_opponents[0])
+                else [],
+                list(faster_opponents[1])
+                if (len(faster_opponents) > 1
+                    and faster_opponents[1])
+                else [],
+            ]
+        if priority_opponents is not None:
+            turn_data["priority_opponents"] = [
+                list(priority_opponents[0])
+                if (len(priority_opponents) > 0
+                    and priority_opponents[0])
+                else [],
+                list(priority_opponents[1])
+                if (len(priority_opponents) > 1
+                    and priority_opponents[1])
+                else [],
+            ]
+        if expected_to_faint_before_moving is not None:
+            turn_data["expected_to_faint_before_moving"] = [
+                bool(expected_to_faint_before_moving[0])
+                if len(expected_to_faint_before_moving) > 0
+                else False,
+                bool(expected_to_faint_before_moving[1])
+                if len(expected_to_faint_before_moving) > 1
+                else False,
+            ]
+        if protected_due_to_speed_priority is not None:
+            turn_data["protected_due_to_speed_priority"] = [
+                bool(protected_due_to_speed_priority[0])
+                if len(protected_due_to_speed_priority) > 0
+                else False,
+                bool(protected_due_to_speed_priority[1])
+                if len(protected_due_to_speed_priority) > 1
+                else False,
+            ]
+        if speed_priority_protect_bonus_applied is not None:
+            turn_data["speed_priority_protect_bonus_applied"] = [
+                bool(speed_priority_protect_bonus_applied[0])
+                if len(speed_priority_protect_bonus_applied) > 0
+                else False,
+                bool(speed_priority_protect_bonus_applied[1])
+                if len(speed_priority_protect_bonus_applied) > 1
+                else False,
+            ]
+        if speed_priority_attack_penalty_applied is not None:
+            turn_data["speed_priority_attack_penalty_applied"] = [
+                bool(speed_priority_attack_penalty_applied[0])
+                if len(speed_priority_attack_penalty_applied) > 0
+                else False,
+                bool(speed_priority_attack_penalty_applied[1])
+                if len(speed_priority_attack_penalty_applied) > 1
+                else False,
+            ]
+        if speed_priority_switch_bonus_applied is not None:
+            turn_data["speed_priority_switch_bonus_applied"] = [
+                bool(speed_priority_switch_bonus_applied[0])
+                if len(speed_priority_switch_bonus_applied) > 0
+                else False,
+                bool(speed_priority_switch_bonus_applied[1])
+                if len(speed_priority_switch_bonus_applied) > 1
+                else False,
+            ]
+        # Phase BEHAVIOR-17: persist the Protect floor
+        # diagnostic if provided. JSON-safe dict.
+        if speed_priority_protect_floor_debug is not None:
+            turn_data["speed_priority_protect_floor_debug"] = (
+                speed_priority_protect_floor_debug
+            )
         # Phase 6.3.8d: Persist the full narrow
         # candidate table for analyzer inspection.
         # The broad support_target_candidates is
@@ -2596,3 +2757,62 @@ class DoublesDecisionAuditLogger:
             "player_side": player_side,
             "player_name": player_name,
         })
+
+
+# Phase BEHAVIOR-9: protect-like move IDs for score-diff.
+# Used to identify Protect scores in the v2l1_raw_scores.
+_PROTECT_LIKE_MOVE_IDS = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "banefulbunker", "silktrap", "burningbulwark",
+    "obstruct", "maxguard",
+})
+
+
+def _compute_slot_score_diff(v2l1_raw_scores):
+    """Phase BEHAVIOR-9: compute protect_score,
+    best_non_protect_move_score, and score_diff from
+    v2l1_raw_scores.
+
+    Returns (protect_score, best_non_protect_move_score,
+    score_diff). Any of them may be None if not
+    computable.
+
+    No new scoring is done. This only inspects the
+    already-computed raw scores.
+    """
+    if not isinstance(v2l1_raw_scores, dict):
+        return None, None, None
+    protect_score = None
+    best_non_protect = None
+    for k, v in v2l1_raw_scores.items():
+        if not isinstance(k, str):
+            continue
+        # Key format: 'kind|move_id|target_pos' e.g.
+        # 'move|protect|0' or 'switch|garchomp|0'.
+        parts = k.split("|")
+        if len(parts) < 3:
+            continue
+        kind = parts[0]
+        move_id = parts[1].lower()
+        try:
+            score = float(v)
+        except (TypeError, ValueError):
+            continue
+        if kind == "move":
+            if move_id in _PROTECT_LIKE_MOVE_IDS:
+                if (
+                    protect_score is None
+                    or score > protect_score
+                ):
+                    protect_score = score
+            else:
+                if (
+                    best_non_protect is None
+                    or score > best_non_protect
+                ):
+                    best_non_protect = score
+    if protect_score is not None and best_non_protect is not None:
+        score_diff = protect_score - best_non_protect
+    else:
+        score_diff = None
+    return protect_score, best_non_protect, score_diff

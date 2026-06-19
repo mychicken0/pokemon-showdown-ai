@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-16 (Asia/Bangkok)
+Last updated: 2026-06-19 (Asia/Bangkok) — TURN-5/6 timing field gap track closed (OLD-ARTIFACT)
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -3322,3 +3322,490 @@ Next work must proceed in this order:
 Evidence rule carried forward: do not use 100/200-pair samples to debug
 logic. Use fixture/unit tests first, then 1-pair probes, then 5-20 pair
 smokes. Large qualification runs are only for adoption/default flips.
+
+## Phase SWITCH-4 — Switch Decision Closeout (added 2026-06-18)
+
+**Decision: Switch decision behavior is HEALTHY. No scoring change recommended.**
+
+### Evidence chain
+- SWITCH-1: Switch decision evidence audit. Mapped full switch path. Recommended read-only analyzer first.
+- SWITCH-2: Built `analyze_doubles_switch_per_turn.py` (15 fixture tests, 478 lines). Ran on BI-3M2 audit data.
+- SWITCH-3: Switch audit field gap seal. No-code phase — all analyzer-critical fields already persist.
+
+### Key metrics (BI-3M2 20-pair, both arms)
+- Rows: 80
+- Audit turns: 1,440
+- Turns with switch_counterfactual: 720
+- Deltas collected: 662
+- Median delta: -360.61
+- **Bad switches: 0**
+- **Missed opportunities: 2** (deltas 92.4 and 70.9)
+- Correct chosen switches: 10
+- Correct stays: 650
+
+### Decision
+- Switch scoring remains unchanged.
+- Defaults remain unchanged.
+- No more switch work unless new evidence appears.
+- 76 tests pass across switch-related suites.
+
+### Next work item
+**Turn-level analyzer.** Aggregates per-turn data across battles to produce insights about decision quality, timing, and patterns.
+
+### Do-not-do
+- Do NOT run large samples for switch debugging.
+- Do NOT change switch scoring without new analyzer evidence.
+- Do NOT run RL/training from switch data yet.
+- Do NOT change switch defaults.
+- Do NOT add more switch audit fields.
+- Do NOT touch Mega behavior.
+- Do NOT touch `test_51`.
+- Do NOT commit/push.
+
+See `logs/phaseSWITCH4_switch_decision_closeout.md` for full closeout.
+
+## Phase TURN-4 — Turn-Level Analyzer Closeout (added 2026-06-18)
+
+**Decision: Turn-level analyzer is closed as WORKING / READ-ONLY / FIXTURE-TESTED.**
+
+### Phases in this track
+- TURN-1: Turn-level analyzer evidence audit + design. Found 129 turn-level fields, no gap.
+- TURN-2: Built `analyze_doubles_turn_level.py` (978 lines, 17 fixture tests). Ran on BI-3M2.
+- TURN-3: Input integrity check. Found TURN-2 baseline wording wrong (data was correct). Fixed pass-action parser. Corrected metrics: 720 turns, treatment 361 / baseline 359, unknown actions 0 after fix.
+- TURN-4: Closeout. No scoring change. Timing gap deferred.
+
+### Key metrics (TURN-3 corrected, BI-3M2 20-pair)
+- Turn records: 720
+- Arms: {treatment: 361, baseline: 359}
+- Action slot 0: move: 520, pass: 103, switch: 97
+- Action slot 1: move: 471, pass: 185, switch: 64
+- V4a mechanic slot 0: plain: 705, mega: 15
+- Low-margin turns: 241
+- Overkill: 35, focus fire: 94, stale target: 68 (5 issue cases)
+
+### Decision
+- No scoring change recommended.
+- No actionable pattern found in current data.
+- Timing gap deferred to dedicated phase.
+
+### Known gap
+- decision_time_ms is absent/None in BI-3M2 audit (0/720 turns).
+- Not blocking current interpretation.
+- Defer timing instrumentation until a dedicated timing phase.
+
+### Next work item
+**Team-preview/RL data quality.**
+
+### Do-not-do
+- Do NOT change scoring from current analyzer output.
+- Do NOT run more turn analyzer work unless new evidence appears.
+- Do NOT add timing fields now.
+- Do NOT run RL training until data quality inventory is complete.
+- Do NOT touch `test_51`.
+- Do NOT commit/push.
+
+See `logs/phaseTURN4_turn_level_analyzer_closeout.md` for full closeout.
+
+## Phase RL-3 — Team-Preview / RL Data Quality Closeout (added 2026-06-18)
+
+**Decision: Team-preview data quality ADEQUATE. Learned policy promotion NOT APPROVED.**
+
+### Phases in this track
+- RL-1: Inventory. Mapped full team-preview pipeline. No major blockers.
+- RL-2: Built `analyze_vgc2026_team_preview_dataset_quality.py` (15 fixture tests). Ran on V3c4 chunk 0.
+- RL-3: Closeout. Data quality adequate. Promotion not approved.
+
+### Key metrics (RL-2, V3c4 chunk 0 smoke)
+- Rows analyzed: 100
+- All status ok: 100/100
+- Complete pairs: 50
+- Preview validation: 100%
+- Side balance: 50/50
+- Duplicate battle tags: 0
+- Duplicate team hashes: 0
+- Non-observable features: 0
+- Feature count: 20
+- Nonzero weights: 14/20
+- Treatment effect (chunk): +0.060
+- Bootstrap 95% CI (chunk): [-0.160, +0.280]
+
+### V3c.4 200-pair blocker (PROMOTION BLOCKER)
+- learned wins: 204/400 (0.5100)
+- baseline wins: 196/400 (0.4900)
+- treatment effect: +0.0200
+- bootstrap 95% CI: [-0.0950, +0.1300]
+- **bootstrap lower bound -0.0950 < -0.02 (BLOCKED)**
+- one-sided p (learned regression): 0.3978
+- side collapse: 0.030 ≤ 0.10
+- plan changed rate: 0.9450
+
+**Learned policy must NOT become default.** Default remains `matchup_top4_v3`.
+
+### RL readiness
+- Team-preview data: ADEQUATE
+- Team-preview model: V3c.1 exists
+- Team-preview promotion: NOT APPROVED
+- Turn-level RL: PARTIAL / NOT READY
+- Turn-level training: DO NOT START
+
+### Next strategic options
+1. Design richer preview features
+2. Design turn-level dataset schema
+3. Pause learning and move to another behavior feature
+
+### Do-not-do
+- Do NOT retrain without data/design phase.
+- Do NOT flip default.
+- Do NOT run large benchmarks for logic debugging.
+ - Do NOT run RL training until turn-level dataset is validated.
+- Do NOT touch `test_51`.
+- Do NOT commit/push.
+
+See `logs/phaseRL3_team_preview_rl_data_quality_closeout.md` for full closeout.
+
+## Phase PREVIEW-1..10 — V3d.1 Learned-Preview Track Closeout (added 2026-06-18)
+
+**Decision: V3d.1 learned-preview training PAUSED / NOT APPROVED.**
+
+### Phases in this track
+- PREVIEW-1: Designed 10 richer team-preview features.
+- PREVIEW-2: Implemented 10 V3d.1 features in `vgc2026_phaseV3d1_opponent_features.py`. 21 tests pass.
+- PREVIEW-3: Validated feature distributions on 129 real teams. 7 healthy, 3 sparse, hidden-info PASS.
+- PREVIEW-4: Designed V3d.1 training pipeline.
+- PREVIEW-5: Implemented trainer infrastructure and `learned_preview_v3d1` wrapper (opt-in only). 19 tests pass.
+- PREVIEW-6: Built golden dataset (100 rows, 30 features, deterministic SHA256).
+- PREVIEW-7: Dry-run on 100-row golden dataset. Gates FAIL (mean_val_acc 0.571 < 0.60, overfit_gap 0.284 > 0.20).
+- PREVIEW-8: Expanded golden dataset to 400 rows. Dry-run still FAIL (mean_val_acc 0.528, overfit_gap 0.181 PASS).
+- PREVIEW-9: Diagnostic evaluated 144 configs. 0 pass all gates. v3d_all underperforms v3c_only by 4.4 percentage points.
+- PREVIEW-10: Closeout. V3d.1 training is paused.
+
+### Key metrics (PREVIEW-9 diagnostic)
+- configs evaluated: 144
+- configs passing all gates: 0
+- best config: v3c_only, ep=10, lr=0.1, l2=0.001, mm=0.5
+- best v3c_only mean_val_acc: 0.588
+- best v3d_all mean_val_acc: 0.544
+- v3d_all vs v3c_only delta: -0.044
+- model artifact created: NO
+
+### Why v3d does not beat v3c_only
+- v3d_all underperforms v3c_only by 4.4 percentage points on mean_val_acc.
+- v3d_all has higher overfit gap (0.183 vs 0.122).
+- v3d_all has higher feature dominance (0.323 vs 0.232), indicating pathological fitting.
+- Removing sparse features helps slightly but introduces even worse dominance.
+- No hyperparameter combination makes v3d_all pass all gates.
+
+### Preserved assets
+- `vgc2026_phaseV3d1_opponent_features.py` — feature extractor (useful for future research).
+- `vgc2026_phaseV3d1_train.py` — trainer infrastructure (dry-run guarded).
+- `logs/vgc2026_phaseV3d1_golden_dataset.jsonl` and `..._expanded.jsonl` — golden datasets.
+- `analyze_vgc2026_phaseV3d1_feature_quality.py`, `build_..._golden_dataset.py`, `dryrun_..._training.py`, `diagnose_..._dryrun.py` — analyzers.
+- `learned_preview_v3d1` in `team_preview_policy.py` — opt-in only, inert.
+
+### Do-not-do
+- Do NOT train the V3d.1 model.
+- Do NOT create `logs/vgc2026_phaseV3d1_model.json`.
+- Do NOT run 50/200-pair runtime qualification for V3d.1.
+- Do NOT default-flip to any learned policy.
+- Do NOT attempt learned-preview retraining without a new objective or better features.
+
+### Recommended next behavior topic
+Per PREVIEW-9 decision rules: "If v3d does not beat v3c_only: recommend pausing learned preview and moving to another behavior topic."
+
+Suggested non-learning behavior features:
+1. Protect/speed-control/support targeting (scoring change, not learned).
+2. Voluntary switch quality scoring refinement.
+3. Mega evolution refinement.
+4. Switch decision analyzer improvements.
+5. Turn-level analyzer improvements.
+6. User-selected next feature.
+
+See `logs/phasePREVIEW10_v3d1_learned_preview_closeout.md` for full closeout.
+
+## Phase BEHAVIOR-1..19 — Speed-Priority Expected-Faint Track Closeout (added 2026-06-19)
+
+**Decision: Speed-priority expected-faint track CLOSED as fixed.**
+
+### Root cause
+The BEHAVIOR-16 Protect floor was not activating because:
+1. `faint_before_moving` was candidate-dependent (set to False for Protect candidates).
+2. `expected_to_faint_before_moving` was only set for the selected action, not for non-selected Protect candidates.
+
+### Fix (BEHAVIOR-18)
+1. `estimate_speed_priority_threat` now sets `faint_before_moving=True` for any candidate when the slot is speed-threatened or priority-threatened.
+2. `expected_to_faint_before_moving` is now set for every scored order, not just the selected one.
+
+### BEHAVIOR-18 evidence (5-pair smoke)
+| metric | BEHAVIOR-17 | BEHAVIOR-18 |
+|---|---:|---:|
+| debug `expected_faint=True` at scoring time | 0/65 (0%) | 17/24 (71%) |
+| debug `floor_applied=True` | 0/65 (0%) | 8/24 (33%) |
+| raw protect >= 240 | 2/11 (18%) | 17/24 (71%) |
+| expected_faint -> Protect | 0/10 (0%) | 12/24 (50%) |
+
+### Closeout decision
+- Track closed as fixed.
+- 50% expected_faint -> attack is expected (attack scores beat the 240 floor).
+- Do NOT tune magnitude without a separate evidence phase.
+- All config fields stable at their documented defaults.
+
+### Remaining limitation
+- 50% expected_faint cases still select attack (attack score > 240 floor).
+- This is a magnitude issue, not a bug.
+- Future magnitude tuning requires a separate 20+ pair evidence phase.
+
+### Do-not-do
+- Do NOT add more bonus/penalty values now.
+- Do NOT increase the floor value.
+- Do NOT run large benchmarks for this issue.
+- Do NOT do RL/model work for this issue.
+- Do NOT change Mega/switch/preview unrelated settings.
+- Do NOT touch `test_51`.
+
+### Recommended next behavior topic
+Per BEHAVIOR-19 closeout: the speed-priority
+expected-faint track is closed. Move to another
+behavior feature:
+
+1. Voluntary switch quality scoring refinement.
+2. Mega evolution refinement.
+3. Switch decision analyzer improvements.
+4. Turn-level analyzer improvements.
+5. Support target targeting refinement.
+6. User-selected next feature.
+
+See `logs/phaseBEHAVIOR19_speed_priority_expected_faint_closeout.md` for full closeout.
+
+## Phase SUPPORT-1/2 — Support Targeting Track Closeout (added 2026-06-19)
+
+**Decision: Support targeting closed as healthy based on available evidence.**
+
+### SUPPORT-1 evidence summary
+| metric | value |
+|---|---|
+| wrong-side selected | 0 (BI3M2 20-pair + BEHAVIOR-18 5-pair) |
+| stale support target | 0 |
+| immune/no-effect support | 0 |
+| broad wrong-side block fired | 0 times |
+| narrow ally heal blocked | 0 (field not in older artifacts) |
+| support moves selected | 23/361 (~6%, mostly Fake Out) |
+| support-targeting tests | 276 pass (6 test files) |
+| analyzer support coverage | 6 categories + wrong-side + narrow |
+
+### SUPPORT-2 closeout decision
+- Healthy based on available evidence.
+- No scoring/targeting change recommended.
+- No production change. No tests changed. No defaults changed.
+
+### Limitations
+- Sample size for rare support moves (Heal Pulse, Pollen Puff, Rage Powder) is limited.
+- Mostly Fake Out in available artifacts.
+- Rare moves are not exhaustively proven.
+
+### Dormant helper finding (not a behavior bug)
+- `build_narrow_ally_heal_candidate_table` and `narrow_ally_heal_wrong_side_block` are imported but never called in production.
+- The broad support wrong-side block IS active and covers the severe-mistake case for Heal Pulse, Floral Healing, and Decorate.
+- Defer cleanup; do not treat as behavior bug.
+
+### Do-not-do
+- Do NOT make blind support scoring changes.
+- Do NOT do broad target override rewrites.
+- Do NOT run large benchmarks for this issue.
+- Do NOT do RL/model work for this issue.
+- Do NOT remove or wire dormant narrow ally heal helpers in this phase.
+- Do NOT touch `test_51`.
+
+### Recommended next behavior topic
+Support targeting is closed. Move to another behavior feature:
+
+1. Voluntary switch quality scoring refinement.
+2. Mega evolution refinement.
+3. Switch decision analyzer improvements.
+4. Turn-level analyzer improvements.
+5. User-selected next feature.
+
+See `logs/phaseSUPPORT2_support_targeting_closeout.md` for full closeout.
+
+## Phase SWITCH-5/6 — Voluntary Switch Refinement Track Closeout (added 2026-06-19)
+
+**Decision: Voluntary switch refinement closed as not needed.**
+
+### SWITCH-5 evidence summary
+| metric | treatment | baseline |
+|---|---:|---:|
+| bad switches (negative delta) | 0 | 0 |
+| missed opportunities (stay, positive delta) | 1 (delta=92.4) | 1 (delta=70.9) |
+| correct chosen switches | 5/5 | 5/5 |
+| correct stays | 328 | 322 |
+| median delta | -356.75 | -394.42 |
+| switch_counterfactual coverage | 100% | 100% |
+
+### SWITCH-6 closeout decision
+- No evidence-backed reason to change switch scoring.
+- No scoring change recommended.
+- No production change. No tests changed. No defaults changed.
+
+### Missed opportunity interpretation
+Both missed opportunities are the same pattern: turn 4, slot 0, stayed with rockslide when switching to sneasler (bench) would have been +70-92 better. This is a sneasler mirror-match scenario in the BI3M2 pool. Minor optimization, not systematic. Not a reason to change scoring.
+
+### Limitations
+- Based on BI3M2 artifacts only (40 treatment + 40 baseline rows).
+- Rare matchup-specific switch opportunities may still exist.
+- No claim of perfect switch play (99.7% correct, not 100%).
+- Mirror-match confusion in audit data (opponent species may be on our bench).
+
+### Do-not-do
+- Do NOT make blind switch scoring changes.
+- Do NOT increase the switch baseline score.
+- Do NOT decrease the sacrifice/stay-value penalties.
+- Do NOT increase the risk_reduction_multiplier.
+- Do NOT change the `voluntary_switch_min_risk_reduction` threshold.
+- Do NOT add new reason_codes speculatively.
+- Do NOT run large benchmarks for switch tuning.
+- Do NOT touch `test_51`.
+
+### Recommended next behavior topic
+Voluntary switch refinement is closed as not needed. Move to another behavior feature:
+
+1. Mega evolution refinement.
+2. Switch decision analyzer improvements.
+3. Turn-level analyzer improvements.
+4. User-selected next feature.
+
+See `logs/phaseSWITCH6_voluntary_switch_refinement_closeout.md` for full closeout.
+
+## Phase TURN-5/6 — Timing Field Gap Track Closeout (added 2026-06-19)
+
+**Decision: Timing field gap closed as old-artifact only / infrastructure ready, not wired.**
+
+### TURN-5 finding
+- Timing infrastructure is fully implemented end-to-end: bot compute → bot pass → logger accept → logger write → JSONL persist → analyzer consume.
+- All 5 timing fields (`decision_time_ms`, `valid_order_time_ms`, `score_action_time_ms`, `joint_scoring_time_ms`, `audit_postprocess_time_ms`) are present in code.
+- `enable_decision_timing_diagnostics` defaults to `False`.
+- V3a.2 reality runner does NOT expose a CLI flag to enable timing.
+- 0/4394 turns across 5 artifacts have timing data.
+
+### TURN-6 closeout decision
+- Classification E: old-artifact only / infrastructure ready, not wired.
+- No production fix needed.
+- No scoring/default/behavior change.
+
+### Optional future work: RUNNER-TIMING-1
+A separate future phase could:
+1. Add `--enable-timing` CLI flag to the V3a.2 reality runner.
+2. Run a 5-pair smoke with the flag enabled.
+3. Verify timing data appears in the artifact.
+4. Run `analyze_doubles_turn_level.py` on the new artifact.
+
+This is a runner/instrumentation change, not a behavior change. Only pursue if timing analysis becomes useful.
+
+### Do-not-do
+- Do NOT change production behavior.
+- Do NOT change the runner in this phase.
+- Do NOT add `--enable-timing` in this phase.
+- Do NOT change defaults (keep the flag False).
+- Do NOT run battles.
+- Do NOT touch `test_51`.
+
+### Recommended next behavior topic
+Timing field gap is closed as old-artifact. Move to another behavior feature:
+
+1. Mega evolution refinement.
+2. Switch decision analyzer improvements.
+3. Turn-level analyzer improvements.
+4. User-selected next feature.
+
+See `logs/phaseTURN6_timing_field_gap_closeout.md` for full closeout.
+
+---
+
+## RL-8 Closeout — Turn-Level Offline RL
+
+**Decision:** `PIPELINE_WORKS / TRAINING_NOT_APPROVED`.
+
+**Evidence chain:**
+
+- RL-4: `turn_rl_v1.0` schema designed. 10 validation
+  gates. Forbidden-field list.
+- RL-5: builder built. BI3M2 dataset 574 deduped rows,
+  10/10 gates pass. 34 tests.
+- RL-6: quality analyzer built. 8/8 readiness
+  criteria pass on core dataset. 20 tests.
+- RL-5b: builder correctness proved via 8 new tests
+  (total 42). The "missing field" issue was a
+  source-data limitation (BI3M2 source predates
+  BEHAVIOR-18 fields), not a builder bug.
+- RL-7: in-memory dry-run pairwise reranker. Core
+  val_pairwise_accuracy 0.5398, majority baseline
+  0.7741, deterministic. Enriched dataset 180 rows,
+  100% coverage on 2 of 3 enriched fields. 42 tests.
+- RL-8: this closeout. No code change.
+
+**Why training is not approved:**
+
+- Pairwise accuracy 0.5398 is below majority baseline
+  0.7741.
+- Action distribution is heavily biased (84% double
+  attacks).
+- Core dataset 574 rows is small; enriched dataset
+  180 rows is too small for performance claims.
+- Terminal reward is sparse (1 signal per episode).
+- No off-policy evaluation.
+- No performance claim possible.
+
+**Preserved artifacts:**
+
+- Datasets: `logs/turn_level_offline_dataset_rl5b_v1_0_bi3m2.{jsonl,json,md}`,
+  `logs/turn_level_offline_dataset_rl7_behavior18_enriched_v1_0.{jsonl,json,md}`.
+- Scripts: `build_turn_level_offline_dataset.py`,
+  `analyze_turn_level_offline_dataset_quality.py`,
+  `dryrun_turn_level_offline_policy.py`.
+- Tests: 42 + 20 + 42 = 104 tests across 3 files,
+  all pass.
+- Reports: phaseRL4..phaseRL7.
+
+**Stable state preserved:**
+
+- `bot_doubles_damage_aware.py` not modified.
+- `DoublesDamageAwareConfig` not modified.
+- `matchup_top4_v3` policy unchanged.
+- `learned_preview_v3c1`, `learned_preview_v3d1`
+  not promoted.
+- No `logs/vgc2026_phaseV3d1_model.json` (and no
+  other model file from RL-4..8).
+- `test_51` not touched.
+- No commit/push.
+
+**Future RL requirements:**
+
+- Larger fresh dataset (5,000+ rows minimum).
+- Latest instrumentation enabled.
+- More diverse action distribution.
+- Reward design beyond terminal-only (or explicit
+  justification).
+- Off-policy evaluation plan.
+- Stronger baseline comparison (per-turn heuristic,
+  constant predictor, current production policy).
+- Model promotion criteria with adoption gates.
+
+**Do-not-do:**
+
+- No PPO / Q-learning / self-play / off-policy RL.
+- No behavior cloning artifact.
+- No default/policy flip.
+- No model retraining of V3 series.
+- No large benchmark for RL data without explicit
+  approval.
+- No `test_51`.
+- No production code change.
+- No commit/push.
+
+**Next recommended non-RL topic:**
+
+- Project checkpoint / git hygiene.
+- Runner instrumentation backlog.
+- Analyzer cleanup.
+- User-selected next feature.
+
+See `logs/phaseRL8_turn_level_offline_rl_closeout.md`
+for full closeout.

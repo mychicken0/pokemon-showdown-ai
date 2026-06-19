@@ -221,6 +221,18 @@ class TestDoublesSpeedPriority(unittest.TestCase):
     def test_protect_bonus_gated_by_availability(self):
         self.player.config.enable_speed_priority_awareness = True
         self.player.config.speed_priority_use_scaled_penalty = False
+        # Phase BEHAVIOR-16: disable the Protect floor for
+        # this test. The test is about the BEHAVIOR-11
+        # bonus path (which IS gated by Protect
+        # availability), not the floor (which applies
+        # to any Protect-like action regardless of legal
+        # orders).
+        self.player.config.speed_priority_expected_faint_protect_score_floor = 0.0
+        # Phase BEHAVIOR-11: disable the expected-faint
+        # Protect bonus for this test. The test is
+        # about the is_threatened bonus path, not the
+        # expected-faint bonus.
+        self.player.config.speed_priority_protect_bonus_under_expected_faint = 0.0
         our_active = MockPokemon("slowbro", base_stats={"spe": 30}, level=80)
         our_active.current_hp_fraction = 0.25
         
