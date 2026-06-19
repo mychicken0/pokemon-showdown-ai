@@ -3809,3 +3809,81 @@ See `logs/phaseTURN6_timing_field_gap_closeout.md` for full closeout.
 
 See `logs/phaseRL8_turn_level_offline_rl_closeout.md`
 for full closeout.
+
+---
+
+## RUNNER-2 — Runner Instrumentation Closeout
+
+**Decision:** `INSTRUMENTATION_READY`.
+
+The `bot_vgc2026_phaseV3a2_reality.py` runner
+has 4 opt-in instrumentation flags (all default
+OFF) plus 7 core runtime flags.
+
+### Instrumentation flags (all default OFF)
+
+- `--enable-mega-evolution` — opt-in Mega on
+  treatment arm.
+- `--enable-behavior-15-piecewise` — opt-in
+  piecewise expected-faint attack penalty on
+  treatment arm.
+- `--audit-decisions` — both-arm audit JSONL.
+- `--enable-timing-diagnostics` — opt-in
+  decision-timing fields in audit (requires
+  `--audit-decisions`).
+
+### Stable state
+
+- All 4 instrumentation flags default OFF.
+- Both-arm audit works (treatment + baseline).
+- Account isolation works (run-id embedded).
+- 59 runner tests pass (38 mega + 21 timing).
+- No production code change.
+- No model artifact.
+
+See `logs/phaseRUNNER2_runner_instrumentation_closeout.md`
+for full inventory, interaction matrix, metadata
+fields, and safe probe recipes.
+
+---
+
+## PROJECT-CLOSEOUT-1 — Final Working-State Summary
+
+**Decision:** ready for next user-selected work.
+
+### Git state (at this closeout)
+
+- 4 modified tracked files (ANALYZER-2 +
+  RUNNER-2 docs).
+- 13 untracked V3d.1 PAUSE files (by design).
+- 2,338+ ignored logs.
+- 199 tests pass across 6 suites.
+
+### Closed tracks (this project)
+
+- Mega opt-in (BI-3K)
+- Speed-priority expected-faint (BEHAVIOR-19)
+- Support targeting (SUPPORT-2)
+- Voluntary switch refinement (SWITCH-6)
+- Turn-level analyzer / timing (TURN-6)
+- Runner instrumentation (RUNNER-2)
+- Switch mirror-match attribution (ANALYZER-1)
+- Turn-level top-suspicious attribution (ANALYZER-2)
+- Turn-level offline RL (RL-4..8)
+
+### Paused / not approved
+
+- V3d.1 learned preview (PREVIEW-10)
+- Turn-level RL training (RL-8)
+- Mega default flip (BI-3K)
+
+### Recommended next step
+
+Commit the 4 uncommitted files
+(ANALYZER-2 + RUNNER-2) as a single small
+checkpoint, then either stop, start a new
+behavior feature, or resume V3d.1 with
+explicit user authorization.
+
+See `logs/phasePROJECTCLOSEOUT1_final_working_state_roadmap.md`
+for full inventory and 3-option roadmap.

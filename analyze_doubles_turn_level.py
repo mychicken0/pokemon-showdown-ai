@@ -289,6 +289,89 @@ def _v4a_mechanic(action_key: Any) -> str:
     return action_key[3] or "plain"
 
 
+# Phase ANALYZER-2: parse a V4a action key into
+# structured pieces for attribution. The V4a key
+# is a 4-element list [kind, id, target, mechanic].
+def _parse_v4a_action(
+    action_key: Any,
+) -> Dict[str, Optional[str]]:
+    """Parse a V4a action key into structured fields.
+
+    Returns a dict with:
+      - raw: original key
+      - kind: "move" / "switch" / "pass" / "unknown"
+      - id: the move id (e.g. "tackle") or
+        switch species
+      - target: target slot as string, or None
+      - mechanic: mechanic tag, or None
+    """
+    if not isinstance(action_key, list):
+        return {
+            "raw": str(action_key) if action_key else None,
+            "kind": "unknown",
+            "id": None,
+            "target": None,
+            "mechanic": None,
+        }
+    if len(action_key) < 2:
+        return {
+            "raw": str(action_key),
+            "kind": "unknown",
+            "id": None,
+            "target": None,
+            "mechanic": None,
+        }
+    a0 = action_key[0]
+    a1 = action_key[1]
+    a2 = action_key[2] if len(action_key) > 2 else None
+    a3 = action_key[3] if len(action_key) > 3 else None
+    kind = "unknown"
+    if a0 == "move":
+        kind = "move"
+    elif a0 == "switch":
+        kind = "switch"
+    elif a0 == "pass":
+        kind = "pass"
+    elif (
+        a0 == "unknown"
+        and isinstance(a1, str)
+        and "pass" in a1.lower()
+    ):
+        kind = "pass"
+    return {
+        "raw": str(action_key),
+        "kind": kind,
+        "id": str(a1).lower() if a1 is not None else None,
+        "target": str(a2) if a2 is not None else None,
+        "mechanic": str(a3) if a3 is not None else None,
+    }
+
+
+def _slot_labels(
+    state_snapshot: Dict[str, Any],
+) -> Dict[str, Optional[str]]:
+    """Extract per-slot our/opp active species
+    attribution labels from a state_snapshot.
+
+    Returns dict with:
+      - our_active_slot0 / our_active_slot1
+      - opp_active_slot0 / opp_active_slot1
+    """
+    ss = state_snapshot or {}
+    our = ss.get("our_active_species", []) or []
+    opp = ss.get("opp_active_species", []) or []
+    our0 = str(our[0]).lower() if len(our) > 0 else None
+    our1 = str(our[1]).lower() if len(our) > 1 else None
+    opp0 = str(opp[0]).lower() if len(opp) > 0 else None
+    opp1 = str(opp[1]).lower() if len(opp) > 1 else None
+    return {
+        "our_active_slot0": our0,
+        "our_active_slot1": our1,
+        "opp_active_slot0": opp0,
+        "opp_active_slot1": opp1,
+    }
+
+
 def _load_audit(path: str) -> Tuple[List[Dict[str, Any]], int]:
     """Phase TURN-2: load a JSONL file, skipping malformed lines."""
     rows: List[Dict[str, Any]] = []
@@ -1001,12 +1084,63 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             is_suspicious = True
             susp_reasons.append("support_wrong_side")
         if is_suspicious:
+            # Phase ANALYZER-2: per-slot attribution so
+            # readers can identify our vs opp species
+            # without consulting the raw state_snapshot.
+            v4a_sel_rec = rec.get("v4a_selected_joint_key")
+            slot0_act = (
+                v4a_sel_rec[0] if isinstance(v4a_sel_rec, list)
+                and len(v4a_sel_rec) >= 1 else None
+            )
+            slot1_act = (
+                v4a_sel_rec[1] if isinstance(v4a_sel_rec, list)
+                and len(v4a_sel_rec) >= 2 else None
+            )
+            slot0_parsed = _parse_v4a_action(slot0_act)
+            slot1_parsed = _parse_v4a_action(slot1_act)
+            labels = _slot_labels(rec.get("state_snapshot", {}))
             suspicious.append({
                 "battle_tag": rec.get("battle_tag"),
                 "arm": rec.get("benchmark_arm"),
                 "turn": rec.get("turn_number"),
                 "reasons": susp_reasons,
                 "selected": rec.get("v4a_selected_joint_key"),
+                "selected_slot0_action": slot0_act,
+                "selected_slot1_action": slot1_act,
+                "selected_slot0_kind": slot0_parsed["kind"],
+                "selected_slot1_kind": slot1_parsed["kind"],
+                "selected_slot0_id": slot0_parsed["id"],
+                "selected_slot1_id": slot1_parsed["id"],
+                "selected_slot0_target": slot0_parsed[
+                    "target"
+                ],
+                "selected_slot1_target": slot1_parsed[
+                    "target"
+                ],
+                "selected_slot0_mechanic": slot0_parsed[
+                    "mechanic"
+                ],
+                "selected_slot1_mechanic": slot1_parsed[
+                    "mechanic"
+                ],
+                "selected_slot0_category": rec.get(
+                    "slot0_category"
+                ),
+                "selected_slot1_category": rec.get(
+                    "slot1_category"
+                ),
+                "our_active_slot0": labels[
+                    "our_active_slot0"
+                ],
+                "our_active_slot1": labels[
+                    "our_active_slot1"
+                ],
+                "opp_active_slot0": labels[
+                    "opp_active_slot0"
+                ],
+                "opp_active_slot1": labels[
+                    "opp_active_slot1"
+                ],
                 "margin": margin,
                 "decision_time_ms": dt,
             })
@@ -1501,19 +1635,36 @@ def _write_markdown(
     if not sorted_susp:
         lines.append("No suspicious turns found.")
     else:
-        lines.append("| battle | arm | turn | reasons | margin | time (ms) |")
-        lines.append("|---|---|---|---|---|---|")
+        # Phase ANALYZER-2: attribution columns. Readers
+        # can now see our_active / opp_active / per-slot
+        # selected action breakdown at a glance, so
+        # mirror-match species (e.g. our bench Sneasler
+        # vs opp active Sneasler) are no longer confused.
+        lines.append(
+            "| battle | arm | turn | our_s0 | opp_s0 | "
+            "sel0_kind | sel0_id | sel0_tgt | "
+            "our_s1 | opp_s1 | "
+            "sel1_kind | sel1_id | sel1_tgt | "
+            "reasons | margin |"
+        )
+        lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for s in sorted_susp:
-            sel = s.get("selected", "?")
-            if isinstance(sel, list):
-                sel = str(sel)
             lines.append(
                 f"| `{s.get('battle_tag', '?')}` | "
                 f"{s.get('arm', '?')} | "
                 f"{s.get('turn', '?')} | "
+                f"`{s.get('our_active_slot0', '-')}` | "
+                f"`{s.get('opp_active_slot0', '-')}` | "
+                f"{s.get('selected_slot0_kind', '-')} | "
+                f"`{s.get('selected_slot0_id', '-')}` | "
+                f"`{s.get('selected_slot0_target', '-')}` | "
+                f"`{s.get('our_active_slot1', '-')}` | "
+                f"`{s.get('opp_active_slot1', '-')}` | "
+                f"{s.get('selected_slot1_kind', '-')} | "
+                f"`{s.get('selected_slot1_id', '-')}` | "
+                f"`{s.get('selected_slot1_target', '-')}` | "
                 f"{','.join(s.get('reasons', []))} | "
-                f"{s.get('margin', '')} | "
-                f"{s.get('decision_time_ms', '')} |"
+                f"{s.get('margin', '')} |"
             )
     lines.append("")
     lines.append("## Per-Battle Summary")

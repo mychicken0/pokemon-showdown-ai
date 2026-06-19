@@ -7158,3 +7158,81 @@ to justify real model training.
 
 See `logs/phaseRL8_turn_level_offline_rl_closeout.md`
 for the full closeout report.
+
+---
+
+## RUNNER-2 — Runner Instrumentation Closeout
+
+**Decision:** `INSTRUMENTATION_READY`.
+
+### Flags
+
+Core: `--tag`, `--n-pairs`, `--start-pair`,
+`--seed`, `--overwrite`, `--timeout`,
+`--learned-policy`, `--account-prefix`,
+`--account-run-id`.
+
+Opt-in instrumentation (all default OFF):
+`--enable-mega-evolution`,
+`--enable-behavior-15-piecewise`,
+`--audit-decisions`,
+`--enable-timing-diagnostics`.
+
+### Key invariants
+
+- The 4 instrumentation flags never change the
+  global `DoublesDamageAwareConfig` default.
+- `--enable-timing-diagnostics` requires
+  `--audit-decisions` to take effect.
+- `--enable-mega-evolution` only affects the
+  treatment arm; baseline never gets Mega.
+- Both-arm audit is always paired: 2 loggers,
+  2 files, no single-arm mode.
+
+### Verification
+
+- 59 runner tests pass (38 mega + 21 timing).
+- `git diff --check` exit 0.
+- `py_compile` exit 0.
+- `--help` shows all 14 flags.
+- No model artifact.
+
+See `logs/phaseRUNNER2_runner_instrumentation_closeout.md`
+for full inventory, interaction matrix, and safe
+probe recipes.
+
+---
+
+## PROJECT-CLOSEOUT-1 — Final Working-State Summary
+
+**Decision:** ready for next user-selected work.
+
+### Summary
+
+- 4 modified tracked files (uncommitted
+  ANALYZER-2 + RUNNER-2 docs).
+- 13 untracked V3d.1 PAUSE files.
+- 199 tests pass.
+- No model artifact.
+- No default flips.
+
+### Closed tracks
+
+Mega, Speed-priority, Support, Switch,
+Turn-level analyzer, Runner instrumentation,
+Switch attribution, Turn-level attribution,
+Turn-level offline RL.
+
+### Paused
+
+V3d.1 learned preview (PREVIEW-10). 13 PAUSE
+files stay untracked.
+
+### Recommended next step
+
+Commit the 4 uncommitted files, then either
+stop, start a new behavior feature, or resume
+V3d.1 with explicit user authorization.
+
+See `logs/phasePROJECTCLOSEOUT1_final_working_state_roadmap.md`
+for full inventory and 3-option roadmap.

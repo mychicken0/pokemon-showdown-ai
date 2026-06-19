@@ -990,5 +990,309 @@ class TestSlotVsTurnCounts(unittest.TestCase):
             self.assertIn(f"{fld}_turn_any_count", sp)
 
 
+class TestSuspiciousAttributionHelpers(unittest.TestCase):
+    """Phase ANALYZER-2: pure helper tests for the
+    V4a action parser and slot label extractor.
+    """
+
+    def setUp(self):
+        from analyze_doubles_turn_level import (
+            _parse_v4a_action,
+            _slot_labels,
+        )
+        self.parse = _parse_v4a_action
+        self.labels = _slot_labels
+
+    def test_parse_v4a_move(self):
+        p = self.parse(["move", "tackle", 1, ""])
+        self.assertEqual(p["kind"], "move")
+        self.assertEqual(p["id"], "tackle")
+        self.assertEqual(p["target"], "1")
+
+    def test_parse_v4a_switch(self):
+        p = self.parse(["switch", "sneasler", 0, ""])
+        self.assertEqual(p["kind"], "switch")
+        self.assertEqual(p["id"], "sneasler")
+        self.assertEqual(p["target"], "0")
+
+    def test_parse_v4a_pass(self):
+        p = self.parse(["unknown", "/choose pass", 0, ""])
+        self.assertEqual(p["kind"], "pass")
+        self.assertEqual(p["target"], "0")
+
+    def test_parse_v4a_none(self):
+        p = self.parse(None)
+        self.assertEqual(p["kind"], "unknown")
+
+    def test_parse_v4a_short(self):
+        p = self.parse(["move"])
+        self.assertEqual(p["kind"], "unknown")
+
+    def test_slot_labels_basic(self):
+        ss = {
+            "our_active_species": ["tyranitar", "incineroar"],
+            "opp_active_species": ["sneasler", "garchomp"],
+        }
+        l = self.labels(ss)
+        self.assertEqual(l["our_active_slot0"], "tyranitar")
+        self.assertEqual(l["our_active_slot1"], "incineroar")
+        self.assertEqual(l["opp_active_slot0"], "sneasler")
+        self.assertEqual(l["opp_active_slot1"], "garchomp")
+
+    def test_slot_labels_missing(self):
+        l = self.labels({})
+        self.assertIsNone(l["our_active_slot0"])
+        self.assertIsNone(l["opp_active_slot0"])
+
+
+class TestSuspiciousAttributionRecord(unittest.TestCase):
+    """Phase ANALYZER-2: the suspicious record
+    produced by _aggregate includes per-slot
+    attribution fields.
+    """
+
+    def setUp(self):
+        from analyze_doubles_turn_level import (
+            _aggregate,
+            _extract_turn_record,
+        )
+        self.aggregate = _aggregate
+        self.extract = _extract_turn_record
+
+    def _make_suspicious_record(self):
+        """Build a record that triggers the suspicious
+        path (stale target selected)."""
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "enable_mega_evolution": True,
+            "audit_turns": [
+                {
+                    "turn": 4,
+                    "state_snapshot": {
+                        "our_active_species": [
+                            "tyranitar", "incineroar"
+                        ],
+                        "opp_active_species": [
+                            "sneasler", "garchomp"
+                        ],
+                        "our_active_hp_fraction": [1.0, 0.5],
+                        "opp_active_hp_fraction": [0.8, 0.6],
+                    },
+                    "v4a_selected_joint_key": [
+                        ["move", "rockslide", 0, ""],
+                        ["move", "fakeout", 1, ""],
+                    ],
+                    "stale_target_selected": True,
+                    "stale_target_avoided": False,
+                    "stale_target_caused_no_effect": False,
+                    "stale_target_caused_type_immune": False,
+                    "selected_joint_order": None,
+                    "selected_score": 100.0,
+                    "score_gap_selected_best_alt": 10.0,
+                    "v2l1_selected_joint_key": None,
+                    "v2l1_final_action_keys": None,
+                    "v4a_final_action_keys": None,
+                    "overkill_penalty_triggered": False,
+                    "order_aware_overkill_penalty_applied": False,
+                    "focus_fire_triggered": False,
+                    "support_target_candidate_blocked": None,
+                    "support_target_wrong_side_selected_slot0": False,
+                    "support_target_wrong_side_selected_slot1": False,
+                }
+            ],
+        }
+        records = self.extract(row, 0, "test.jsonl")
+        return self.aggregate(records)
+
+    def test_turn_record_includes_our_and_opp_active_species(self):
+        agg = self._make_suspicious_record()
+        susp = agg["suspicious"]
+        self.assertGreater(len(susp), 0)
+        s = susp[0]
+        self.assertEqual(s["our_active_slot0"], "tyranitar")
+        self.assertEqual(s["our_active_slot1"], "incineroar")
+        self.assertEqual(s["opp_active_slot0"], "sneasler")
+        self.assertEqual(s["opp_active_slot1"], "garchomp")
+
+    def test_selected_action_key_parsed_into_category_target_mechanic(self):
+        agg = self._make_suspicious_record()
+        s = agg["suspicious"][0]
+        # Slot 0: move rockslide target 0.
+        self.assertEqual(s["selected_slot0_kind"], "move")
+        self.assertEqual(s["selected_slot0_id"], "rockslide")
+        self.assertEqual(s["selected_slot0_target"], "0")
+        self.assertEqual(s["selected_slot0_mechanic"], "")
+        # Slot 1: move fakeout target 1.
+        self.assertEqual(s["selected_slot1_kind"], "move")
+        self.assertEqual(s["selected_slot1_id"], "fakeout")
+        self.assertEqual(s["selected_slot1_target"], "1")
+        self.assertEqual(s["selected_slot1_mechanic"], "")
+
+    def test_mirror_match_turn_attribution_not_ambiguous(self):
+        """Mirror-match case: our bench sneasler (chosen
+        via switch) vs opp active sneasler. The record
+        must distinguish them.
+        """
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "enable_mega_evolution": True,
+            "audit_turns": [
+                {
+                    "turn": 5,
+                    "state_snapshot": {
+                        "our_active_species": [
+                            "tyranitar", "incineroar"
+                        ],
+                        "opp_active_species": [
+                            "sneasler", "garchomp"
+                        ],
+                        "our_active_hp_fraction": [1.0, 0.5],
+                        "opp_active_hp_fraction": [0.8, 0.6],
+                    },
+                    "v4a_selected_joint_key": [
+                        ["switch", "sneasler", 0, ""],
+                        ["move", "protect", 0, ""],
+                    ],
+                    "stale_target_selected": True,
+                    "stale_target_avoided": False,
+                    "stale_target_caused_no_effect": False,
+                    "stale_target_caused_type_immune": False,
+                    "selected_joint_order": None,
+                    "selected_score": 100.0,
+                    "score_gap_selected_best_alt": 10.0,
+                    "v2l1_selected_joint_key": None,
+                    "v2l1_final_action_keys": None,
+                    "v4a_final_action_keys": None,
+                    "overkill_penalty_triggered": False,
+                    "order_aware_overkill_penalty_applied": False,
+                    "focus_fire_triggered": False,
+                    "support_target_candidate_blocked": None,
+                    "support_target_wrong_side_selected_slot0": False,
+                    "support_target_wrong_side_selected_slot1": False,
+                }
+            ],
+        }
+        records = self.extract(row, 0, "test.jsonl")
+        agg = self.aggregate(records)
+        s = agg["suspicious"][0]
+        # Slot 0: switch to sneasler (our bench).
+        self.assertEqual(s["selected_slot0_kind"], "switch")
+        self.assertEqual(s["selected_slot0_id"], "sneasler")
+        # opp_active_slot0 is the opponent's sneasler,
+        # not ours.
+        self.assertEqual(s["opp_active_slot0"], "sneasler")
+        # our_active_slot0 is tyranitar (not sneasler).
+        self.assertEqual(s["our_active_slot0"], "tyranitar")
+        # The reader can now see "switch to sneasler" was
+        # a switch to bench sneasler, while opp active
+        # is also sneasler — they are different Pokemon.
+
+    def test_top_suspicious_json_preserves_old_keys(self):
+        agg = self._make_suspicious_record()
+        s = agg["suspicious"][0]
+        # Old keys preserved.
+        for k in (
+            "battle_tag", "arm", "turn", "reasons",
+            "selected", "margin",
+        ):
+            self.assertIn(k, s)
+        # New attribution keys added.
+        for k in (
+            "our_active_slot0", "our_active_slot1",
+            "opp_active_slot0", "opp_active_slot1",
+            "selected_slot0_kind", "selected_slot1_kind",
+            "selected_slot0_id", "selected_slot1_id",
+            "selected_slot0_target", "selected_slot1_target",
+            "selected_slot0_mechanic", "selected_slot1_mechanic",
+        ):
+            self.assertIn(k, s)
+
+
+class TestMarkdownAttributionColumns(unittest.TestCase):
+    """Phase ANALYZER-2: the markdown table for
+    Top Suspicious Turns includes attribution columns.
+    """
+
+    def setUp(self):
+        from analyze_doubles_turn_level import (
+            _aggregate,
+            _extract_turn_record,
+            _write_markdown,
+        )
+        self.aggregate = _aggregate
+        self.extract = _extract_turn_record
+        self.write_md = _write_markdown
+
+    def test_top_suspicious_markdown_has_attribution_columns(self):
+        row = {
+            "battle_tag": "b1",
+            "won": False,
+            "benchmark_arm": "treatment",
+            "enable_mega_evolution": True,
+            "audit_turns": [
+                {
+                    "turn": 4,
+                    "state_snapshot": {
+                        "our_active_species": [
+                            "tyranitar", "incineroar"
+                        ],
+                        "opp_active_species": [
+                            "sneasler", "garchomp"
+                        ],
+                        "our_active_hp_fraction": [1.0, 0.5],
+                        "opp_active_hp_fraction": [0.8, 0.6],
+                    },
+                    "v4a_selected_joint_key": [
+                        ["move", "rockslide", 0, ""],
+                        ["move", "fakeout", 1, ""],
+                    ],
+                    "stale_target_selected": True,
+                    "stale_target_avoided": False,
+                    "stale_target_caused_no_effect": False,
+                    "stale_target_caused_type_immune": False,
+                    "selected_joint_order": None,
+                    "selected_score": 100.0,
+                    "score_gap_selected_best_alt": 10.0,
+                    "v2l1_selected_joint_key": None,
+                    "v2l1_final_action_keys": None,
+                    "v4a_final_action_keys": None,
+                    "overkill_penalty_triggered": False,
+                    "order_aware_overkill_penalty_applied": False,
+                    "focus_fire_triggered": False,
+                    "support_target_candidate_blocked": None,
+                    "support_target_wrong_side_selected_slot0": False,
+                    "support_target_wrong_side_selected_slot1": False,
+                }
+            ],
+        }
+        records = self.extract(row, 0, "test.jsonl")
+        agg = self.aggregate(records)
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            md = os.path.join(tmp, "out.md")
+            self.write_md(
+                ["test.jsonl"], records, agg, 5, md
+            )
+            with open(md) as f:
+                content = f.read()
+        # Required attribution columns.
+        for col in (
+            "our_s0", "opp_s0",
+            "sel0_kind", "sel0_id", "sel0_tgt",
+            "our_s1", "opp_s1",
+            "sel1_kind", "sel1_id", "sel1_tgt",
+        ):
+            self.assertIn(col, content)
+        # Old reasons column preserved.
+        self.assertIn("reasons", content)
+        # Old margin column preserved.
+        self.assertIn("margin", content)
+
+
 if __name__ == "__main__":
     unittest.main()
