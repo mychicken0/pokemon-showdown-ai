@@ -276,6 +276,42 @@ def build_treatment_player_config(
     return DoublesDamageAwareConfig(enable_mega_evolution=True)
 
 
+def build_treatment_player_config_with_timing(
+    base_config, enable_decision_timing_diagnostics: bool
+):
+    """Phase RUNNER-TIMING-1: tiny pure helper.
+
+    Returns a config that combines ``base_config`` (which
+    may be None, a Mega-only config, or a piecewise config
+    from BEHAVIOR-15) with timing diagnostics. Only modifies
+    the base when ``enable_decision_timing_diagnostics`` is
+    True. The flag is independent of Mega and piecewise.
+
+    If the base is None, returns a fresh config with timing
+    on. If the base is set, merges the timing flag into a
+    new DoublesDamageAwareConfig (preserving all other
+    fields, including Mega / piecewise).
+
+    Default OFF (False) returns the base unchanged so
+    production behavior is preserved.
+    """
+    from bot_doubles_damage_aware import (
+        DoublesDamageAwareConfig,
+    )
+    if not enable_decision_timing_diagnostics:
+        return base_config
+    if base_config is None:
+        return DoublesDamageAwareConfig(
+            enable_decision_timing_diagnostics=True
+        )
+    return DoublesDamageAwareConfig(
+        **{
+            **base_config.__dict__,
+            "enable_decision_timing_diagnostics": True,
+        }
+    )
+
+
 async def run_one_battle(
     pair_id: int,
     side: str,
@@ -291,6 +327,7 @@ async def run_one_battle(
     account_run_id: str = "",
     enable_mega_evolution: bool = False,
     enable_behavior_15_piecewise: bool = False,
+    enable_decision_timing_diagnostics: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -393,6 +430,18 @@ async def run_one_battle(
                     "enable_speed_priority_piecewise_expected_faint_policy": True,
                 }
             )
+    # Phase RUNNER-TIMING-1: opt-in timing diagnostics.
+    # Independent of Mega / piecewise. Default OFF keeps
+    # production scoring unchanged. When set, treatment
+    # bot records decision_time_ms / valid_order_time_ms /
+    # score_action_time_ms in the audit JSONL.
+    if is_treatment:
+        treatment_config = (
+            build_treatment_player_config_with_timing(
+                treatment_config,
+                enable_decision_timing_diagnostics,
+            )
+        )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
     # completely BEFORE constructing either player. Each
     # side must call ControlledTeamPreviewPlayer(...) exactly
@@ -474,7 +523,16 @@ async def run_one_battle(
     ):
         audit_logger_treatment.set_current_battle_meta(
             benchmark_arm="treatment",
-            enable_mega_evolution=(treatment_config is not None),
+            enable_mega_evolution=(treatment_config is not None and bool(
+                getattr(
+                    treatment_config,
+                    "enable_mega_evolution",
+                    False,
+                )
+            )),
+            enable_decision_timing_diagnostics=bool(
+                enable_decision_timing_diagnostics
+            ),
             treatment_side=side,
             player_side=side,
             player_name=(
@@ -487,6 +545,9 @@ async def run_one_battle(
         audit_logger_baseline.set_current_battle_meta(
             benchmark_arm="baseline",
             enable_mega_evolution=False,
+            enable_decision_timing_diagnostics=bool(
+                enable_decision_timing_diagnostics
+            ),
             treatment_side=baseline_side,
             player_side=baseline_side,
             player_name=baseline_name,
@@ -543,6 +604,17 @@ async def run_one_battle(
         ),
         "enable_mega_evolution": bool(
             treatment_config is not None
+            and bool(getattr(
+                treatment_config,
+                "enable_mega_evolution",
+                False,
+            ))
+        ),
+        # Phase RUNNER-TIMING-1: timing diagnostics
+        # flag recorded per battle so future reports
+        # can identify which runs had timing on.
+        "enable_decision_timing_diagnostics": bool(
+            enable_decision_timing_diagnostics
         ),
         "treatment_side": side if is_treatment else "",
         # Phase BI-3K.5: resolved account names and run id
@@ -649,6 +721,21 @@ def main():
             "change scoring or selection."
         ),
     )
+    parser.add_argument(
+        "--enable-timing-diagnostics", action="store_true",
+        help=(
+            "Phase RUNNER-TIMING-1 probe: enable "
+            "decision-timing diagnostics on the "
+            "treatment-arm bot. Persists "
+            "decision_time_ms / valid_order_time_ms / "
+            "score_action_time_ms in the audit JSONL. "
+            "Default OFF. Does NOT change scoring or "
+            "selection. Independent of "
+            "--enable-mega-evolution and "
+            "--enable-behavior-15-piecewise. Only takes "
+            "effect when --audit-decisions is also set."
+        ),
+    )
     args = parser.parse_args()
 
     if not check_localhost():
@@ -711,6 +798,12 @@ def main():
             if args.audit_decisions
             else ""
         )
+        + (
+            ", enable_timing_diagnostics=True "
+            "(RUNNER-TIMING-1 probe)"
+            if args.enable_timing_diagnostics
+            else ""
+        )
     )
     print(f"  CSV    : {csv_path}")
     print(f"  JSONL  : {jsonl_path}")
@@ -754,6 +847,9 @@ def main():
                 account_run_id=account_run_id,
                 enable_mega_evolution=args.enable_mega_evolution,
                 enable_behavior_15_piecewise=args.enable_behavior_15_piecewise,
+                enable_decision_timing_diagnostics=(
+                    args.enable_timing_diagnostics
+                ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )
@@ -767,6 +863,9 @@ def main():
                 account_run_id=account_run_id,
                 enable_mega_evolution=args.enable_mega_evolution,
                 enable_behavior_15_piecewise=args.enable_behavior_15_piecewise,
+                enable_decision_timing_diagnostics=(
+                    args.enable_timing_diagnostics
+                ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )

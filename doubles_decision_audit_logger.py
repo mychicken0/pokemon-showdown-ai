@@ -2670,7 +2670,8 @@ class DoublesDecisionAuditLogger:
 
     def set_current_battle_meta(
         self, benchmark_arm, enable_mega_evolution,
-        treatment_side, player_side, player_name,
+        enable_decision_timing_diagnostics=False,
+        treatment_side="", player_side="", player_name="",
     ):
         """Phase BI-3K.7: context-based battle metadata.
 
@@ -2683,10 +2684,17 @@ class DoublesDecisionAuditLogger:
         poke-env server-assigned tag. The runner calls
         this for BOTH the treatment and baseline
         loggers before each battle.
+
+        Phase RUNNER-TIMING-1: ``enable_decision_timing_diagnostics``
+        is also stored so persisted audit rows identify
+        which runs had timing on. Default False.
         """
         self._current_battle_meta = {
             "benchmark_arm": str(benchmark_arm),
             "enable_mega_evolution": bool(enable_mega_evolution),
+            "enable_decision_timing_diagnostics": bool(
+                enable_decision_timing_diagnostics
+            ),
             "treatment_side": str(treatment_side),
             "player_side": str(player_side),
             "player_name": str(player_name),
@@ -2721,6 +2729,12 @@ class DoublesDecisionAuditLogger:
         arm_meta = self._battle_arm_meta.pop(battle_tag, {})
         merged = {**arm_meta, **ctx_meta}
         mega_enabled = bool(merged.get("enable_mega_evolution", False))
+        # Phase RUNNER-TIMING-1: include timing flag in
+        # the persisted audit row so future reports can
+        # distinguish timing-on vs timing-off runs.
+        timing_enabled = bool(merged.get(
+            "enable_decision_timing_diagnostics", False
+        ))
         benchmark_arm = str(
             merged.get("benchmark_arm", self._benchmark_arm)
         )
@@ -2737,6 +2751,7 @@ class DoublesDecisionAuditLogger:
             "singleton_safety_enabled": singleton_enabled,
             "priority_safety_enabled": priority_enabled,
             "enable_mega_evolution": mega_enabled,
+            "enable_decision_timing_diagnostics": timing_enabled,
             "treatment_side": treatment_side,
             "player_side": player_side,
             "player_name": player_name,
