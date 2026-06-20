@@ -1,0 +1,34 @@
+{
+  "scenario_id": "spread_def_heat_wave",
+  "description": "Spread-defense family (basic): opp scripts Heat Wave on turn 1; bot must have Wide Guard legal",
+  "version": 1,
+  "our_team_file": "data/curated_teams/control4a/team_057.json",
+  "opp_team_file": "data/curated_teams/control4a/team_020.json",
+  "lead": {
+    "opp_slot_0": "Volcarona",
+    "opp_slot_1": "Blastoise"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {"move": "heatwave"},
+      "opp_slot_1": {"move": "protect"}
+    }
+  },
+  "validators": [
+    {
+      "name": "heat_wave_actually_used",
+      "type": "expected_opp_action_used",
+      "expected": true,
+      "field": "spread"
+    },
+    {
+      "name": "bot_legal_wide_guard",
+      "type": "expected_bot_legal_response",
+      "expected": "Wide Guard"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}
