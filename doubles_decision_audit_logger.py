@@ -550,6 +550,28 @@ class DoublesDecisionAuditLogger:
         switch_available=None,
         only_conditional_priority=None,
         stalling_field_condition=None,
+        # Phase SPREAD-2: per-slot spread-defense
+        # legal/selected fields (Wide Guard / Quick
+        # Guard / Crafty Shield) plus the per-turn
+        # opp-pressure-state flag. Pure
+        # observation; the existing 8-move
+        # ``protect_like_available`` allowlist does
+        # NOT include these 3 moves.
+        wide_guard_legal=None,
+        quick_guard_legal=None,
+        crafty_shield_legal=None,
+        spread_defense_selected=None,
+        opp_pressure_state=None,
+        # Phase SPREAD-4: per-slot spread-defense
+        # raw scores + score-gap vs selected. Pure
+        # observation; the dry-run simulator uses
+        # these to compute decision-flip counts at
+        # hypothetical bonus magnitudes.
+        wide_guard_score=None,
+        quick_guard_score=None,
+        crafty_shield_score=None,
+        score_gap_wide_guard_vs_selected=None,
+        score_gap_quick_guard_vs_selected=None,
         ability_hard_block_avoided=None,
         ability_immune_move_selected=None,
         ground_into_levitate_selected=None,
@@ -582,10 +604,32 @@ class DoublesDecisionAuditLogger:
         direct_absorb_target_species=None,
         direct_absorb_target_ability=None,
         direct_absorb_only_legal_action=None,
-        # Phase 6.3.6: Known Absorb Hard Safety fields
-        direct_known_absorb_repeat_selected=None,
-        # Phase 6.4: Switch Candidate Safety fields
-        forced_switch=None,
+         # Phase 6.3.6: Known Absorb Hard Safety fields
+         direct_known_absorb_repeat_selected=None,
+         # Phase COMBO-3: Ally-activation combo audit
+         # fields. Per-slot lists of 2 booleans. All
+         # default to [False, False] (or None) when the
+         # bot does not pass them. The bot computes
+         # these from the selected action and known
+         # ally abilities/items at the audit call site.
+         # - selected_move_into_known_absorb_ally:
+         #   selected/final action targets ally and
+         #   ally has known absorb/immunity for that
+         #   move type.
+         # - selected_move_into_known_redirect_ally:
+         #   selected single-target move would be
+         #   redirected by known ally Storm Drain /
+         #   Lightning Rod.
+         # - selected_super_effective_into_weakness_policy_holder:
+         #   selected ally-targeted damaging move is
+         #   super-effective AND ally has known
+         #   Weakness Policy item (when item is
+         #   observable).
+         selected_move_into_known_absorb_ally=None,
+         selected_move_into_known_redirect_ally=None,
+         selected_super_effective_into_weakness_policy_holder=None,
+         # Phase 6.4: Switch Candidate Safety fields
+         forced_switch=None,
         switch_candidate_type_safety_applied=None,
         selected_switch_species=None,
         selected_switch_types=None,
@@ -1233,6 +1277,23 @@ class DoublesDecisionAuditLogger:
                 "spread_available": bool(spread_available[0]),
                 "best_spread_score": float(best_spread_score[0]) if best_spread_score[0] is not None else None,
                 "best_ko_score": float(best_ko_score[0]) if best_ko_score[0] is not None else None,
+                # Phase SPREAD-2: per-slot spread-defense
+                # legal/selected fields. Wide Guard /
+                # Quick Guard / Crafty Shield are NOT
+                # in the 8-move protect-like allowlist
+                # so they need their own per-slot
+                # booleans. Pure observation; no
+                # scoring change.
+                "wide_guard_legal": bool(wide_guard_legal[0]) if (wide_guard_legal and len(wide_guard_legal) > 0) else False,
+                "quick_guard_legal": bool(quick_guard_legal[0]) if (quick_guard_legal and len(quick_guard_legal) > 0) else False,
+                "crafty_shield_legal": bool(crafty_shield_legal[0]) if (crafty_shield_legal and len(crafty_shield_legal) > 0) else False,
+                "spread_defense_selected": str(spread_defense_selected[0]) if (spread_defense_selected and len(spread_defense_selected) > 0) else "",
+                # Phase SPREAD-4: per-slot spread-defense
+                # raw score. None when candidate not
+                # legal.
+                "wide_guard_score": float(wide_guard_score[0]) if (wide_guard_score is not None and len(wide_guard_score) > 0 and wide_guard_score[0] is not None) else None,
+                "quick_guard_score": float(quick_guard_score[0]) if (quick_guard_score is not None and len(quick_guard_score) > 0 and quick_guard_score[0] is not None) else None,
+                "crafty_shield_score": float(crafty_shield_score[0]) if (crafty_shield_score is not None and len(crafty_shield_score) > 0 and crafty_shield_score[0] is not None) else None,
                 "zero_effectiveness_move_selected": bool(zero_effectiveness_0),
                 "all_targets_immune_spread_selected": bool(all_targets_immune_0),
                 "all_target_immune_spread_avoided": bool(all_target_immune_avoided[0]) if all_target_immune_avoided else False,
@@ -1296,9 +1357,16 @@ class DoublesDecisionAuditLogger:
                 "direct_absorb_block_reason": str(direct_absorb_block_reason[0]) if direct_absorb_block_reason else "",
                 "direct_absorb_target_species": str(direct_absorb_target_species[0]) if direct_absorb_target_species else "",
                 "direct_absorb_target_ability": str(direct_absorb_target_ability[0]) if direct_absorb_target_ability else "",
-                "direct_absorb_only_legal_action": bool(direct_absorb_only_legal_action[0]) if direct_absorb_only_legal_action else False,
-                # Phase 6.3.6: Known Absorb Hard Safety
-                "direct_known_absorb_repeat_selected": bool(direct_known_absorb_repeat_selected[0]) if direct_known_absorb_repeat_selected else False,
+                 "direct_absorb_only_legal_action": bool(direct_absorb_only_legal_action[0]) if direct_absorb_only_legal_action else False,
+                 # Phase 6.3.6: Known Absorb Hard Safety
+                 "direct_known_absorb_repeat_selected": bool(direct_known_absorb_repeat_selected[0]) if direct_known_absorb_repeat_selected else False,
+                 # Phase COMBO-3: ally-activation combo
+                 # audit. Per-slot booleans. When the
+                 # bot does not pass these (default
+                 # None), the audit field is False.
+                 "selected_move_into_known_absorb_ally": bool(selected_move_into_known_absorb_ally[0]) if selected_move_into_known_absorb_ally else False,
+                 "selected_move_into_known_redirect_ally": bool(selected_move_into_known_redirect_ally[0]) if selected_move_into_known_redirect_ally else False,
+                 "selected_super_effective_into_weakness_policy_holder": bool(selected_super_effective_into_weakness_policy_holder[0]) if selected_super_effective_into_weakness_policy_holder else False,
                 # Phase 6.4: Switch Candidate Safety
                 "forced_switch": bool(forced_switch[0]) if forced_switch else False,
                 "switch_candidate_type_safety_applied": bool(switch_candidate_type_safety_applied[0]) if switch_candidate_type_safety_applied else False,
@@ -1537,6 +1605,16 @@ class DoublesDecisionAuditLogger:
                 "spread_available": bool(spread_available[1]),
                 "best_spread_score": float(best_spread_score[1]) if best_spread_score[1] is not None else None,
                 "best_ko_score": float(best_ko_score[1]) if best_ko_score[1] is not None else None,
+                # Phase SPREAD-2: per-slot spread-defense
+                # mirror (slot 1).
+                "wide_guard_legal": bool(wide_guard_legal[1]) if (wide_guard_legal and len(wide_guard_legal) > 1) else False,
+                "quick_guard_legal": bool(quick_guard_legal[1]) if (quick_guard_legal and len(quick_guard_legal) > 1) else False,
+                "crafty_shield_legal": bool(crafty_shield_legal[1]) if (crafty_shield_legal and len(crafty_shield_legal) > 1) else False,
+                "spread_defense_selected": str(spread_defense_selected[1]) if (spread_defense_selected and len(spread_defense_selected) > 1) else "",
+                # Phase SPREAD-4: per-slot score mirror.
+                "wide_guard_score": float(wide_guard_score[1]) if (wide_guard_score is not None and len(wide_guard_score) > 1 and wide_guard_score[1] is not None) else None,
+                "quick_guard_score": float(quick_guard_score[1]) if (quick_guard_score is not None and len(quick_guard_score) > 1 and quick_guard_score[1] is not None) else None,
+                "crafty_shield_score": float(crafty_shield_score[1]) if (crafty_shield_score is not None and len(crafty_shield_score) > 1 and crafty_shield_score[1] is not None) else None,
                 "zero_effectiveness_move_selected": bool(zero_effectiveness_1),
                 "all_targets_immune_spread_selected": bool(all_targets_immune_1),
                 "all_target_immune_spread_avoided": bool(all_target_immune_avoided[1]) if all_target_immune_avoided else False,
@@ -1600,9 +1678,16 @@ class DoublesDecisionAuditLogger:
                 "direct_absorb_block_reason": str(direct_absorb_block_reason[1]) if direct_absorb_block_reason else "",
                 "direct_absorb_target_species": str(direct_absorb_target_species[1]) if direct_absorb_target_species else "",
                 "direct_absorb_target_ability": str(direct_absorb_target_ability[1]) if direct_absorb_target_ability else "",
-                "direct_absorb_only_legal_action": bool(direct_absorb_only_legal_action[1]) if direct_absorb_only_legal_action else False,
-                # Phase 6.3.6: Known Absorb Hard Safety
-                "direct_known_absorb_repeat_selected": bool(direct_known_absorb_repeat_selected[1]) if direct_known_absorb_repeat_selected else False,
+                 "direct_absorb_only_legal_action": bool(direct_absorb_only_legal_action[1]) if direct_absorb_only_legal_action else False,
+                 # Phase 6.3.6: Known Absorb Hard Safety
+                 "direct_known_absorb_repeat_selected": bool(direct_known_absorb_repeat_selected[1]) if direct_known_absorb_repeat_selected else False,
+                 # Phase COMBO-3: ally-activation combo
+                 # audit. Per-slot booleans. When the
+                 # bot does not pass these (default
+                 # None), the audit field is False.
+                 "selected_move_into_known_absorb_ally": bool(selected_move_into_known_absorb_ally[1]) if selected_move_into_known_absorb_ally else False,
+                 "selected_move_into_known_redirect_ally": bool(selected_move_into_known_redirect_ally[1]) if selected_move_into_known_redirect_ally else False,
+                 "selected_super_effective_into_weakness_policy_holder": bool(selected_super_effective_into_weakness_policy_holder[1]) if selected_super_effective_into_weakness_policy_holder else False,
                 # Phase 6.4: Switch Candidate Safety
                 "forced_switch": bool(forced_switch[1]) if forced_switch else False,
                 "switch_candidate_type_safety_applied": bool(switch_candidate_type_safety_applied[1]) if switch_candidate_type_safety_applied else False,
@@ -1818,6 +1903,15 @@ class DoublesDecisionAuditLogger:
                 "opponent_ability_error": None,
                 "opponent_ground_into_levitate": None,
                 "opponent_type_immune_move_selected": False,
+                # Phase SPREAD-2: spread-defense
+                # outcome fields. Computed by the
+                # outcome resolver from the turn
+                # events. Pure observation; no scoring
+                # change.
+                "opponent_used_spread": False,
+                "opponent_used_protect": False,
+                "opponent_used_wide_guard": False,
+                "opponent_used_quick_guard": False,
             },
             # Phase 6.4.10c.1: VSW candidate and raw
             # switch order counts per slot. The
@@ -2209,6 +2303,53 @@ class DoublesDecisionAuditLogger:
             turn_data["speed_priority_protect_floor_debug"] = (
                 speed_priority_protect_floor_debug
             )
+        # Phase SPREAD-2: persist the top-level
+        # opp-pressure-state boolean (any live opp
+        # has a revealed spread move and is healthy
+        # enough to use it). Pure observation; no
+        # scoring change.
+        if opp_pressure_state is not None:
+            turn_data["opp_pressure_state"] = bool(opp_pressure_state)
+        # Phase SPREAD-4: persist score-gap lists at
+        # top level so the dry-run simulator can
+        # compute decision-flip counts.
+        if score_gap_wide_guard_vs_selected is not None:
+            turn_data["score_gap_wide_guard_vs_selected"] = [
+                float(score_gap_wide_guard_vs_selected[0])
+                if (
+                    len(score_gap_wide_guard_vs_selected) > 0
+                    and score_gap_wide_guard_vs_selected[0]
+                    is not None
+                )
+                else None,
+                float(score_gap_wide_guard_vs_selected[1])
+                if (
+                    len(score_gap_wide_guard_vs_selected) > 1
+                    and score_gap_wide_guard_vs_selected[1]
+                    is not None
+                )
+                else None,
+            ]
+        if score_gap_quick_guard_vs_selected is not None:
+            turn_data["score_gap_quick_guard_vs_selected"] = [
+                float(score_gap_quick_guard_vs_selected[0])
+                if (
+                    len(score_gap_quick_guard_vs_selected) > 0
+                    and score_gap_quick_guard_vs_selected[0]
+                    is not None
+                )
+                else None,
+                float(score_gap_quick_guard_vs_selected[1])
+                if (
+                    len(score_gap_quick_guard_vs_selected) > 1
+                    and score_gap_quick_guard_vs_selected[1]
+                    is not None
+                )
+                else None,
+            ]
+
+
+
         # Phase 6.3.8d: Persist the full narrow
         # candidate table for analyzer inspection.
         # The broad support_target_candidates is
@@ -2621,6 +2762,40 @@ class DoublesDecisionAuditLogger:
                     move_name = self._normalize_name(msg[2])
                     if move_name in self.PRIORITY_MOVES:
                         opp_actions["opponent_used_priority"] = True
+
+            # Phase SPREAD-2: detect opponent spread /
+            # protect / wide_guard / quick_guard usage
+            # from the same turn events. Pure
+            # observation; persisted into
+            # ``opp_actions``. The allowlists are
+            # stable (no per-call mutation) so they
+            # are evaluated inline here.
+            _OPP_SPREAD_LIKE = frozenset({
+                "hypervoice", "rockslide", "heatwave",
+                "blizzard", "clangsour", "clangingscales",
+                "dazzlinggleam", "muddywater", "snarl",
+                "expandforce", "makeitrain", "glare",
+                "icywind", "acidspray", "strugglebug",
+                "waterspout", "eruption", "dragondarts",
+                "earthquake", "surf", "discharge",
+                "mindblown", "teeterdance",
+            })
+            _OPP_PROTECT_LIKE = frozenset({
+                "protect", "detect", "spikyshield",
+                "kingsshield", "banefulbunker", "silktrap",
+                "burningbulwark", "maxguard", "obstruct",
+            })
+            for msg in turn_events:
+                if len(msg) >= 3 and msg[0] == "move" and msg[1].startswith(opp_role):
+                    move_name = self._normalize_name(msg[2])
+                    if move_name == "wideguard":
+                        opp_actions["opponent_used_wide_guard"] = True
+                    if move_name == "quickguard":
+                        opp_actions["opponent_used_quick_guard"] = True
+                    if move_name in _OPP_PROTECT_LIKE:
+                        opp_actions["opponent_used_protect"] = True
+                    if move_name in _OPP_SPREAD_LIKE:
+                        opp_actions["opponent_used_spread"] = True
 
             # Check if opponent moved before us
             # Find the indices of first move events

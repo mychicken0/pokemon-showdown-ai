@@ -106,6 +106,38 @@ PROTECT_LIKE_MOVES = frozenset({
     "obstruct", "maxguard", "silktrap", "burningbulwark",
 })
 
+# Phase SPREAD-2: spread-defense move allowlist
+# (counter-spread moves). Distinct from
+# PROTECT_LIKE_MOVES because Wide Guard / Quick
+# Guard / Crafty Shield were not in the 8-move
+# allowlist. Pure observation allowlist; no scoring
+# change in the analyzer.
+SPREAD_DEFENSE_MOVES = frozenset({
+    "wideguard", "quickguard", "craftyshield",
+})
+
+# Phase SPREAD-2: opp-side spread-move allowlist
+# (duplicated from the audit logger). Used by the
+# analyzer to compute ``opp_used_spread_turn_count``
+# from prior artifacts that have
+# ``selected_action_move_id`` per slot but no
+# dedicated opp_actions spread counter (older
+# artifacts).
+OPP_SPREAD_LIKE_MOVES = frozenset({
+    "hypervoice", "rockslide", "heatwave", "blizzard",
+    "clangsour", "clangingscales", "dazzlinggleam",
+    "muddywater", "snarl", "expandforce", "makeitrain",
+    "glare", "icywind", "acidspray", "strugglebug",
+    "waterspout", "eruption", "dragondarts", "earthquake",
+    "surf", "discharge", "mindblown", "teeterdance",
+})
+
+OPP_PROTECT_LIKE_MOVES = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "banefulbunker", "silktrap", "burningbulwark",
+    "maxguard", "obstruct",
+})
+
 SPEED_CONTROL_MOVES = frozenset({
     "tailwind", "trickroom", "icywind", "electroweb",
     "thunderwave", "thundercage", "scaryface",
@@ -645,6 +677,75 @@ def _extract_turn_record(
             "faster_opponents": turn.get("faster_opponents"),
             "priority_opponents": turn.get("priority_opponents"),
             "target_used_protect": turn.get("target_used_protect"),
+            # Phase SPREAD-2: project the per-slot
+            # spread-defense fields from slot_0 /
+            # slot_1 into the flat record shape so
+            # the analyzer aggregation can read them.
+            "wide_guard_legal_slot0": bool(
+                (turn.get("slot_0") or {}).get("wide_guard_legal")
+            ),
+            "wide_guard_legal_slot1": bool(
+                (turn.get("slot_1") or {}).get("wide_guard_legal")
+            ),
+            "quick_guard_legal_slot0": bool(
+                (turn.get("slot_0") or {}).get("quick_guard_legal")
+            ),
+            "quick_guard_legal_slot1": bool(
+                (turn.get("slot_1") or {}).get("quick_guard_legal")
+            ),
+            "crafty_shield_legal_slot0": bool(
+                (turn.get("slot_0") or {}).get("crafty_shield_legal")
+            ),
+            "crafty_shield_legal_slot1": bool(
+                (turn.get("slot_1") or {}).get("crafty_shield_legal")
+            ),
+            "spread_defense_selected_slot0": str(
+                (turn.get("slot_0") or {}).get(
+                    "spread_defense_selected"
+                )
+                or ""
+            ),
+            "spread_defense_selected_slot1": str(
+                (turn.get("slot_1") or {}).get(
+                    "spread_defense_selected"
+                )
+                or ""
+            ),
+            "opp_pressure_state": bool(
+                turn.get("opp_pressure_state")
+            ),
+            "opp_actions": dict(turn.get("opp_actions") or {}),
+            # Phase SPREAD-4: score-gap lists at the
+            # top level of each turn. Used by the
+            # dry-run simulator to compute decision-
+            # flip counts at hypothetical bonus
+            # magnitudes.
+            "score_gap_wide_guard_vs_selected": list(
+                turn.get("score_gap_wide_guard_vs_selected") or []
+            ),
+            "score_gap_quick_guard_vs_selected": list(
+                turn.get("score_gap_quick_guard_vs_selected") or []
+            ),
+            # Per-slot raw score mirror (projected
+            # from slot_0 / slot_1).
+            "wide_guard_score_slot0": (
+                (turn.get("slot_0") or {}).get("wide_guard_score")
+            ),
+            "wide_guard_score_slot1": (
+                (turn.get("slot_1") or {}).get("wide_guard_score")
+            ),
+            "quick_guard_score_slot0": (
+                (turn.get("slot_0") or {}).get("quick_guard_score")
+            ),
+            "quick_guard_score_slot1": (
+                (turn.get("slot_1") or {}).get("quick_guard_score")
+            ),
+            "crafty_shield_score_slot0": (
+                (turn.get("slot_0") or {}).get("crafty_shield_score")
+            ),
+            "crafty_shield_score_slot1": (
+                (turn.get("slot_1") or {}).get("crafty_shield_score")
+            ),
             # Phase BEHAVIOR-2: store move_id for
             # by-move aggregation.
             "move_id_slot0": _move_id_from_action(
@@ -712,6 +813,51 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "support_target_candidate_blocked": 0,
         "support_target_wrong_side_selected": 0,
         "narrow_ally_heal_candidate_blocked": 0,
+    }
+    # Phase SPREAD-2: spread-defense summary.
+    # Mirrors ``protect_summary`` for Wide Guard /
+    # Quick Guard / Crafty Shield. Pure observation;
+    # no scoring change in the analyzer.
+    spread_defense_summary = {
+        "slot0_wide_guard_legal": 0,
+        "slot1_wide_guard_legal": 0,
+        "any_slot_wide_guard_legal": 0,
+        "slot0_quick_guard_legal": 0,
+        "slot1_quick_guard_legal": 0,
+        "any_slot_quick_guard_legal": 0,
+        "slot0_crafty_shield_legal": 0,
+        "slot1_crafty_shield_legal": 0,
+        "any_slot_crafty_shield_legal": 0,
+        "slot0_wide_guard_selected": 0,
+        "slot1_wide_guard_selected": 0,
+        "any_slot_wide_guard_selected": 0,
+        "slot0_quick_guard_selected": 0,
+        "slot1_quick_guard_selected": 0,
+        "any_slot_quick_guard_selected": 0,
+        "slot0_crafty_shield_selected": 0,
+        "slot1_crafty_shield_selected": 0,
+        "any_slot_crafty_shield_selected": 0,
+        "selected_by_move": Counter(),
+        "spread_defense_legal_not_selected": 0,
+        "opp_pressure_state_turn_count": 0,
+        "opp_used_spread_turn_count": 0,
+        "opp_used_protect_turn_count": 0,
+        "opp_used_wide_guard_turn_count": 0,
+        "opp_used_quick_guard_turn_count": 0,
+        # Phase SPREAD-4: score-gap statistics so
+        # the dry-run simulator can pick a bonus
+        # magnitude. Negative gap = selected move
+        # scored higher; positive gap = spread-
+        # defense move would have flipped the
+        # decision.
+        "score_gap_wg_legal_not_selected": [],  # list of gaps
+        "score_gap_wg_legal_not_selected_with_pressure": [],
+        "score_gap_wg_legal_not_selected_min": 0.0,
+        "score_gap_wg_legal_not_selected_p25": 0.0,
+        "score_gap_wg_legal_not_selected_median": 0.0,
+        "score_gap_wg_legal_not_selected_p75": 0.0,
+        "score_gap_wg_legal_not_selected_max": 0.0,
+        "score_gap_wg_legal_not_selected_mean": 0.0,
     }
     # Phase BEHAVIOR-2: protect / speed-control /
     # speed-priority / support-targeting summaries.
@@ -854,7 +1000,7 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         if (rec.get("narrow_ally_heal_candidate_blocked_slot0")
                 or rec.get("narrow_ally_heal_candidate_blocked_slot1")):
             safety["narrow_ally_heal_candidate_blocked"] += 1
-        # Phase BEHAVIOR-2: protect summary.
+                # Phase BEHAVIOR-2: protect summary.
         p0 = rec.get("protect_selected_slot0")
         p1 = rec.get("protect_selected_slot1")
         if p0:
@@ -863,6 +1009,110 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             protect_summary["slot1_protect_selected"] += 1
         if p0 or p1:
             protect_summary["any_slot_protect_selected"] += 1
+        # Phase SPREAD-2: spread-defense legal/selected
+        # summary (Wide Guard / Quick Guard / Crafty
+        # Shield). Pure observation; no scoring change.
+        wg_l_0 = bool(rec.get("wide_guard_legal_slot0"))
+        wg_l_1 = bool(rec.get("wide_guard_legal_slot1"))
+        qg_l_0 = bool(rec.get("quick_guard_legal_slot0"))
+        qg_l_1 = bool(rec.get("quick_guard_legal_slot1"))
+        cs_l_0 = bool(rec.get("crafty_shield_legal_slot0"))
+        cs_l_1 = bool(rec.get("crafty_shield_legal_slot1"))
+        wg_s_0 = (rec.get("spread_defense_selected_slot0") or "") == "wideguard"
+        qg_s_0 = (rec.get("spread_defense_selected_slot0") or "") == "quickguard"
+        cs_s_0 = (rec.get("spread_defense_selected_slot0") or "") == "craftyshield"
+        wg_s_1 = (rec.get("spread_defense_selected_slot1") or "") == "wideguard"
+        qg_s_1 = (rec.get("spread_defense_selected_slot1") or "") == "quickguard"
+        cs_s_1 = (rec.get("spread_defense_selected_slot1") or "") == "craftyshield"
+        if wg_l_0:
+            spread_defense_summary["slot0_wide_guard_legal"] += 1
+        if wg_l_1:
+            spread_defense_summary["slot1_wide_guard_legal"] += 1
+        if wg_l_0 or wg_l_1:
+            spread_defense_summary["any_slot_wide_guard_legal"] += 1
+        if qg_l_0:
+            spread_defense_summary["slot0_quick_guard_legal"] += 1
+        if qg_l_1:
+            spread_defense_summary["slot1_quick_guard_legal"] += 1
+        if qg_l_0 or qg_l_1:
+            spread_defense_summary["any_slot_quick_guard_legal"] += 1
+        if cs_l_0:
+            spread_defense_summary["slot0_crafty_shield_legal"] += 1
+        if cs_l_1:
+            spread_defense_summary["slot1_crafty_shield_legal"] += 1
+        if cs_l_0 or cs_l_1:
+            spread_defense_summary["any_slot_crafty_shield_legal"] += 1
+        if wg_s_0:
+            spread_defense_summary["slot0_wide_guard_selected"] += 1
+        if wg_s_1:
+            spread_defense_summary["slot1_wide_guard_selected"] += 1
+        if wg_s_0 or wg_s_1:
+            spread_defense_summary["any_slot_wide_guard_selected"] += 1
+            spread_defense_summary["selected_by_move"]["wideguard"] += 1
+        if qg_s_0:
+            spread_defense_summary["slot0_quick_guard_selected"] += 1
+        if qg_s_1:
+            spread_defense_summary["slot1_quick_guard_selected"] += 1
+        if qg_s_0 or qg_s_1:
+            spread_defense_summary["any_slot_quick_guard_selected"] += 1
+            spread_defense_summary["selected_by_move"]["quickguard"] += 1
+        if cs_s_0:
+            spread_defense_summary["slot0_crafty_shield_selected"] += 1
+        if cs_s_1:
+            spread_defense_summary["slot1_crafty_shield_selected"] += 1
+        if cs_s_0 or cs_s_1:
+            spread_defense_summary["any_slot_crafty_shield_selected"] += 1
+            spread_defense_summary["selected_by_move"]["craftyshield"] += 1
+        # Counterfactual: any spread-defense legal
+        # this turn but no spread-defense move
+        # selected.
+        any_legal = (
+            wg_l_0 or wg_l_1 or qg_l_0 or qg_l_1
+            or cs_l_0 or cs_l_1
+        )
+        any_selected = (
+            wg_s_0 or wg_s_1 or qg_s_0 or qg_s_1
+            or cs_s_0 or cs_s_1
+        )
+        if any_legal and not any_selected:
+            spread_defense_summary[
+                "spread_defense_legal_not_selected"
+            ] += 1
+        if bool(rec.get("opp_pressure_state")):
+            spread_defense_summary[
+                "opp_pressure_state_turn_count"
+            ] += 1
+        opp_a = rec.get("opp_actions", {}) or {}
+        if opp_a.get("opponent_used_spread"):
+            spread_defense_summary["opp_used_spread_turn_count"] += 1
+        if opp_a.get("opponent_used_protect"):
+            spread_defense_summary["opp_used_protect_turn_count"] += 1
+        if opp_a.get("opponent_used_wide_guard"):
+            spread_defense_summary["opp_used_wide_guard_turn_count"] += 1
+        if opp_a.get("opponent_used_quick_guard"):
+            spread_defense_summary["opp_used_quick_guard_turn_count"] += 1
+
+        # Phase SPREAD-4: collect score-gap values
+        # for turns where WG is legal but NOT
+        # selected. The dry-run simulator uses
+        # these to find the minimum bonus that
+        # would flip each turn's decision.
+        gap_wg = rec.get("score_gap_wide_guard_vs_selected") or []
+        opp_p_for_gap = bool(rec.get("opp_pressure_state"))
+        if wg_l_0 or wg_l_1:
+            for g in gap_wg:
+                if g is None:
+                    continue
+                if not any_selected:
+                    spread_defense_summary[
+                        "score_gap_wg_legal_not_selected"
+                    ].append(g)
+                    if opp_p_for_gap:
+                        spread_defense_summary[
+                            "score_gap_wg_legal_not_selected_with_pressure"
+                        ].append(g)
+
+
         # Phase BEHAVIOR-2: speed-control summary.
         sc0 = rec.get("speed_control_selected_slot0")
         sc1 = rec.get("speed_control_selected_slot1")
@@ -1203,7 +1453,60 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             speed_priority_summary, score_diff_values
         ),
         "support_targeting_summary": support_targeting_summary,
+        # Phase SPREAD-2: spread-defense summary.
+        # Convert Counter to dict for JSON
+        # serialization.
+        "spread_defense_summary": _finalize_spread_defense_summary(
+            spread_defense_summary
+        ),
     }
+
+
+def _finalize_spread_defense_summary(
+    summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Phase SPREAD-2: convert Counters to dicts
+    so the summary is JSON-serializable. Pure
+    observation; no scoring change.
+    """
+    out = dict(summary)
+    out["selected_by_move"] = dict(summary.get("selected_by_move", Counter()))
+    gaps = list(summary.get(
+        "score_gap_wg_legal_not_selected", []
+    ))
+    gaps_p = list(summary.get(
+        "score_gap_wg_legal_not_selected_with_pressure", []
+    ))
+    out["score_gap_wg_legal_not_selected"] = gaps
+    out["score_gap_wg_legal_not_selected_with_pressure"] = gaps_p
+    out["score_gap_wg_legal_not_selected_count"] = len(gaps)
+    out["score_gap_wg_legal_not_selected_with_pressure_count"] = (
+        len(gaps_p)
+    )
+    if gaps:
+        s = sorted(gaps)
+        out["score_gap_wg_legal_not_selected_min"] = s[0]
+        out["score_gap_wg_legal_not_selected_max"] = s[-1]
+        out["score_gap_wg_legal_not_selected_mean"] = (
+            sum(gaps) / len(gaps)
+        )
+        out["score_gap_wg_legal_not_selected_p25"] = (
+            _percentile(gaps, 0.25)
+        )
+        out["score_gap_wg_legal_not_selected_median"] = (
+            _percentile(gaps, 0.50)
+        )
+        out["score_gap_wg_legal_not_selected_p75"] = (
+            _percentile(gaps, 0.75)
+        )
+    else:
+        out["score_gap_wg_legal_not_selected_min"] = 0.0
+        out["score_gap_wg_legal_not_selected_max"] = 0.0
+        out["score_gap_wg_legal_not_selected_mean"] = 0.0
+        out["score_gap_wg_legal_not_selected_p25"] = 0.0
+        out["score_gap_wg_legal_not_selected_median"] = 0.0
+        out["score_gap_wg_legal_not_selected_p75"] = 0.0
+    return out
 
 
 def _finalize_speed_priority_summary(
@@ -1456,6 +1759,88 @@ def _write_markdown(
             p["by_move"].items(), key=lambda x: -x[1]
         ):
             lines.append(f"| {mid} | {n} |")
+    lines.append("")
+    # Phase SPREAD-2: spread-defense summary
+    # (Wide Guard / Quick Guard / Crafty Shield).
+    lines.append("## Spread-Defense Summary")
+    lines.append("")
+    s = agg.get("spread_defense_summary", {})
+    lines.append("| metric | count |")
+    lines.append("|---|---|")
+    for k in (
+        "slot0_wide_guard_legal",
+        "slot1_wide_guard_legal",
+        "any_slot_wide_guard_legal",
+        "slot0_quick_guard_legal",
+        "slot1_quick_guard_legal",
+        "any_slot_quick_guard_legal",
+        "slot0_crafty_shield_legal",
+        "slot1_crafty_shield_legal",
+        "any_slot_crafty_shield_legal",
+        "slot0_wide_guard_selected",
+        "slot1_wide_guard_selected",
+        "any_slot_wide_guard_selected",
+        "slot0_quick_guard_selected",
+        "slot1_quick_guard_selected",
+        "any_slot_quick_guard_selected",
+        "slot0_crafty_shield_selected",
+        "slot1_crafty_shield_selected",
+        "any_slot_crafty_shield_selected",
+        "spread_defense_legal_not_selected",
+        "opp_pressure_state_turn_count",
+        "opp_used_spread_turn_count",
+        "opp_used_protect_turn_count",
+        "opp_used_wide_guard_turn_count",
+        "opp_used_quick_guard_turn_count",
+    ):
+        lines.append(f"| {k} | {s.get(k, 0)} |")
+    by_move = s.get("selected_by_move") or {}
+    if by_move:
+        lines.append("")
+        lines.append("### Selected by move")
+        lines.append("")
+        lines.append("| move | count |")
+        lines.append("|---|---:|")
+        for mid, n in sorted(by_move.items(), key=lambda x: -x[1]):
+            lines.append(f"| {mid} | {n} |")
+    lines.append("")
+    # Phase SPREAD-4: score-gap distribution
+    # for Wide Guard legal-but-not-selected
+    # turns. The dry-run simulator uses these
+    # percentiles to pick a hypothetical
+    # bonus magnitude.
+    sg = s.get("score_gap_wg_legal_not_selected_count", 0)
+    lines.append("### Wide Guard score-gap (selected - WG)")
+    lines.append("")
+    if sg == 0:
+        lines.append("No Wide Guard legal-but-not-selected turns observed.")
+    else:
+        lines.append(f"count: {sg}")
+        lines.append(
+            f"count (with opp_pressure=True): "
+            f"{s.get('score_gap_wg_legal_not_selected_with_pressure_count', 0)}"
+        )
+        lines.append("")
+        lines.append("| stat | value |")
+        lines.append("|---|---:|")
+        lines.append(
+            f"| min | {s.get('score_gap_wg_legal_not_selected_min', 0):.2f} |"
+        )
+        lines.append(
+            f"| p25 | {s.get('score_gap_wg_legal_not_selected_p25', 0):.2f} |"
+        )
+        lines.append(
+            f"| median | {s.get('score_gap_wg_legal_not_selected_median', 0):.2f} |"
+        )
+        lines.append(
+            f"| mean | {s.get('score_gap_wg_legal_not_selected_mean', 0):.2f} |"
+        )
+        lines.append(
+            f"| p75 | {s.get('score_gap_wg_legal_not_selected_p75', 0):.2f} |"
+        )
+        lines.append(
+            f"| max | {s.get('score_gap_wg_legal_not_selected_max', 0):.2f} |"
+        )
     lines.append("")
     lines.append("## Speed-Control Summary")
     lines.append("")

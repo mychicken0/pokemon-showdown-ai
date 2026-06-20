@@ -1,6 +1,6 @@
 # Walkthrough Read Me First
 
-Last updated: 2026-06-18 (Asia/Bangkok) — V3d.1 learned-preview track closed out (PAUSED)
+Last updated: 2026-06-19 (Asia/Bangkok) — PROTECT-1 roadmap added for RL-oriented behavior work
 
 This file is the chronological project log. It intentionally contains old
 phase reports, superseded results, and failed attempts. For the current truth,
@@ -7236,3 +7236,158 @@ V3d.1 with explicit user authorization.
 
 See `logs/phasePROJECTCLOSEOUT1_final_working_state_roadmap.md`
 for full inventory and 3-option roadmap.
+
+---
+
+## PROTECT-1 Roadmap — Protect Usage / Defensive Action Quality
+
+After PROJECT-CLOSEOUT-1, the next recommended behavior topic was
+recorded as Protect usage / defensive action quality.
+
+Rationale:
+
+- RL-7 proved the offline policy pipeline runs, but training is not
+  approved.
+- The current turn-level dataset is too biased toward double attacks.
+- Protect is a clear, high-value defensive action category.
+- Recent speed-priority expected-faint work makes Protect analysis
+  timely and well-instrumented.
+
+Planned sequence:
+
+1. PROTECT-1 evidence audit (read-only).
+2. PROTECT-2 analyzer gap seal only if needed.
+3. PROTECT-3 policy design / fixture tests if suspicious cases recur.
+4. PROTECT-4 small fix only with evidence.
+
+The roadmap explicitly forbids RL training, model artifacts, large
+logic-debugging benchmarks, default flips, and V3d.1 resume without
+explicit authorization.
+
+See `logs/phasePROTECT1_protect_usage_for_rl_roadmap.md`.
+
+---
+
+## PROTECT-3 — Protect Usage Closeout
+
+**Decision:** `PATH_INCONSISTENCY_RESOLVED`. Close
+the entire PROTECT track.
+
+### Summary
+
+- PROTECT-1 reported "0 floor applied" — that was
+  a diagnostic bug (wrong field path).
+- PROTECT-2 fixed the diagnostic. Real number:
+  floor applied 20 times (slot0=7, slot1=13),
+  9.2% of cases where the field is present.
+- All 20 floor applications were in ef=True
+  contexts.
+- 15 of 20 led to Protect chosen.
+- 5 of 20 still chose attack (policy/magnitude
+  question, not a code defect).
+- 27 attack-through cases had floor NOT applied
+  (condition question, not a path bug).
+
+### Stable state
+
+- No production code change.
+- No scoring change.
+- No default flips.
+- 148 tests pass.
+- No model artifact.
+- No commit/push.
+
+See `logs/phasePROTECT3_protect_usage_closeout.md`
+for full closeout.
+
+---
+
+## COMBO-1 — Doubles Combo-Support Inventory
+
+After PROTECT-3, the next concern was that doubles support is broader
+than wrong-side support targeting. COMBO-1 was created as a read-only
+inventory before any implementation.
+
+Main distinction:
+
+- SUPPORT-2 closed support-targeting safety based on available evidence.
+- COMBO-1 keeps combo planning open.
+
+The inventory covers:
+
+- Ally activation: Beat Up + Justified, Weakness Policy-style proc,
+  absorb/redirect self-proc.
+- Direct ally support: Helping Hand, Coaching, Decorate, Heal Pulse,
+  Life Dew, Pollen Puff.
+- Redirection/protection: Follow Me, Rage Powder, Wide Guard,
+  Quick Guard, Ally Switch, Protect.
+- Turn-order manipulation: After You, Instruct, Quash, Tailwind,
+  Trick Room.
+- Field/weather/terrain synergy.
+- Spread move + partner immunity/benefit.
+- Ability swap/copy/stat-transfer families.
+- Anti-combo counterplay when the opponent focuses the boosted
+  Pokemon.
+
+Data snapshot:
+
+- 129 VGC top-team entries include Tailwind 99 teams, Fake Out 73,
+  Earthquake 51, Trick Room 33, Rage Powder 31, Wide Guard 19,
+  Helping Hand 13, Follow Me 9.
+- 558 random doubles species records include Helping Hand 64 species,
+  Tailwind 94, Fake Out 44, Pollen Puff 36, Justified 4.
+
+Decision:
+
+- No scoring change from COMBO-1.
+- Do not assume every ally hit is good.
+- Do not weaken ally-damage safety.
+- Recommended next phase is **COMBO-2 — Ally Activation Combo
+  Evidence Audit**, read-only, starting with Beat Up + Justified as
+  the mental model plus absorb/redirect partner activation.
+
+See `logs/phaseCOMBO1_doubles_combo_support_inventory.md`.
+
+---
+
+## COMBO-5 — Combo Support Closeout
+
+**Decision:** `PATH_INSTRUMENTED` / `TRAINING_NOT_APPROVED`. Close the COMBO support track.
+
+### Summary
+
+- COMBO-1 found combo planning not implemented;
+  only safety is strong.
+- COMBO-2 audit found absorb/redirect audit
+  fields are template-only.
+- COMBO-3 wired 3 new audit fields
+  (absorb/redirect/weakness_policy) into
+  `log_turn_decision` without scoring change.
+- COMBO-4 1-pair probe confirmed wiring fires
+  correctly: 2/26 redirect_ally cases (Lightning
+  Rod Pikachu + Archaludon Electroshot).
+- COMBO-5 closeout: docs only. No code change.
+
+### Tests
+
+- 6 new (test_doubles_combo3_ally_activation_audit)
+- 113 existing (absorb/safety/redirection/etc.)
+- 119 total, all pass.
+
+### No-change confirmation
+
+- No scoring change. No combo bonus.
+- No Beat Up + Justified bonus. No absorb
+  combo bonus. No Weakness Policy bonus.
+- No model artifact. No commit/push.
+- No `test_51` touched.
+
+### Future COMBO work requires
+
+- Curated test teams with absorb / WP members.
+- 10+ pair probe.
+- Scoring helper design.
+- Explicit user request.
+
+See `logs/phaseCOMBO5_combo_support_closeout.md`
+for full closeout.

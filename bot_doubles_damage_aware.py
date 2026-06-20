@@ -406,6 +406,23 @@ class DoublesDamageAwareConfig:
     enable_known_ally_redirection_hard_safety: bool = False
     known_ally_redirection_block_score: float = 0.0
 
+    # Phase SPREAD-5: Opt-in spread-defense bonus.
+    # Adds a bonus to Wide Guard's raw score when
+    # ``opp_pressure_state`` is True (any live opp
+    # has a revealed spread-move user that is
+    # healthy). Default OFF so the production bot
+    # behavior is unchanged. Only Wide Guard
+    # receives the bonus; Quick Guard and Crafty
+    # Shield are NOT included in this phase
+    # because the SPREAD-4 evidence base did not
+    # surface any Quick Guard / Crafty Shield
+    # legal opportunities. Protect also does not
+    # receive this bonus (Protect is governed by
+    # ``protect_floor`` and the speed-priority
+    # floor).
+    enable_spread_defense_bonus: bool = False
+    wide_guard_spread_pressure_bonus: float = 500.0
+
     # Phase 6.3.5: Ground-into-Flying audit fields (generic dual-type)
     # (no config fields needed for Part 0A - the fix is in the scoring logic)
 
@@ -1489,6 +1506,82 @@ def get_self_stat_drop_penalty(
         return 1.0, ""
     except Exception:
         return 1.0, ""
+
+
+# Phase SPREAD-2: Spread-defense move allowlist.
+# Wide Guard protects the user and ally from any
+# opposing move that targets multiple Pokemon
+# (target = "allAdjacentFoes"). Quick Guard does
+# the same for priority moves. Crafty Shield
+# protects the user and ally from status moves.
+# These are priority=3 in ``get_move_priority``
+# but were NOT in the 8-move protect-like
+# allowlist. The audit/analyzer gap is sealed in
+# SPREAD-2 by adding per-slot legal/selected
+# fields. Pure observation; no scoring change.
+_SPREAD_DEFENSE_MOVE_IDS = frozenset({
+    "wideguard",
+    "quickguard",
+    "craftyshield",
+})
+
+
+def _normalize_move_id_for_spread_defense(move_id: str) -> str:
+    if not isinstance(move_id, str):
+        return ""
+    return (
+        move_id.lower()
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("_", "")
+        .strip()
+    )
+
+
+def is_spread_defense_move(move_id: str) -> bool:
+    """Phase SPREAD-2: True if ``move_id`` is a
+    spread-defense counter move (Wide Guard / Quick
+    Guard / Crafty Shield). Pure observation; used
+    for audit wiring, not scoring.
+    """
+    norm = _normalize_move_id_for_spread_defense(move_id)
+    return norm in _SPREAD_DEFENSE_MOVE_IDS
+
+
+def compute_opp_pressure_state_for_battle(battle) -> bool:
+    """Phase SPREAD-5: True if any live opp has
+    a revealed spread-move user that is healthy
+    enough to use it (HP >= 0.5). Mirrors the
+    SPREAD-2 audit ``opp_pressure_state`` logic
+    but is callable from ``score_action`` where
+    the per-turn flag is not yet available.
+    """
+    try:
+        live_opps = [
+            opp
+            for opp in (getattr(battle, "opponent_active_pokemon", None) or [])
+            if opp and not getattr(opp, "fainted", False)
+        ]
+        if not live_opps:
+            return False
+        for opp in live_opps:
+            opp_hp = getattr(opp, "current_hp_fraction", 1.0)
+            if opp_hp is None or opp_hp < 0.5:
+                continue
+            opp_moves_dict = getattr(opp, "moves", {}) or {}
+            if not opp_moves_dict:
+                continue
+            for opp_move in opp_moves_dict.values():
+                if opp_move is None:
+                    continue
+                try:
+                    if is_opponent_spread_move(opp_move, None):
+                        return True
+                except Exception:
+                    continue
+    except Exception:
+        return False
+    return False
 
 
 def is_opponent_only_spread_move(move, order=None) -> bool:
@@ -3903,6 +3996,21 @@ class DoublesDamageAwarePlayer(Player):
             return True
         return False
 
+    def _slot_in_opp_pressure(
+        self, active_idx: int, battle
+    ) -> bool:
+        """Phase SPREAD-5: instance wrapper around
+        ``compute_opp_pressure_state_for_battle``.
+        The ``active_idx`` argument is unused but
+        is kept for symmetry with future slot-
+        specific opp-pressure rules. The current
+        rule is per-turn (any live opp), not per-
+        slot, because Wide Guard protects both
+        slots in a doubles battle.
+        """
+        del active_idx  # currently unused
+        return compute_opp_pressure_state_for_battle(battle)
+
     def _is_all_target_immune_damaging_spread(
         self, order, slot_idx: int, battle, config
     ) -> bool:
@@ -4385,6 +4493,46 @@ class DoublesDamageAwarePlayer(Player):
                 is_selected=is_selected,
                 in_spread_check=in_spread_check,
             )
+            # Phase SPREAD-5: Opt-in Wide Guard
+            # spread-defense bonus. Apply only when
+            # ALL of the following are true:
+            #   * enable_spread_defense_bonus is True
+            #     (default OFF; opt-in only)
+            #   * candidate action is Wide Guard
+            #   * opp_pressure_state is True (any
+            #     live opp has a revealed spread-move
+            #     user that is healthy)
+            #   * bonus magnitude is positive
+            # This is intentionally narrow:
+            #   - Quick Guard: NOT included
+            #   - Crafty Shield: NOT included
+            #   - Protect: NOT included (governed by
+            #     protect_floor)
+            #   - non-pressure turns: NOT included
+            #   - default config: NOT included
+            if (
+                getattr(
+                    self.config,
+                    "enable_spread_defense_bonus",
+                    False,
+                )
+                and isinstance(order.order, Move)
+                and _normalize_move_id_for_spread_defense(
+                    getattr(order.order, "id", "")
+                ) == "wideguard"
+                and self._slot_in_opp_pressure(
+                    active_idx, battle
+                )
+                and getattr(
+                    self.config,
+                    "wide_guard_spread_pressure_bonus",
+                    500.0,
+                )
+                > 0.0
+            ):
+                score = float(score) + float(
+                    self.config.wide_guard_spread_pressure_bonus
+                )
             # Phase BEHAVIOR-12: Expected-faint attack penalty.
             # Applied to non-Protect, non-switch, non-pass
             # actions when the active slot is expected to
@@ -9368,6 +9516,30 @@ class DoublesDamageAwarePlayer(Player):
                             spread_available[idx] = True
                             break
 
+            # Phase SPREAD-2: spread-defense move legal
+            # per slot (Wide Guard / Quick Guard /
+            # Crafty Shield). Distinct from
+            # protect_like_available because those
+            # 8 standard moves don't include any
+            # spread-defense counter. Per-slot
+            # booleans for the audit logger only;
+            # no scoring change.
+            wide_guard_legal = [False, False]
+            quick_guard_legal = [False, False]
+            crafty_shield_legal = [False, False]
+            for idx in (0, 1):
+                if battle.available_moves[idx]:
+                    for move in battle.available_moves[idx]:
+                        mid = _normalize_move_id_for_spread_defense(
+                            getattr(move, "id", "")
+                        )
+                        if mid == "wideguard":
+                            wide_guard_legal[idx] = True
+                        elif mid == "quickguard":
+                            quick_guard_legal[idx] = True
+                        elif mid == "craftyshield":
+                            crafty_shield_legal[idx] = True
+
             # 5. best spread score and best KO score per slot
             best_spread_score = [None, None]
             best_ko_score = [None, None]
@@ -9566,6 +9738,29 @@ class DoublesDamageAwarePlayer(Player):
             only_conditional_priority = [False, False]
             stalling_field_condition = [False, False]
 
+            # Phase SPREAD-2: which spread-defense
+            # move (Wide Guard / Quick Guard /
+            # Crafty Shield) did we select this turn,
+            # per slot. Derived from the selected
+            # action's move id (already computed as
+            # ``selected_action_move_id``). Pure
+            # observation; no scoring change.
+            spread_defense_selected = [
+                _normalize_move_id_for_spread_defense(
+                    selected_action_move_id[0]
+                )
+                if selected_action_move_id[0]
+                in _SPREAD_DEFENSE_MOVE_IDS
+                else "",
+                _normalize_move_id_for_spread_defense(
+                    selected_action_move_id[1]
+                )
+                if selected_action_move_id[1]
+                in _SPREAD_DEFENSE_MOVE_IDS
+                else "",
+            ]
+
+
             stalling = False
             if battle:
                 if self.is_trick_room_active(battle):
@@ -9601,6 +9796,132 @@ class DoublesDamageAwarePlayer(Player):
                     only_conditional_priority[idx] = threat_info.get(
                         "only_conditional_priority", False
                     )
+
+            # Phase SPREAD-2: opp-pressure state. True
+            # if at least one opp is alive AND has at
+            # least one revealed spread move in its
+            # known moveset AND is healthy enough to
+            # use it. This is the trigger condition
+            # that would make a Wide Guard legal-and-
+            # useful. Pure observation; no scoring
+            # change.
+            opp_pressure_state = False
+            try:
+                live_opps = [
+                    opp
+                    for opp in battle.opponent_active_pokemon
+                    if opp and not getattr(opp, "fainted", False)
+                ]
+                if len(live_opps) >= 1:
+                    for opp in live_opps:
+                        opp_hp = getattr(opp, "current_hp_fraction", 1.0)
+                        if opp_hp is None or opp_hp < 0.5:
+                            continue
+                        opp_moves_dict = getattr(opp, "moves", {}) or {}
+                        if not opp_moves_dict:
+                            continue
+                        for opp_move in opp_moves_dict.values():
+                            if opp_move is None:
+                                continue
+                            try:
+                                if is_opponent_spread_move(
+                                    opp_move, None
+                                ):
+                                    opp_pressure_state = True
+                                    break
+                            except Exception:
+                                continue
+                        if opp_pressure_state:
+                            break
+            except Exception:
+                opp_pressure_state = False
+
+            # Phase SPREAD-4: per-slot Wide Guard /
+            # Quick Guard / Crafty Shield raw scores
+            # from the score_action pass. The bot
+            # already computed slot_0_scores /
+            # slot_1_scores above. Look up the
+            # spread-defense candidate's raw score
+            # so the analyzer can compute the
+            # score-gap between WG and the
+            # selected move. Pure observation; no
+            # scoring change in the bot.
+            wide_guard_score = [None, None]
+            quick_guard_score = [None, None]
+            crafty_shield_score = [None, None]
+            # Per-slot best alternative (max non-WG /
+            # non-QG / non-CS) score for the gap
+            # calculation. This is the score of the
+            # action the bot is likely picking instead
+            # of the spread-defense move.
+            best_alternative_score = [None, None]
+            try:
+                for idx in (0, 1):
+                    slot_scores = (
+                        slot_0_scores
+                        if idx == 0
+                        else slot_1_scores
+                    )
+                    if not valid_orders or idx >= len(valid_orders):
+                        continue
+                    if not valid_orders[idx]:
+                        continue
+                    best_alt = None
+                    for order in valid_orders[idx]:
+                        if not order or not isinstance(
+                            order.order, Move
+                        ):
+                            continue
+                        mid = (
+                            _normalize_move_id_for_spread_defense(
+                                getattr(order.order, "id", "")
+                            )
+                        )
+                        score = float(
+                            slot_scores.get(id(order), 0.0)
+                        )
+                        if mid == "wideguard":
+                            wide_guard_score[idx] = score
+                            continue
+                        if mid == "quickguard":
+                            quick_guard_score[idx] = score
+                            continue
+                        if mid == "craftyshield":
+                            crafty_shield_score[idx] = score
+                            continue
+                        if best_alt is None or score > best_alt:
+                            best_alt = score
+                    best_alternative_score[idx] = best_alt
+            except Exception:
+                pass
+
+            # Phase SPREAD-4: score gap per slot =
+            # wide_guard_score - best_alternative_score.
+            # Negative gap = selected alternative beat
+            # WG; positive = WG was already winning.
+            # The dry-run simulator uses this gap
+            # distribution to pick a hypothetical
+            # bonus magnitude.
+            score_gap_wg_vs_selected = [None, None]
+            score_gap_qg_vs_selected = [None, None]
+            try:
+                for idx in (0, 1):
+                    wg = wide_guard_score[idx]
+                    qg = quick_guard_score[idx]
+                    alt = best_alternative_score[idx]
+                    if wg is not None and alt is not None:
+                        score_gap_wg_vs_selected[idx] = float(
+                            wg - alt
+                        )
+                    if qg is not None and alt is not None:
+                        score_gap_qg_vs_selected[idx] = float(
+                            qg - alt
+                        )
+            except Exception:
+                score_gap_wg_vs_selected = [None, None]
+                score_gap_qg_vs_selected = [None, None]
+
+
 
             # Phase 6.4: Compute switch safety audit data for selected orders
             _t_audit_start = time.time() if _timing_enabled else 0
@@ -9702,6 +10023,16 @@ class DoublesDamageAwarePlayer(Player):
             dynamic_type_absorb_candidate_declared_type_list = ["", ""]
             dynamic_type_absorb_candidate_effective_type_list = ["", ""]
             dynamic_type_absorb_candidate_form_list = ["", ""]
+            # Phase COMBO-3: ally-activation combo audit
+            # lists. Per-slot booleans. The bot does
+            # not yet score beneficial ally activation;
+            # this records whether the bot happened
+            # to select such a move (e.g. Surf into
+            # Water Absorb ally). False by default.
+            # Observational only, no scoring change.
+            selected_move_into_known_absorb_ally_list = [False, False]
+            selected_move_into_known_redirect_ally_list = [False, False]
+            selected_super_effective_into_weakness_policy_holder_list = [False, False]
             dynamic_type_absorb_candidate_source_list = ["", ""]
             dynamic_type_absorb_candidate_target_table_list = [[], []]
 
@@ -10186,6 +10517,175 @@ class DoublesDamageAwarePlayer(Player):
                 dynamic_type_absorb_candidate_target_table_list[idx] = absorb_result[
                     "dynamic_candidate_target_table"
                 ]
+
+                # Phase COMBO-3: ally-activation combo
+                # audit. Compute three per-slot booleans
+                # from the selected action, the
+                # active mon, the ally, and known
+                # ally abilities / items. This is
+                # observational only — no scoring
+                # change. The fields help future
+                # audits prove whether the bot ever
+                # selected a beneficial ally-activation
+                # move.
+                try:
+                    if (
+                        chosen_order is not None
+                        and isinstance(chosen_order.order, Move)
+                    ):
+                        sel_move = chosen_order.order
+                        sel_move_id = (
+                            getattr(sel_move, "id", "") or ""
+                        ).lower()
+                        sel_target = int(
+                            getattr(chosen_order, "move_target", 0) or 0
+                        )
+                        # Resolve the selected move's
+                        # effective type.
+                        sel_eff_type = ""
+                        try:
+                            from doubles_engine.types import (
+                                get_effective_move_type,
+                            )
+                            sel_eff_type = (
+                                get_effective_move_type(
+                                    sel_move, active_mon
+                                ) or ""
+                            ).upper()
+                        except Exception:
+                            sel_eff_type = ""
+                        # Ally: the other slot (1-idx).
+                        ally_idx = 1 - idx
+                        ally_mon = (
+                            battle.active_pokemon[ally_idx]
+                            if (
+                                len(battle.active_pokemon)
+                                > ally_idx
+                            )
+                            else None
+                        )
+                        ally_ability = ""
+                        if ally_mon is not None:
+                            try:
+                                ally_ability = (
+                                    get_known_ability(
+                                        ally_mon, battle
+                                    ) or ""
+                                )
+                            except Exception:
+                                ally_ability = ""
+                        ally_ability_norm = "".join(
+                            c
+                            for c in ally_ability.lower()
+                            if c.isalnum()
+                        )
+                        # Field 1: selected damaging move
+                        # into known absorb ally.
+                        # Conditions:
+                        # - target is the ally (-1 or -2)
+                        # OR the move is a spread move
+                        # that would hit the ally.
+                        # - ally ability is in the known
+                        # absorb set and matches the
+                        # selected move's type.
+                        hits_ally = (
+                            sel_target in (-1, -2)
+                        ) or self.is_spread_move(sel_move)
+                        if hits_ally and sel_eff_type:
+                            # Map move type to expected
+                            # absorb ability.
+                            type_to_ability = {
+                                "WATER": "waterabsorb",
+                                "ELECTRIC": "voltabsorb",
+                                "FIRE": "flashfire",
+                                "GRASS": "sapsipper",
+                            }
+                            expected = type_to_ability.get(
+                                sel_eff_type, ""
+                            )
+                            if (
+                                expected
+                                and ally_ability_norm
+                                in (
+                                    expected,
+                                    "stormdrain",
+                                    "lightningrod",
+                                    "dryskin",
+                                    "motordrive",
+                                    "wellbakedbody",
+                                )
+                            ):
+                                selected_move_into_known_absorb_ally_list[
+                                    idx
+                                ] = True
+                        # Field 2: selected single-target
+                        # move would be redirected by
+                        # known ally Storm Drain or
+                        # Lightning Rod.
+                        if (
+                            sel_target in (1, 2)
+                            and ally_ability_norm
+                            in ("stormdrain", "lightningrod")
+                        ):
+                            # Only count as "would be
+                            # redirected into absorb ally"
+                            # if the move is of the
+                            # matching type and the
+                            # original target is not
+                            # already the redirector.
+                            if sel_eff_type in (
+                                "WATER", "ELECTRIC"
+                            ):
+                                selected_move_into_known_redirect_ally_list[
+                                    idx
+                                ] = True
+                        # Field 3: selected move is
+                        # super-effective into ally with
+                        # known Weakness Policy.
+                        # Weakness Policy item is
+                        # observable in the bot's known
+                        # data; if not observable, the
+                        # field stays False.
+                        if hits_ally and sel_eff_type:
+                            try:
+                                type_mult = (
+                                    self.get_type_effectiveness(
+                                        sel_move, ally_mon,
+                                        active_mon
+                                    )
+                                )
+                            except Exception:
+                                type_mult = 1.0
+                            ally_item_norm = ""
+                            try:
+                                ally_item = getattr(
+                                    ally_mon, "item", None
+                                )
+                                if ally_item is not None:
+                                    ally_item_norm = (
+                                        "".join(
+                                            c
+                                            for c in str(
+                                                ally_item
+                                            ).lower()
+                                            if c.isalnum()
+                                        )
+                                    )
+                            except Exception:
+                                ally_item_norm = ""
+                            if (
+                                type_mult is not None
+                                and type_mult > 1.0
+                                and ally_item_norm
+                                == "weaknesspolicy"
+                            ):
+                                selected_super_effective_into_weakness_policy_holder_list[
+                                    idx
+                                ] = True
+                except Exception:
+                    # Observational only. On any
+                    # error, leave the field False.
+                    pass
 
                 is_selected_ar = known_ally_redirection_selected_list[idx]
                 is_known_before = known_ally_redirection_known_before_decision_list[idx]
@@ -11334,6 +11834,32 @@ class DoublesDamageAwarePlayer(Player):
                 switch_available=switch_available,
                 only_conditional_priority=only_conditional_priority,
                 stalling_field_condition=stalling_field_condition,
+                # Phase SPREAD-2: spread-defense audit
+                # wiring (Wide Guard / Quick Guard /
+                # Crafty Shield). Pure observation;
+                # no scoring change. The logger writes
+                # per-slot booleans to slot_0/slot_1
+                # and persists the top-level
+                # ``opp_pressure_state`` flag.
+                wide_guard_legal=wide_guard_legal,
+                quick_guard_legal=quick_guard_legal,
+                crafty_shield_legal=crafty_shield_legal,
+                spread_defense_selected=spread_defense_selected,
+                opp_pressure_state=opp_pressure_state,
+                # Phase SPREAD-4: per-slot spread-defense
+                # raw score + score gap vs selected. Pure
+                # observation; no scoring change in the
+                # bot. The audit logger writes the per-
+                # slot score fields and a top-level
+                # ``score_gap_wide_guard_vs_selected``
+                # list so the dry-run simulator can
+                # compute decision-flip counts at
+                # various hypothetical bonus magnitudes.
+                wide_guard_score=wide_guard_score,
+                quick_guard_score=quick_guard_score,
+                crafty_shield_score=crafty_shield_score,
+                score_gap_wide_guard_vs_selected=score_gap_wg_vs_selected,
+                score_gap_quick_guard_vs_selected=score_gap_qg_vs_selected,
                 ability_hard_block_avoided=[
                     self._ability_hard_block_avoided.setdefault(
                         battle_tag, {0: False, 1: False}
@@ -11647,6 +12173,12 @@ class DoublesDamageAwarePlayer(Player):
                 dynamic_type_absorb_candidate_form=dynamic_type_absorb_candidate_form_list,
                 dynamic_type_absorb_candidate_source=dynamic_type_absorb_candidate_source_list,
                 dynamic_type_absorb_candidate_target_table=dynamic_type_absorb_candidate_target_table_list,
+                # Phase COMBO-3: ally-activation combo
+                # audit. Per-slot booleans. Observational
+                # only; no scoring change.
+                selected_move_into_known_absorb_ally=selected_move_into_known_absorb_ally_list,
+                selected_move_into_known_redirect_ally=selected_move_into_known_redirect_ally_list,
+                selected_super_effective_into_weakness_policy_holder=selected_super_effective_into_weakness_policy_holder_list,
                 # Phase 6.3.6b.6: Blocked candidate metadata
                 known_ally_redirection_opportunity_observed=known_ally_redirection_opportunity_observed_list,
                 known_ally_redirection_blocked_candidate_move_id=known_ally_redirection_blocked_candidate_move_id_list,

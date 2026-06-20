@@ -328,6 +328,7 @@ async def run_one_battle(
     enable_mega_evolution: bool = False,
     enable_behavior_15_piecewise: bool = False,
     enable_decision_timing_diagnostics: bool = False,
+    enable_spread_defense_bonus: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -442,6 +443,31 @@ async def run_one_battle(
                 enable_decision_timing_diagnostics,
             )
         )
+    # Phase SPREAD-5: opt-in Wide Guard spread-defense
+    # bonus. Default OFF keeps production scoring
+    # unchanged. When set, treatment bot adds
+    # wide_guard_spread_pressure_bonus (+500.0 default)
+    # to Wide Guard's raw score when opp_pressure_state
+    # is True. Quick Guard / Crafty Shield / Protect
+    # are NOT included.
+    if is_treatment and enable_spread_defense_bonus:
+        from bot_doubles_damage_aware import (
+            DoublesDamageAwareConfig,
+        )
+        spread_cfg = DoublesDamageAwareConfig(
+            enable_spread_defense_bonus=True,
+            wide_guard_spread_pressure_bonus=500.0,
+        )
+        if treatment_config is None:
+            treatment_config = spread_cfg
+        else:
+            treatment_config = DoublesDamageAwareConfig(
+                **{
+                    **treatment_config.__dict__,
+                    "enable_spread_defense_bonus": True,
+                    "wide_guard_spread_pressure_bonus": 500.0,
+                }
+            )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
     # completely BEFORE constructing either player. Each
     # side must call ControlledTeamPreviewPlayer(...) exactly
@@ -709,6 +735,19 @@ def main():
         ),
     )
     parser.add_argument(
+        "--enable-spread-defense-bonus", action="store_true",
+        help=(
+            "Phase SPREAD-5 probe: enable opt-in "
+            "Wide Guard spread-defense bonus "
+            "(wide_guard_spread_pressure_bonus = +500.0) "
+            "on the treatment arm only. Default OFF. "
+            "Bonus fires only when (a) candidate is "
+            "Wide Guard, (b) opp_pressure_state=True, "
+            "(c) bonus magnitude > 0. Quick Guard / "
+            "Crafty Shield / Protect are NOT included."
+        ),
+    )
+    parser.add_argument(
         "--audit-decisions", action="store_true",
         help=(
             "Phase BI-3F-1 probe: attach a "
@@ -850,6 +889,9 @@ def main():
                 enable_decision_timing_diagnostics=(
                     args.enable_timing_diagnostics
                 ),
+                enable_spread_defense_bonus=(
+                    args.enable_spread_defense_bonus
+                ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )
@@ -865,6 +907,9 @@ def main():
                 enable_behavior_15_piecewise=args.enable_behavior_15_piecewise,
                 enable_decision_timing_diagnostics=(
                     args.enable_timing_diagnostics
+                ),
+                enable_spread_defense_bonus=(
+                    args.enable_spread_defense_bonus
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,

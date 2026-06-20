@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-19 (Asia/Bangkok) — TURN-5/6 timing field gap track closed (OLD-ARTIFACT)
+Last updated: 2026-06-19 (Asia/Bangkok) — PROTECT-1 roadmap added for RL-oriented behavior work
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -3887,3 +3887,199 @@ explicit user authorization.
 
 See `logs/phasePROJECTCLOSEOUT1_final_working_state_roadmap.md`
 for full inventory and 3-option roadmap.
+
+---
+
+## PROTECT-1 Roadmap — Protect Usage / Defensive Action Quality
+
+**Decision:** next recommended behavior topic is Protect usage,
+starting with a read-only evidence audit.
+
+This recommendation is driven by RL-7: the turn-level offline policy
+pipeline works, but training is not approved because the dataset is
+too attack-heavy and weak against a majority baseline. Protect usage
+is the most useful next behavior topic for improving future
+state/action diversity without jumping into RL training.
+
+### Planned sequence
+
+1. **PROTECT-1:** read-only Protect usage evidence audit.
+2. **PROTECT-2:** analyzer gap seal only if existing fields are
+   insufficient.
+3. **PROTECT-3:** policy design / fixture tests only if repeated
+   suspicious cases are found.
+4. **PROTECT-4:** small scoring fix only with evidence.
+
+### Rules
+
+- No RL training.
+- No model artifacts.
+- No large benchmarks for logic debugging.
+- No default flips.
+- No V3d.1 resume unless explicitly requested.
+
+See `logs/phasePROTECT1_protect_usage_for_rl_roadmap.md`
+for the stored roadmap.
+
+---
+
+## PROTECT-3 — Protect Usage Closeout
+
+**Decision:** `PATH_INCONSISTENCY_RESOLVED`. Close
+the entire PROTECT track.
+
+### Evidence chain
+
+- **PROTECT-1:** initial audit found 32
+  attack-through cases but reported
+  `floor_applied = 0`. That was a diagnostic
+  bug, not a bot bug.
+- **PROTECT-2:** fixed 2 field-path bugs in
+  the diagnostic (nested floor field, list of
+  booleans). Re-ran on same artifacts.
+  - Floor applied: 20 (slot0=7, slot1=13),
+    9.2% of cases where field is present.
+  - All 20 in ef=True contexts.
+  - 15 of 20 led to Protect chosen.
+  - 5 of 20 still chose attack (policy/magnitude
+    question; not a path bug).
+- **PROTECT-3:** closeout. No scoring change.
+  No PROTECT-4.
+
+### Stable state preserved
+
+- `bot_doubles_damage_aware.py`: not modified.
+- `doubles_decision_audit_logger.py`: not
+  modified.
+- `protect_floor` config: unchanged at 240.0.
+- No default flips.
+- 24 diagnostic tests + 124 unrelated = 148
+  pass.
+
+### Future magnitude review requires
+
+- Larger fresh dataset (20+ pairs, latest
+  instrumentation).
+- Targeted priority-threat probe.
+- Dry-run magnitude experiments only.
+- Win/loss evidence at scale (100+ cases).
+- Without these, any magnitude change is
+  untested speculation.
+
+See `logs/phasePROTECT3_protect_usage_closeout.md`
+for full closeout.
+
+---
+
+## COMBO-1 — Doubles Combo-Support Inventory
+
+**Decision:** combo-support is a broad open topic and should start
+with evidence, not scoring.
+
+SUPPORT-2 closed wrong-side support targeting safety as healthy.
+That does **not** close combo planning. Doubles combo support also
+includes ally activation, partner immunity/benefit, redirection,
+Wide Guard / Quick Guard, turn-order manipulation, weather/terrain
+synergy, ability swap/copy, and anti-combo counterplay.
+
+### Key inventory findings
+
+- VGC top-team data has high support density:
+  Tailwind 99 teams, Fake Out 73, Earthquake 51,
+  Trick Room 33, Rage Powder 31, Wide Guard 19,
+  Helping Hand 13, Follow Me 9.
+- Random doubles pool has broad support availability:
+  Helping Hand 64 species, Icy Wind 53, Rock Slide 41,
+  Pollen Puff 36, Tailwind 94, Fake Out 44.
+- Justified appears in both local random pool and VGC data,
+  but Beat Up was not present in the inspected local pools.
+  Beat Up + Justified remains strategically relevant for
+  custom teams and should be handled as a mechanic pattern,
+  not ignored by frequency alone.
+- Current code is strongest at safety:
+  support-target classification, direct known absorb safety,
+  ally ability safety, and redirection/absorb hard-safety
+  tests.
+- Current code does **not** prove positive combo planning:
+  Beat Up + Justified intent, Weakness Policy self-proc,
+  beneficial absorb self-proc, Instruct/After You valuation,
+  and proactive Wide Guard / Quick Guard value remain open.
+
+### Recommended next phase
+
+**COMBO-2 — Ally Activation Combo Evidence Audit**
+(read-only).
+
+Start with the narrow high-value family:
+
+- Beat Up + Justified as the mental model.
+- Surf/Discharge/Fire/Grass into beneficial partner
+  absorb/redirect abilities.
+- Weakness Policy as design-only unless local item evidence
+  is sufficient.
+
+No scoring change, no default flip, no RL/training, no model
+artifact, and no `test_51`.
+
+See `logs/phaseCOMBO1_doubles_combo_support_inventory.md`
+for the full inventory.
+
+---
+
+## COMBO-5 — Combo Support Closeout
+
+**Decision:** `PATH_INSTRUMENTED` / `TRAINING_NOT_APPROVED`. Close the COMBO support track.
+
+### Evidence chain
+
+- **COMBO-1:** initial support-targeting closeout
+  found combo planning is not implemented; only
+  safety is strong.
+- **COMBO-2:** audit found absorb/redirect audit
+  fields are template-only (not populated); 0
+  combo activity in 543 turns of existing
+  artifacts.
+- **COMBO-3:** wired 3 new audit fields from
+  existing bot detection logic into
+  `log_turn_decision`:
+  - `selected_move_into_known_absorb_ally`
+  - `selected_move_into_known_redirect_ally`
+  - `selected_super_effective_into_weakness_policy_holder`
+  All 3 are real values in the JSONL. No scoring
+  change. 6 new tests + 113 existing = 119 pass.
+- **COMBO-4:** 1-pair probe (team 54: Pikachu +
+  Archaludon, Lightning Rod) confirmed wiring
+  fires correctly: 2/26 turns have
+  `redirect_ally=True` (semantically correct:
+  Archaludon selected Electroshot, ally Pikachu
+  had Lightning Rod). 0/26 absorb (no absorb
+  ally on team 54). 0/26 weakness_policy (0 WP
+  in top 200).
+- **COMBO-5:** closeout. Docs only. No code
+  change.
+
+### Stable state preserved
+
+- `bot_doubles_damage_aware.py`: changed ONLY in
+  audit wiring (COMBO-3). No scoring change.
+- `doubles_decision_audit_logger.py`: changed
+  ONLY in record template (COMBO-3).
+- `DoublesDamageAwareConfig`: NOT modified.
+- `matchup_top4_v3` policy: unchanged.
+- `learned_preview_v3c1`, `learned_preview_v3d1`:
+  not promoted.
+- `protect_floor`: unchanged at 240.0.
+- No flag flips. No defaults flipped.
+- No `test_51` touched.
+- No commit/push.
+
+### Future COMBO work requires
+
+- Manually curated test teams with absorb
+  allies and Weakness Policy holders.
+- 10+ pair probe for win/loss evidence.
+- Scoring helper design as a separate phase.
+- Explicit user request.
+
+See `logs/phaseCOMBO5_combo_support_closeout.md`
+for full closeout.
