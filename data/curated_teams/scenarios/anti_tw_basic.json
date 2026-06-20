@@ -1,7 +1,7 @@
 {
   "scenario_id": "anti_tw_basic",
   "description": "Anti-Tailwind family: opp scripts Tailwind on turn 1; bot must counter with Taunt/Encore",
-  "version": 1,
+  "version": 2,
   "our_team_file": "data/curated_teams/control4a/team_027.json",
   "opp_team_file": "data/curated_teams/control4a/team_046.json",
   "lead": {
@@ -10,14 +10,18 @@
   },
   "script": {
     "turn_1": {
-      "opp_slot_0": {"move": "tailwind"},
-      "opp_slot_1": {"move": "protect"}
+      "opp_slot_0": {
+        "move": "tailwind"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
     }
   },
   "validators": [
     {
       "name": "tw_actually_used",
-      "type": "expected_opp_action_used",
+      "type": "expected_scripted_action",
       "expected": true,
       "field": "tailwind"
     },

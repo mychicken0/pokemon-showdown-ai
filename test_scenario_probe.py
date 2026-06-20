@@ -37,6 +37,8 @@ from scenario_probe import (
     load_scenario_dict,
     load_scenario_file,
     run_validators,
+    validate_scripted_action_with_crosscheck,
+    run_validators_with_canonical,
 )
 
 
@@ -576,6 +578,296 @@ class TestRunValidators(unittest.TestCase):
         results = run_validators(scen, audit)
         _, passed, msg = results[0]
         self.assertTrue(passed)
+
+
+class TestExpectedScriptedAction(unittest.TestCase):
+    """Phase SCENARIO-11b: tests for the
+    Option C canonical signal validator.
+    The canonical signal is the baseline
+    audit's ``scripted_actions``; the
+    treatment audit's ``opponent_actions``
+    is a diagnostic cross-check.
+    """
+
+    def _baseline_with_move(self, move: str) -> list:
+        return [{
+            "battle_tag": "test-1",
+            "scenario_id": "test",
+            "scripted_actions": [
+                {
+                    "turn": 1,
+                    "slot_idx": 0,
+                    "move": move,
+                    "executed": True,
+                },
+            ],
+        }]
+
+    def _baseline_empty(self) -> list:
+        return [{
+            "battle_tag": "test-1",
+            "scenario_id": "test",
+            "scripted_actions": [],
+        }]
+
+    def _treatment_with_opp_used(self, field, val):
+        return [{
+            "battle_tag": "test-1",
+            "audit_turns": [
+                {
+                    "turn": 1,
+                    "opponent_actions": {
+                        f"opponent_used_{field}": val,
+                    },
+                },
+            ],
+        }]
+
+    def _treatment_with_no_opp_actions(self) -> list:
+        return [{
+            "battle_tag": "test-1",
+            "audit_turns": [
+                {"turn": 1, "opponent_actions": None},
+            ],
+        }]
+
+    def test_pass_when_baseline_has_move(self):
+        """Canonical: baseline scripted_actions
+        has the move with executed=True. Pass."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=None,
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertIsNone(result["bot_opp_action_crosscheck"])
+        self.assertFalse(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_fail_when_baseline_missing_move(self):
+        """No canonical match: fail."""
+        result = validate_scripted_action_with_crosscheck(
+            move="tailwind",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=None,
+        )
+        self.assertFalse(result["canonical_signal_fired"])
+        self.assertFalse(result["passed"])
+
+    def test_fail_when_baseline_empty(self):
+        """Empty baseline: fail."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_empty(),
+            treatment_records=None,
+        )
+        self.assertFalse(result["canonical_signal_fired"])
+        self.assertFalse(result["passed"])
+
+    def test_gap_true_when_treatment_missing_opp_action(self):
+        """Canonical fires but treatment
+        has no opp_actions: gap=True,
+        but still passes via canonical."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=self._treatment_with_no_opp_actions(),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertIsNone(result["bot_opp_action_crosscheck"])
+        self.assertTrue(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_gap_true_when_treatment_field_explicit_false(self):
+        """Canonical fires but treatment
+        says opp_used=False: gap=True,
+        still passes via canonical."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=self._treatment_with_opp_used(
+                "trickroom", False
+            ),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertFalse(result["bot_opp_action_crosscheck"])
+        self.assertTrue(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_gap_false_when_both_agree(self):
+        """Canonical fires AND treatment
+        says opp_used=True: gap=False."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=self._treatment_with_opp_used(
+                "trickroom", True
+            ),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertTrue(result["bot_opp_action_crosscheck"])
+        self.assertFalse(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_no_crash_when_treatment_field_missing(self):
+        """Treatment has opp_actions but
+        the field is missing: crosscheck=None,
+        gap=True."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=self._treatment_with_opp_used(
+                "some_other_field", True
+            ),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertIsNone(result["bot_opp_action_crosscheck"])
+        self.assertTrue(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_no_crash_when_treatment_records_empty(self):
+        """Treatment records empty: crosscheck=None,
+        gap=False (no treatment provided)."""
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("trickroom"),
+            treatment_records=[],
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+        self.assertIsNone(result["bot_opp_action_crosscheck"])
+        self.assertFalse(result["bot_opp_action_gap"])
+        self.assertTrue(result["passed"])
+
+    def test_supports_trickroom(self):
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=self._baseline_with_move("Trick Room"),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+
+    def test_supports_tailwind(self):
+        result = validate_scripted_action_with_crosscheck(
+            move="tailwind",
+            baseline_records=self._baseline_with_move("tailwind"),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+
+    def test_supports_swordsdance(self):
+        result = validate_scripted_action_with_crosscheck(
+            move="swordsdance",
+            baseline_records=self._baseline_with_move(
+                "Swords Dance"
+            ),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+
+    def test_supports_heatwave(self):
+        result = validate_scripted_action_with_crosscheck(
+            move="heatwave",
+            baseline_records=self._baseline_with_move("Heat Wave"),
+        )
+        self.assertTrue(result["canonical_signal_fired"])
+
+    def test_failed_action_does_not_count(self):
+        """An action with executed=False
+        should NOT count as canonical fired."""
+        baseline = [{
+            "scripted_actions": [
+                {
+                    "turn": 1,
+                    "slot_idx": 0,
+                    "move": "trickroom",
+                    "executed": False,
+                },
+            ],
+        }]
+        result = validate_scripted_action_with_crosscheck(
+            move="trickroom",
+            baseline_records=baseline,
+            treatment_records=None,
+        )
+        self.assertFalse(result["canonical_signal_fired"])
+        self.assertFalse(result["passed"])
+
+    def test_run_validators_with_canonical(self):
+        """Test the higher-level
+        run_validators_with_canonical
+        function with a scripted scenario."""
+        data = dict(
+            VALID_SCENARIO,
+            validators=[
+                {
+                    "name": "tr_actually_used",
+                    "type": "expected_scripted_action",
+                    "expected": True,
+                    "field": "trickroom",
+                },
+                {
+                    "name": "no_failures",
+                    "type": "no_script_failures",
+                },
+            ],
+        )
+        scen = load_scenario_dict(data)
+        baseline = self._baseline_with_move("trickroom")
+        treatment = self._treatment_with_no_opp_actions()
+        results = run_validators_with_canonical(
+            scen, baseline, treatment
+        )
+        self.assertEqual(len(results), 2)
+        # scripted_action validator
+        r0 = results[0]
+        self.assertEqual(r0["validator"].type,
+                         "expected_scripted_action")
+        self.assertTrue(r0["passed"])
+        self.assertTrue(r0["canonical_signal_fired"])
+        self.assertTrue(r0["bot_opp_action_gap"])
+        # no_script_failures
+        r1 = results[1]
+        self.assertEqual(r1["validator"].type,
+                         "no_script_failures")
+        self.assertTrue(r1["passed"])
+
+    def test_scenario_loader_accepts_new_type(self):
+        """The scenario loader should accept
+        ``expected_scripted_action`` as a
+        valid validator type."""
+        data = dict(
+            VALID_SCENARIO,
+            validators=[
+                {
+                    "name": "x",
+                    "type": "expected_scripted_action",
+                    "expected": True,
+                    "field": "trickroom",
+                },
+            ],
+        )
+        # Should not raise
+        scen = load_scenario_dict(data)
+        self.assertEqual(len(scen.validators), 1)
+        v = scen.validators[0]
+        self.assertEqual(v.type, "expected_scripted_action")
+        self.assertEqual(v.field, "trickroom")
+        self.assertTrue(v.expected)
+
+    def test_scenario_loader_rejects_invalid_type(self):
+        """The scenario loader should reject
+        unknown validator types."""
+        from scenario_probe import ScenarioValidationError
+        data = dict(
+            VALID_SCENARIO,
+            validators=[
+                {
+                    "name": "x",
+                    "type": "expected_unknown_type",
+                    "expected": True,
+                    "field": "x",
+                },
+            ],
+        )
+        with self.assertRaises(ScenarioValidationError):
+            load_scenario_dict(data)
 
 
 class TestSchemaJsonSafe(unittest.TestCase):

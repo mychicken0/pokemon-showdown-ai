@@ -1,7 +1,7 @@
 {
   "scenario_id": "anti_stat_boost_basic",
   "description": "Anti-stat-boost family: opp scripts Swords Dance on turn 1; bot must counter with Taunt/Encore/Haze",
-  "version": 1,
+  "version": 2,
   "our_team_file": "data/curated_teams/control4a/team_027.json",
   "opp_team_file": "data/curated_teams/control4a/team_006.json",
   "lead": {
@@ -10,16 +10,20 @@
   },
   "script": {
     "turn_1": {
-      "opp_slot_0": {"move": "swordsdance"},
-      "opp_slot_1": {"move": "protect"}
+      "opp_slot_0": {
+        "move": "swordsdance"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
     }
   },
   "validators": [
     {
       "name": "sd_actually_used",
-      "type": "expected_opp_action_used",
+      "type": "expected_scripted_action",
       "expected": true,
-      "field": "stat_boost_setup"
+      "field": "swordsdance"
     },
     {
       "name": "bot_legal_taunt",

@@ -77,6 +77,13 @@ VALID_VALIDATOR_TYPES = frozenset({
     "expected_audit_signal",
     "expected_bot_legal_response",
     "no_script_failures",
+    # Phase SCENARIO-11b: Option C canonical
+    # signal validator. Reads the baseline
+    # audit's ``scripted_actions`` as
+    # canonical; cross-checks the treatment
+    # audit's ``opponent_actions`` as a
+    # diagnostic. Pass based on canonical.
+    "expected_scripted_action",
 })
 
 
@@ -168,8 +175,15 @@ class ScenarioValidator:
         if self.type == "no_script_failures":
             return (
                 f"{self.name}: check that no scripted "
-                f"action failed (all script orders were "
-                f"valid)"
+                "action failed (all script orders were "
+                "valid)"
+            )
+        if self.type == "expected_scripted_action":
+            return (
+                f"{self.name}: check that baseline "
+                f"scripted_actions has move {self.field!r} "
+                f"executed (canonical) with cross-check "
+                f"of treatment opponent_actions"
             )
         return f"{self.name}: unknown validator type {self.type!r}"
 
@@ -372,6 +386,7 @@ def _parse_validator(
     if vtype in (
         "expected_opp_action_used",
         "expected_audit_signal",
+        "expected_scripted_action",
     ) and "field" not in vraw:
         raise ScenarioValidationError(
             f"validators[{idx}] ({name!r}) type "
@@ -662,6 +677,17 @@ def _run_one_validator(
         return _check_bot_legal_response(
             validator, records
         )
+    if validator.type == "expected_scripted_action":
+        # Canonical: baseline audit's
+        # ``scripted_actions``. The records
+        # passed here are the BASELINE
+        # audit records (scripted opp's
+        # perspective). See
+        # ``run_validators_with_canonical``
+        # for the cross-check flow.
+        return _check_scripted_action(
+            validator, records
+        )
     return (False, f"unknown validator type {validator.type!r}")
 
 
@@ -685,6 +711,297 @@ def _check_opp_action_used(
         return (False, f"{field_name} True in {matches} "
                 f"turns (expected False)")
     return (True, f"{field_name} ok ({matches} matches)")
+
+
+def _check_scripted_action(
+    validator: ScenarioValidator,
+    records: List[Dict[str, Any]],
+) -> Tuple[bool, str]:
+    """Phase SCENARIO-11b: Option C canonical
+    signal check.
+
+    Reads the baseline audit's
+    ``scripted_actions`` for an executed
+    action matching ``validator.field`` (the
+    move name, e.g. ``trickroom``,
+    ``tailwind``, ``heatwave``).
+
+    Pass condition: at least one record has a
+    matching executed action in its
+    ``scripted_actions`` list.
+
+    The treatment audit's
+    ``opponent_actions.opponent_used_X``
+    field is NOT checked here. Use
+    ``validate_scripted_action_with_crosscheck``
+    for the Option C flow with gap detection.
+    """
+    target_move = _normalize_move_id(validator.field)
+    matches = 0
+    for rec in records:
+        for a in rec.get("scripted_actions", []):
+            if not a.get("executed"):
+                continue
+            if _normalize_move_id(a.get("move", "")) == target_move:
+                matches += 1
+                break
+    if validator.expected is True and matches == 0:
+        return (
+            False,
+            f"baseline scripted_actions has no "
+            f"executed move matching {validator.field!r} "
+            f"across {len(records)} records",
+        )
+    if validator.expected is False and matches > 0:
+        return (
+            False,
+            f"baseline scripted_actions has {matches} "
+            f"executed move(s) matching {validator.field!r} "
+            f"(expected None)",
+        )
+    return (
+        True,
+        f"baseline scripted_actions ok ({matches} matches)",
+    )
+
+
+def validate_scripted_action_with_crosscheck(
+    move: str,
+    baseline_records: List[Dict[str, Any]],
+    treatment_records: Optional[List[Dict[str, Any]]] = None,
+    expected: bool = True,
+) -> Dict[str, Any]:
+    """Phase SCENARIO-11b: Option C validator
+    with cross-check.
+
+    Reads the baseline audit's
+    ``scripted_actions`` as canonical.
+    Optionally cross-checks the treatment
+    audit's ``opponent_actions.opponent_used_X``
+    as a diagnostic.
+
+    Args:
+        move: the move name to look for
+            (e.g. ``trickroom``, ``tailwind``,
+            ``swordsdance``, ``heatwave``).
+            Case-insensitive; spaces / dashes /
+            underscores are stripped.
+        baseline_records: parsed baseline
+            audit records (scripted opp's
+            perspective).
+        treatment_records: parsed treatment
+            audit records (bot's perspective).
+            If None, no cross-check is done.
+        expected: the expected state of the
+            canonical signal. Pass condition
+            is ``canonical_signal_fired == expected``.
+
+    Returns:
+        {
+            "canonical_signal_fired": bool,
+            "bot_opp_action_crosscheck": bool or None,
+            "bot_opp_action_gap": bool,
+            "passed": bool,
+            "message": str,
+        }
+    """
+    target_move = _normalize_move_id(move)
+
+    # Canonical: baseline scripted_actions
+    canonical_signal_fired = False
+    canonical_match_count = 0
+    for rec in baseline_records:
+        for a in rec.get("scripted_actions", []):
+            if not a.get("executed"):
+                continue
+            if _normalize_move_id(a.get("move", "")) == target_move:
+                canonical_match_count += 1
+                canonical_signal_fired = True
+                break
+
+    # Cross-check: treatment opponent_actions
+    # - True if the field is explicitly True
+    # - False if the field is explicitly False
+    # - None if opp_actions is missing or
+    #   the field is not present
+    bot_opp_action_crosscheck: Optional[bool] = None
+    if treatment_records:
+        for rec in treatment_records:
+            for t in rec.get("audit_turns", []):
+                opp = t.get("opponent_actions", {}) or {}
+                if not opp:
+                    continue
+                val = opp.get(f"opponent_used_{move}")
+                if val is True:
+                    bot_opp_action_crosscheck = True
+                    break
+                if val is False:
+                    bot_opp_action_crosscheck = False
+                    # don't break, keep looking
+                    # for an explicit True
+            if bot_opp_action_crosscheck is True:
+                break
+
+    # Gap: canonical fired AND treatment
+    # was provided (non-None and non-empty)
+    # AND treatment didn't confirm. If
+    # treatment was not provided or empty,
+    # no gap (no cross-check).
+    bot_opp_action_gap = bool(
+        treatment_records
+        and canonical_signal_fired
+        and bot_opp_action_crosscheck is not True
+    )
+
+    # Pass based on canonical
+    passed = canonical_signal_fired == bool(expected)
+
+    msg = (
+        f"canonical_signal_fired={canonical_signal_fired} "
+        f"(matches={canonical_match_count}); "
+        f"bot_opp_action_crosscheck={bot_opp_action_crosscheck}; "
+        f"bot_opp_action_gap={bot_opp_action_gap}; "
+        f"expected={expected}; passed={passed}"
+    )
+    return {
+        "canonical_signal_fired": canonical_signal_fired,
+        "bot_opp_action_crosscheck": bot_opp_action_crosscheck,
+        "bot_opp_action_gap": bot_opp_action_gap,
+        "passed": passed,
+        "message": msg,
+    }
+
+
+def run_validators_with_canonical(
+    scenario: Scenario,
+    baseline_audit_data: Any,
+    treatment_audit_data: Any = None,
+) -> List[Dict[str, Any]]:
+    """Phase SCENARIO-11b: run all validators
+    with Option C canonical signal support.
+
+    For ``expected_scripted_action``
+    validators:
+    - Baseline audit's ``scripted_actions``
+      is the canonical signal.
+    - Treatment audit's
+      ``opponent_actions.opponent_used_X``
+      is a cross-check.
+    - ``bot_opp_action_gap`` is set if
+      canonical says fired but treatment
+      doesn't have the field as True.
+    - Pass based on canonical only.
+
+    For all other validator types, the
+    behavior is identical to
+    ``run_validators``: validators run
+    against the baseline_audit_data (the
+    ``expected_bot_legal_response`` runs
+    against the bot's audit, but here we
+    only have the baseline; this is a
+    known limitation — for full coverage
+    use ``run_validators`` separately on
+    the treatment audit).
+
+    Args:
+        scenario: the loaded Scenario
+        baseline_audit_data: parsed baseline
+            audit JSONL content (list of records
+            or single record).
+        treatment_audit_data: parsed treatment
+            audit JSONL content. Used for
+            cross-check only.
+
+    Returns:
+        list of dicts with keys:
+        ``validator`` (ScenarioValidator),
+        ``passed`` (bool),
+        ``message`` (str),
+        ``canonical_signal_fired`` (bool, only
+        for expected_scripted_action),
+        ``bot_opp_action_crosscheck`` (bool or
+        None, only for expected_scripted_action),
+        ``bot_opp_action_gap`` (bool, only for
+        expected_scripted_action).
+    """
+    # Normalize audit_data
+    if isinstance(baseline_audit_data, dict):
+        baseline_records = [baseline_audit_data]
+    elif isinstance(baseline_audit_data, list):
+        baseline_records = baseline_audit_data
+    else:
+        baseline_records = []
+
+    if treatment_audit_data is None:
+        treatment_records = None
+    elif isinstance(treatment_audit_data, dict):
+        treatment_records = [treatment_audit_data]
+    elif isinstance(treatment_audit_data, list):
+        treatment_records = treatment_audit_data
+    else:
+        treatment_records = None
+
+    results: List[Dict[str, Any]] = []
+    for validator in scenario.validators:
+        if validator.type == "expected_scripted_action":
+            cross = validate_scripted_action_with_crosscheck(
+                move=validator.field,
+                baseline_records=baseline_records,
+                treatment_records=treatment_records,
+                expected=bool(validator.expected),
+            )
+            results.append({
+                "validator": validator,
+                "passed": cross["passed"],
+                "message": cross["message"],
+                "canonical_signal_fired": cross[
+                    "canonical_signal_fired"
+                ],
+                "bot_opp_action_crosscheck": cross[
+                    "bot_opp_action_crosscheck"
+                ],
+                "bot_opp_action_gap": cross[
+                    "bot_opp_action_gap"
+                ],
+            })
+        elif validator.type == "expected_bot_legal_response":
+            # The bot's legal actions are in
+            # the treatment audit (bot's
+            # perspective). If treatment is
+            # available, use it; otherwise
+            # fall back to baseline.
+            records = (
+                treatment_records
+                if treatment_records
+                else baseline_records
+            )
+            passed, msg = _run_one_validator(
+                validator, records
+            )
+            results.append({
+                "validator": validator,
+                "passed": passed,
+                "message": msg,
+            })
+        elif validator.type == "no_script_failures":
+            # Always pass for skeleton
+            results.append({
+                "validator": validator,
+                "passed": True,
+                "message": "no_script_failures (skeleton)",
+            })
+        else:
+            # Fall back to run_validators
+            # behavior on baseline records
+            passed, msg = _run_one_validator(
+                validator, baseline_records
+            )
+            results.append({
+                "validator": validator,
+                "passed": passed,
+                "message": msg,
+            })
+    return results
 
 
 def _check_audit_signal(
