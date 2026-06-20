@@ -1,0 +1,38 @@
+{
+  "scenario_id": "spread_def_rock_slide",
+  "description": "Spread-defense family (Rock Slide variant): opp scripts Rock Slide on turn 1; bot must have Wide Guard legal",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/item2/team_001.json",
+  "lead": {
+    "opp_slot_0": "Tyranitar",
+    "opp_slot_1": "Steelix"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "rockslide"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "rock_slide_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "rockslide"
+    },
+    {
+      "name": "bot_legal_wide_guard",
+      "type": "expected_bot_legal_response",
+      "expected": "Wide Guard"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}

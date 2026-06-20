@@ -1,0 +1,38 @@
+{
+  "scenario_id": "redir_followme_basic",
+  "description": "Redirection family (basic): opp scripts Rage Powder on turn 1; bot must have a response (spread or Taunt)",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/item2/team_001.json",
+  "lead": {
+    "opp_slot_0": "Sinistcha",
+    "opp_slot_1": "Steelix"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "ragepowder"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "rage_powder_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "ragepowder"
+    },
+    {
+      "name": "bot_legal_heat_wave",
+      "type": "expected_bot_legal_response",
+      "expected": "Heat Wave"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}
