@@ -10,6 +10,12 @@ __pycache__/
 # Local battle and benchmark artifacts
 logs/
 *.log
+# Exception: phase closeout docs (Markdown
+# reports summarizing track status) are
+# documentation, not local artifacts.
+# Use full path so git re-includes the file
+# even though the parent directory is ignored.
+!/logs/phase*.md
 
 # Local scratch/output data
 scratch/
