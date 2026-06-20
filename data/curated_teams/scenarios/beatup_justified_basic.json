@@ -1,0 +1,33 @@
+{
+  "scenario_id": "beatup_justified_basic",
+  "description": "Beat Up + Justified family (basic): opp scripts Beat Up on turn 1; ally has Justified ability",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/custom/beatup_justified_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Houndoom",
+    "opp_slot_1": "Gallade"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "beatup"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "beat_up_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "beatup"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}

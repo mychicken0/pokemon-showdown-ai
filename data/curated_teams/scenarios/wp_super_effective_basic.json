@@ -1,0 +1,34 @@
+{
+  "scenario_id": "wp_super_effective_basic",
+  "description": "Weakness Policy family (basic) \u2014 DEFERRED: Weakness Policy is marked isNonstandard: Past in the Champions VGC 2026 mod, so the item is rejected by the showdown team validator. See phaseSCENARIO18_wp_super_effective_deferred_report.md for details.",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/custom/wp_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Dragonite",
+    "opp_slot_1": "Baxcalibur"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "protect"
+      },
+      "opp_slot_1": {
+        "move": "iciclespear",
+        "target_pos": -1
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "icicle_spear_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "iciclespear"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}

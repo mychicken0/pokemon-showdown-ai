@@ -1,0 +1,66 @@
+{
+  "id": "beatup_justified_demo_v1",
+  "rank": 0,
+  "player": "custom",
+  "event": "SCENARIO-17",
+  "record": "0-0",
+  "source_platform": "custom",
+  "source_url": "",
+  "parse_status": "ok",
+  "team": [
+    {
+      "species": "Houndoom",
+      "ability": "Flash Fire",
+      "item": "Sitrus Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Beat Up", "Crunch", "Protect", "Fire Fang"]
+    },
+    {
+      "species": "Gallade",
+      "ability": "Justified",
+      "item": "Shuca Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Drain Punch", "Zen Headbutt", "Protect", "Bulk Up"]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Lum Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Protect", "Extreme Speed", "Flare Blitz", "Crunch"]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Leftovers",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Kowtow Cleave", "Sucker Punch", "Iron Head", "Protect"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Choice Scarf",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Rock Slide", "Crunch", "Dragon Dance", "Protect"]
+    }
+  ]
+}
