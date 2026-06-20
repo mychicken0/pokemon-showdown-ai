@@ -454,6 +454,23 @@ class DoublesDamageAwareConfig:
     setup_intent_require_ko_check: bool = True
     setup_intent_ko_opp_hp_threshold: float = 0.10
 
+    # Phase CONTROL-4B: opt-in anti-setup disruption
+    # intent policy. Adds a positive score to
+    # Taunt / Encore / Disable / Quash candidates
+    # when opp has a visible setup/control/status
+    # signal. Per AGENTS.md: visible-only, no
+    # species guessing. Default OFF. Bonus magnitude
+    # +200.0 chosen via CONTROL-4A dry-run (5-pair
+    # probe showed 0% over-flip at all magnitudes,
+    # so +200 is the middle ground, lower than
+    # setup_intent_speed_setup_bonus = +450).
+    enable_anti_setup_disruption_intent: bool = False
+    anti_setup_disruption_bonus: float = 200.0
+    anti_setup_disruption_max_picks_per_game: int = 2
+    anti_setup_disruption_min_turn_between_picks: int = 3
+    anti_setup_disruption_require_survival: bool = True
+    anti_setup_disruption_min_opp_setup_signal: float = 1.0
+
     # Phase ACCURACY-2: opt-in hard-safety block
     # for damaging moves targeting self (target=-1)
     # or ally (target=-2). When True, sets v2l1
@@ -2350,6 +2367,17 @@ class DoublesDamageAwarePlayer(Player):
         #     last turn a setup move was picked
         self._setup_intent_picks_per_game = {}
         self._setup_intent_last_pick_turn = {}
+
+        # Phase CONTROL-4B: per-battle state for the
+        # anti-setup disruption intent anti-spam guards.
+        #   _anti_setup_disrupt_picks_per_game: battle_tag ->
+        #     count of anti-setup disruption picks in
+        #     this game
+        #   _anti_setup_disrupt_last_pick_turn: battle_tag ->
+        #     last turn an anti-setup disruption move
+        #     was picked
+        self._anti_setup_disrupt_picks_per_game = {}
+        self._anti_setup_disrupt_last_pick_turn = {}
 
         # Phase 6.3 tracking state (per battle tag)
         self._ability_hard_block_avoided = {}
@@ -4315,6 +4343,263 @@ class DoublesDamageAwarePlayer(Player):
         )
         self._setup_intent_last_pick_turn[battle_tag] = turn
 
+    # Phase CONTROL-4B: anti-setup disruption intent
+    # policy. Adds a positive score to Taunt / Encore
+    # / Disable / Quash candidates when opp has a
+    # visible setup/control/status signal. Per
+    # AGENTS.md: visible-only, no species guessing.
+    # Default OFF. See
+    # logs/phaseCONTROL3_anti_setup_design.md and
+    # logs/phaseCONTROL4A_anti_setup_dryrun.md.
+    ANTI_SETUP_DISRUPTION_TARGETS = frozenset({
+        "taunt", "encore", "disable", "quash",
+    })
+    ANTI_SETUP_STAT_BOOST_MOVES = frozenset({
+        "swordsdance", "nastyplot", "dragondance",
+        "calmmind", "bulkup", "quiverdance",
+        "shellsmash", "workup", "agility",
+        "rockpolish", "geomancy", "honeclaws",
+        "charge", "growth", "howl", "doubleteam",
+        "cosmicpower", "irondefense", "acidarmor",
+        "autotomize", "minimize", "shiftgear",
+    })
+    ANTI_SETUP_HIGH_BP_MOVES = frozenset({
+        "earthquake", "closecombat", "flareblitz",
+        "wildcharge", "boomburst", "moonblast",
+        "heatwave", "makeitrain", "dracometeor",
+        "sludgewave", "leafstorm", "thunderbolt",
+        "thunder", "icebeam", "psychic", "focusblast",
+        "hydropump", "fireblast", "shadowball",
+        "energyball", "darkpulse", "stoneedge",
+        "earthpower", "flashcannon", "ironhead",
+        "knockoff", "uturn", "voltswitch", "rapidspin",
+    })
+
+    def _anti_setup_disruption_eligible(
+        self, order, active_idx: int, battle
+    ) -> bool:
+        """Phase CONTROL-4B: return True if the
+        anti-setup disruption bonus should apply
+        to this order.
+
+        Guards (all must pass):
+        0. ``enable_anti_setup_disruption_intent``
+           is True (master switch).
+        1. ``order`` is one of: taunt, encore,
+           disable, quash.
+        2. Active user survives this turn
+           (HP > 25% or
+           ``anti_setup_disruption_require_survival=False``).
+        3. The action targets a visible opp mon
+           (slot 1 or 2 in poke-env convention).
+        4. Opp has at least 1.0 visible setup
+           signal (stat-boost used, field TW/TR
+           active, opp revealed setup move, etc.)
+        5. Anti-spam: per-game pick count
+           < ``anti_setup_disruption_max_picks_per_game``
+           AND turns since last pick >=
+           ``anti_setup_disruption_min_turn_between_picks``.
+        """
+        # Guard 0: master switch
+        if not getattr(
+            self.config,
+            "enable_anti_setup_disruption_intent",
+            False,
+        ):
+            return False
+        # Guard 1: move is one of 4 anti-setup moves
+        if not isinstance(getattr(order, "order", None), Move):
+            return False
+        move_id_raw = getattr(order.order, "id", "")
+        move_id_norm = (
+            str(move_id_raw or "").lower()
+            .replace(" ", "").replace("-", "")
+            .replace("_", "").replace("'", "")
+        )
+        if move_id_norm not in self.ANTI_SETUP_DISRUPTION_TARGETS:
+            return False
+        # Guard 2: active user survives
+        if getattr(
+            self.config,
+            "anti_setup_disruption_require_survival",
+            True,
+        ):
+            battle_tag = getattr(battle, "battle_tag", "")
+            if self._expected_to_faint_before_moving.get(
+                battle_tag, {}
+            ).get(active_idx, False):
+                return False
+            try:
+                our_active = (
+                    battle.active_pokemon[active_idx]
+                    if active_idx < len(battle.active_pokemon)
+                    else None
+                )
+                if our_active is not None:
+                    hp_frac = (
+                        our_active.current_hp_fraction
+                        if hasattr(our_active, "current_hp_fraction")
+                        else (
+                            our_active.current_hp
+                            / max(1, our_active.max_hp)
+                            if hasattr(our_active, "current_hp")
+                            and hasattr(our_active, "max_hp")
+                            else 1.0
+                        )
+                    )
+                    if hp_frac is not None and hp_frac < 0.25:
+                        return False
+            except Exception:
+                pass
+        # Guard 3: target is opp slot 1 or 2
+        # poke-env convention: target=1 means opp slot 0,
+        # target=2 means opp slot 1. target=-1 self,
+        # target=-2 ally.
+        target_str = getattr(order, "move_target", None)
+        target_norm = (
+            str(target_str or "").lstrip("+-")
+            if target_str is not None else ""
+        )
+        if target_str not in (1, 2):
+            return False
+        # Guard 4: opp has visible setup signal
+        signal = self._compute_opp_setup_signal(
+            battle, target_slot=int(target_str) - 1,
+            scoring_move=move_id_norm,
+        )
+        min_signal = float(getattr(
+            self.config,
+            "anti_setup_disruption_min_opp_setup_signal",
+            1.0,
+        ))
+        if signal < min_signal:
+            return False
+        # Guard 5: anti-spam
+        battle_tag = getattr(battle, "battle_tag", "")
+        picks = self._anti_setup_disrupt_picks_per_game.get(
+            battle_tag, 0
+        )
+        max_picks = int(getattr(
+            self.config,
+            "anti_setup_disruption_max_picks_per_game",
+            2,
+        ))
+        if picks >= max_picks:
+            return False
+        current_turn = getattr(battle, "turn", 0)
+        last_turn = self._anti_setup_disrupt_last_pick_turn.get(
+            battle_tag, -999
+        )
+        min_gap = int(getattr(
+            self.config,
+            "anti_setup_disruption_min_turn_between_picks",
+            3,
+        ))
+        if current_turn - last_turn < min_gap:
+            return False
+        return True
+
+    def _compute_opp_setup_signal(
+        self, battle, target_slot: int, scoring_move: str
+    ) -> float:
+        """Phase CONTROL-4B: compute visible opp
+        setup signal sum for the given target
+        slot. Per AGENTS.md: visible-only, no
+        species guessing.
+
+        Sources (all visible):
+        - ``opponent_used_stat_boost_setup`` counter
+        - ``opponent_used_tailwind`` /
+          ``opponent_used_trickroom``
+        - Field state TW/TR (visible, but
+          ambiguous about who set it)
+        - Revealed stat-boost moves
+          (via ``get_known_revealed_moves`` helper
+          in poke-env)
+        - Revealed high-BP moves (Disable only)
+        """
+        score = 0.0
+        # Counter signals (audit logger or similar)
+        opp_revealed_counters = getattr(
+            self, "_last_opp_action_signals", None
+        ) or {}
+        if opp_revealed_counters.get("stat_boost"):
+            score += 1.0
+        if opp_revealed_counters.get("tailwind"):
+            score += 0.5
+        if opp_revealed_counters.get("trickroom"):
+            score += 0.5
+        # Field state
+        try:
+            our_side = getattr(battle, "side_conditions", None) or {}
+            sc_has_tw = "tailwind" in our_side
+            sc_has_tr = "trickroom" in our_side
+            our_fields = getattr(battle, "fields", None) or []
+            fld_has_tw = False
+            fld_has_tr = False
+            for f in our_fields:
+                if hasattr(f, "name"):
+                    f_str = f.name.lower()
+                else:
+                    f_str = str(f).lower()
+                f_str = f_str.replace("_", "").replace(" ", "")
+                if "tailwind" in f_str:
+                    fld_has_tw = True
+                if "trickroom" in f_str:
+                    fld_has_tr = True
+            if sc_has_tw or fld_has_tw:
+                score += 0.5
+            if sc_has_tr or fld_has_tr:
+                score += 0.5
+        except Exception:
+            pass
+        # Revealed moves on opp (poke-env's
+        # battle.opponent_active_pokemon[slot].moves
+        # contains all revealed moves for that mon)
+        try:
+            opp_actives = (
+                getattr(battle, "opponent_active_pokemon", None) or []
+            )
+            if 0 <= target_slot < len(opp_actives):
+                opp_pkmn = opp_actives[target_slot]
+                opp_moves = (
+                    getattr(opp_pkmn, "moves", None) or {}
+                )
+                for mv_id, mv in opp_moves.items():
+                    mv_norm = (
+                        str(mv_id or "").lower()
+                        .replace(" ", "").replace("-", "")
+                        .replace("_", "").replace("'", "")
+                    )
+                    if mv_norm in self.ANTI_SETUP_STAT_BOOST_MOVES:
+                        score += 1.0
+                    elif (
+                        mv_norm in self.ANTI_SETUP_HIGH_BP_MOVES
+                        and scoring_move == "disable"
+                    ):
+                        # High-BP is only a signal for
+                        # Disable.
+                        score += 1.0
+        except Exception:
+            pass
+        return score
+
+    def record_anti_setup_disrupt_pick(
+        self, battle_tag: str, turn: int
+    ):
+        """Phase CONTROL-4B: record an anti-setup
+        disruption pick for the anti-spam guards.
+        Called from ``choose_move`` seam when the
+        selected joint order includes an anti-setup
+        disruption action.
+        """
+        self._anti_setup_disrupt_picks_per_game[battle_tag] = (
+            self._anti_setup_disrupt_picks_per_game.get(
+                battle_tag, 0
+            ) + 1
+        )
+        self._anti_setup_disrupt_last_pick_turn[battle_tag] = turn
+
     def _is_all_target_immune_damaging_spread(
         self, order, slot_idx: int, battle, config
     ) -> bool:
@@ -4847,6 +5132,18 @@ class DoublesDamageAwarePlayer(Player):
             ):
                 score = float(score) + float(
                     self.config.setup_intent_speed_setup_bonus
+                )
+            # Phase CONTROL-4B: opt-in anti-setup
+            # disruption intent bonus. Applies ONLY to
+            # Taunt / Encore / Disable / Quash
+            # candidates, and ONLY when all 6 guards
+            # pass. Default OFF. See
+            # logs/phaseCONTROL3_anti_setup_design.md.
+            if self._anti_setup_disruption_eligible(
+                order, active_idx, battle
+            ):
+                score = float(score) + float(
+                    self.config.anti_setup_disruption_bonus
                 )
             # Phase ACCURACY-2: hard-safety block for
             # damaging moves targeting self (target=-1) or

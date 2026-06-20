@@ -1,0 +1,32 @@
+[
+  {
+    "pair": 0,
+    "our": 27,
+    "opp": 20,
+    "label": "bot=27 (whim+taunt) vs opp=20 (volcarona quiver)"
+  },
+  {
+    "pair": 1,
+    "our": 6,
+    "opp": 27,
+    "label": "bot=6 (gengar disable) vs opp=27 (sneasler SD)"
+  },
+  {
+    "pair": 2,
+    "our": 46,
+    "opp": 6,
+    "label": "bot=46 (whim encore) vs opp=6 (kingambit SD)"
+  },
+  {
+    "pair": 3,
+    "our": 57,
+    "opp": 27,
+    "label": "bot=57 (tsareena taunt) vs opp=27 (sneasler SD)"
+  },
+  {
+    "pair": 4,
+    "our": 20,
+    "opp": 6,
+    "label": "bot=20 (tinkaton encore) vs opp=6 (kingambit SD)"
+  }
+]

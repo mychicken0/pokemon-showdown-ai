@@ -404,6 +404,7 @@ async def run_one_battle(
     enable_spread_defense_bonus: bool = False,
     enable_setup_intent_speed_setup: bool = False,
     enable_accuracy_self_ally_block: bool = False,
+    enable_anti_setup_disruption_intent: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -599,6 +600,30 @@ async def run_one_battle(
                 **{
                     **treatment_config.__dict__,
                     "enable_accuracy_self_ally_block": True,
+                }
+            )
+    # Phase CONTROL-4B: opt-in anti-setup disruption
+    # intent policy. Adds a positive score to
+    # Taunt / Encore / Disable / Quash candidates
+    # when opp has a visible setup/control/status
+    # signal. Per AGENTS.md: visible-only, no
+    # species guessing. Default OFF. Magnitude
+    # +200 (chosen via CONTROL-4A dry-run, lower
+    # than setup_intent_speed_setup_bonus = +450).
+    if is_treatment and enable_anti_setup_disruption_intent:
+        from bot_doubles_damage_aware import (
+            DoublesDamageAwareConfig,
+        )
+        ctl4b_cfg = DoublesDamageAwareConfig(
+            enable_anti_setup_disruption_intent=True,
+        )
+        if treatment_config is None:
+            treatment_config = ctl4b_cfg
+        else:
+            treatment_config = DoublesDamageAwareConfig(
+                **{
+                    **treatment_config.__dict__,
+                    "enable_anti_setup_disruption_intent": True,
                 }
             )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
@@ -914,6 +939,24 @@ def main():
         ),
     )
     parser.add_argument(
+        "--enable-anti-setup-disruption-intent",
+        action="store_true",
+        help=(
+            "Phase CONTROL-4B probe: enable opt-in "
+            "anti-setup disruption intent policy. "
+            "Adds a positive score (+200) to "
+            "Taunt / Encore / Disable / Quash "
+            "candidates when opp has a visible "
+            "setup/control/status signal. Per "
+            "AGENTS.md: visible-only, no species "
+            "guessing. Default OFF; opt-in for safe "
+            "rollout. Magnitude +200 chosen via "
+            "CONTROL-4A dry-run (5-pair probe "
+            "showed 0%% over-flip at all "
+            "magnitudes)."
+        ),
+    )
+    parser.add_argument(
         "--audit-decisions", action="store_true",
         help=(
             "Phase BI-3F-1 probe: attach a "
@@ -1150,6 +1193,9 @@ def main():
                 ),
                 enable_accuracy_self_ally_block=(
                     args.enable_accuracy_self_ally_block
+                ),
+                enable_anti_setup_disruption_intent=(
+                    args.enable_anti_setup_disruption_intent
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
