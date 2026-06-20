@@ -1,0 +1,41 @@
+{
+  "scenario_id": "weather_rain_basic",
+  "description": "Weather family (basic): opp scripts Rain Dance on turn 1; rain should be set in the audit state",
+  "version": 2,
+  "our_team_file": "data/curated_teams/item2/team_010.json",
+  "opp_team_file": "data/curated_teams/custom/weather_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Politoed",
+    "opp_slot_1": "Arcanine"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "raindance"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "rain_dance_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "raindance"
+    },
+    {
+      "name": "weather_set_in_audit",
+      "type": "expected_audit_signal",
+      "expected": [
+        "raindance"
+      ],
+      "field": "weather"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}
