@@ -39,7 +39,10 @@ if _clear_loop is not None:
 
 import poke_env_test_cleanup  # noqa: F401
 
-from poke_env import AccountConfiguration
+from poke_env import (
+    AccountConfiguration,
+    LocalhostServerConfiguration,
+)
 
 from bot_vgc2026_phaseV2c import (
     ControlledTeamPreviewPlayer,
@@ -407,6 +410,7 @@ async def run_one_battle(
     enable_anti_setup_disruption_intent: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
+    scenario_path: str = None,
 ) -> Dict[str, Any]:
     """Run one VGC battle: our team at our_team_idx uses
     player_policy, opponent uses opponent_policy.
@@ -678,7 +682,30 @@ async def run_one_battle(
     # Phase BI-3K.6: single construction. Each player is
     # built exactly once with its complete kwargs.
     p1 = ControlledTeamPreviewPlayer(**p1_kwargs)
-    p2 = ControlledTeamPreviewPlayer(**p2_kwargs)
+    # Phase SCENARIO-3: if scenario_path is set,
+    # replace p2 with a ScriptedOpponentPlayer.
+    # The scripted player inherits from base
+    # poke_env.Player (NOT from any bot class) to
+    # prevent cross-talk with the bot.
+    scripted_opp_player = None
+    if scenario_path is not None:
+        from bot_vgc2026_scripted_opp import (
+            ScriptedOpponentPlayer,
+        )
+        scripted_opp_player = ScriptedOpponentPlayer(
+            scenario_path=scenario_path,
+            account_configuration=AccountConfiguration(
+                p2_name, None
+            ),
+            max_concurrent_battles=1,
+            battle_format=BATTLE_FORMAT,
+            log_level=30,
+            team=opp_team_str if side == "p1" else our_team_str,
+            server_configuration=LocalhostServerConfiguration,
+        )
+        p2 = scripted_opp_player
+    else:
+        p2 = ControlledTeamPreviewPlayer(**p2_kwargs)
     if side == "p2":
         p1.preview_result = opp_preview
         p2.preview_result = our_preview
@@ -705,6 +732,25 @@ async def run_one_battle(
     if audit_logger_treatment is not None and hasattr(
         audit_logger_treatment, "set_current_battle_meta"
     ):
+        # Phase SCENARIO-3: pass scenario
+        # metadata to the audit logger.
+        # scripted_opp_player is None unless
+        # scenario_path was set above.
+        _scen_id = (
+            scripted_opp_player.scenario_id
+            if scripted_opp_player is not None
+            else None
+        )
+        _scen_actions = (
+            list(scripted_opp_player.scenario_actions)
+            if scripted_opp_player is not None
+            else []
+        )
+        _scen_failures = (
+            list(scripted_opp_player.scenario_failures)
+            if scripted_opp_player is not None
+            else []
+        )
         audit_logger_treatment.set_current_battle_meta(
             benchmark_arm="treatment",
             enable_mega_evolution=(treatment_config is not None and bool(
@@ -722,10 +768,30 @@ async def run_one_battle(
             player_name=(
                 p1_name if side == "p1" else p2_name
             ),
+            scenario_id=_scen_id,
+            scripted_actions=_scen_actions,
+            script_failures=_scen_failures,
         )
     if audit_logger_baseline is not None and hasattr(
         audit_logger_baseline, "set_current_battle_meta"
     ):
+        # Phase SCENARIO-3: also pass scenario
+        # metadata to the baseline logger.
+        _scen_id = (
+            scripted_opp_player.scenario_id
+            if scripted_opp_player is not None
+            else None
+        )
+        _scen_actions = (
+            list(scripted_opp_player.scenario_actions)
+            if scripted_opp_player is not None
+            else []
+        )
+        _scen_failures = (
+            list(scripted_opp_player.scenario_failures)
+            if scripted_opp_player is not None
+            else []
+        )
         audit_logger_baseline.set_current_battle_meta(
             benchmark_arm="baseline",
             enable_mega_evolution=False,
@@ -735,6 +801,9 @@ async def run_one_battle(
             treatment_side=baseline_side,
             player_side=baseline_side,
             player_name=baseline_name,
+            scenario_id=_scen_id,
+            scripted_actions=_scen_actions,
+            script_failures=_scen_failures,
         )
     try:
         await asyncio.wait_for(
@@ -1016,6 +1085,19 @@ def main():
             "Default: None (use pool)."
         ),
     )
+    parser.add_argument(
+        "--scenario-file", type=str, default=None,
+        help=(
+            "Phase SCENARIO-3: JSON path to a "
+            "scenario file. When set, the opp "
+            "player is replaced with a "
+            "ScriptedOpponentPlayer that follows "
+            "the script in the scenario file. "
+            "Requires --our-team-file and "
+            "--opp-team-file. Default: None "
+            "(use normal pool opponent)."
+        ),
+    )
     args = parser.parse_args()
 
     if not check_localhost():
@@ -1105,6 +1187,16 @@ def main():
             "must be set together (both or neither)."
         )
         sys.exit(3)
+    # Phase SCENARIO-3: --scenario-file
+    # requires --our-team-file and --opp-team-file.
+    if args.scenario_file is not None and (
+        args.our_team_file is None or args.opp_team_file is None
+    ):
+        print(
+            "ERROR: --scenario-file requires "
+            "--our-team-file and --opp-team-file."
+        )
+        sys.exit(3)
     if args.our_team_file and args.opp_team_file:
         our_team = _load_team_file(args.our_team_file)
         opp_team = _load_team_file(args.opp_team_file)
@@ -1112,6 +1204,10 @@ def main():
         pool = curated_pool
         my_count = 2
         opp_count = 2
+        if args.scenario_file is not None:
+            print(
+                f"  SCENARIO: {args.scenario_file}"
+            )
         print(
             f"  CURATED: our_team={our_team.id} "
             f"({our_team.player}) | "
@@ -1169,8 +1265,12 @@ def main():
                 enable_accuracy_self_ally_block=(
                     args.enable_accuracy_self_ally_block
                 ),
+                enable_anti_setup_disruption_intent=(
+                    args.enable_anti_setup_disruption_intent
+                ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
+                scenario_path=args.scenario_file,
             )
             d2 = await run_one_battle(
                 pair_id, "p2",
@@ -1199,6 +1299,7 @@ def main():
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
+                scenario_path=args.scenario_file,
             )
             results.extend([d1, d2])
             # Write CSV row.

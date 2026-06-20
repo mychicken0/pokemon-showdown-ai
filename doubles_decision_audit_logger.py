@@ -3097,6 +3097,8 @@ class DoublesDecisionAuditLogger:
         self, benchmark_arm, enable_mega_evolution,
         enable_decision_timing_diagnostics=False,
         treatment_side="", player_side="", player_name="",
+        scenario_id=None, scripted_actions=None,
+        script_failures=None,
     ):
         """Phase BI-3K.7: context-based battle metadata.
 
@@ -3113,6 +3115,15 @@ class DoublesDecisionAuditLogger:
         Phase RUNNER-TIMING-1: ``enable_decision_timing_diagnostics``
         is also stored so persisted audit rows identify
         which runs had timing on. Default False.
+
+        Phase SCENARIO-3: ``scenario_id``,
+        ``scripted_actions``, ``script_failures`` are
+        scenario metadata captured when
+        ``--scenario-file`` is set on the runner.
+        ``scripted_actions`` and ``script_failures``
+        are mutable lists that may be appended to
+        during the battle; we copy them at read time
+        in ``save_battle``. Default None / empty.
         """
         self._current_battle_meta = {
             "benchmark_arm": str(benchmark_arm),
@@ -3123,6 +3134,9 @@ class DoublesDecisionAuditLogger:
             "treatment_side": str(treatment_side),
             "player_side": str(player_side),
             "player_name": str(player_name),
+            "scenario_id": scenario_id,
+            "scripted_actions": list(scripted_actions or []),
+            "script_failures": list(script_failures or []),
         }
 
     def save_battle(self, battle_tag, winner, battle):
@@ -3166,6 +3180,13 @@ class DoublesDecisionAuditLogger:
         treatment_side = str(merged.get("treatment_side", ""))
         player_side = str(merged.get("player_side", ""))
         player_name = str(merged.get("player_name", ""))
+        # Phase SCENARIO-3: scenario metadata captured
+        # when --scenario-file is set. ``scripted_actions``
+        # and ``script_failures`` are lists of dicts;
+        # ``scenario_id`` is a string or None.
+        scenario_id = merged.get("scenario_id")
+        scripted_actions = merged.get("scripted_actions", [])
+        script_failures = merged.get("script_failures", [])
 
         battle_record = {
             "battle_tag": str(battle_tag),
@@ -3180,6 +3201,9 @@ class DoublesDecisionAuditLogger:
             "treatment_side": treatment_side,
             "player_side": player_side,
             "player_name": player_name,
+            "scenario_id": scenario_id,
+            "scripted_actions": list(scripted_actions),
+            "script_failures": list(script_failures),
             "audit_turns": turns
         }
 
