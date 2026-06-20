@@ -7435,3 +7435,65 @@ Non-goals:
 - No broad setup revival.
 - No Mega/weather/terrain combo planner yet.
 - No `test_51`.
+
+---
+
+## PLANNER-ROADMAP-1 — Doubles Intent Planner Architecture
+
+The next major direction is an intent planner. This supersedes the
+old pattern of adding isolated bonuses for individual support moves.
+
+The roadmap is recorded in:
+
+- `logs/phasePLANNERROADMAP1_doubles_intent_planner_architecture.md`
+
+Problem:
+
+- The bot recognizes many mechanics, but support/control moves need
+  future value.
+- Tailwind/TR, Wide Guard, and anti-setup disruption showed that flat
+  bonuses can be inert or regress at scale.
+- The missing layer is short-horizon planning over the next one or
+  two turns.
+
+Intent families:
+
+- `KO_NOW`
+- `SURVIVE` / `STALL`
+- `SPEED_CONTROL`
+- `ANTI_SETUP` / `DISRUPT`
+- `FIELD_CONTROL`
+- `REDIRECTION`
+- `SPREAD_DEFENSE`
+- `COMBO_ENABLE`
+
+Target architecture:
+
+```text
+battle state
+  -> legal orders
+  -> intent extraction
+  -> intent candidates
+  -> short-horizon intent value
+  -> intent-adjusted joint scoring
+  -> selected joint order
+```
+
+Recommended phases:
+
+1. **PLANNER-1:** architecture audit.
+2. **PLANNER-2:** intent audit fields if needed.
+3. **PLANNER-3:** anti-setup intent MVP design.
+4. **PLANNER-4:** dry-run intent replay.
+5. **PLANNER-5:** opt-in MVP implementation only after dry-run.
+
+Non-goals:
+
+- No all-status-move bonus.
+- No broad setup bonus revival.
+- No immediate default flip.
+- No RL/training as the first step.
+- No weather/terrain combo planner until planner scaffolding exists.
+- No Beat Up / Weakness Policy scoring until curated scenarios prove
+  it.
+- No `test_51`.

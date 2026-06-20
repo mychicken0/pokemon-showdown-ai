@@ -4140,3 +4140,84 @@ known move use, and obvious-KO suppression.
 
 Next recommended phase: **CONTROL-1 — Unified Control Move Evidence
 Audit**.
+
+---
+
+## PLANNER-ROADMAP-1 — Doubles Intent Planner Architecture
+
+**Decision:** `ROADMAP_RECORDED` / `NEXT_MAJOR_WORK`.
+
+The next strategic goal is to move beyond isolated opt-in support
+bonuses. The bot must learn to reason about short-horizon intent:
+what it is trying to accomplish over the next one or two turns.
+
+The full roadmap is saved in:
+
+- `logs/phasePLANNERROADMAP1_doubles_intent_planner_architecture.md`
+
+### Why this is needed
+
+Previous tracks showed that simple bonuses are not enough:
+
+- Tailwind / Trick Room intent could trigger, but regressed at
+  100-pair scale.
+- Wide Guard bonus was safe but mostly inert.
+- Anti-setup disruption was implemented opt-in and safe, but mostly
+  inert under conservative visible-only triggers.
+
+The missing layer is a planner that values future effects rather than
+only immediate damage.
+
+### Intent families
+
+- `KO_NOW`: immediate high-value KO.
+- `SURVIVE` / `STALL`: Protect, defensive switching, field-turn
+  stalling.
+- `SPEED_CONTROL`: Tailwind, Trick Room, Icy Wind, Electroweb,
+  Thunder Wave.
+- `ANTI_SETUP` / `DISRUPT`: Taunt, Encore, Disable, Torment, Quash.
+- `FIELD_CONTROL`: weather, terrain, screens.
+- `REDIRECTION`: Follow Me, Rage Powder.
+- `SPREAD_DEFENSE`: Wide Guard, Quick Guard, Crafty Shield.
+- `COMBO_ENABLE`: Beat Up + Justified, Weakness Policy, absorb /
+  redirect ally activation, Helping Hand / Coaching / Decorate.
+
+### Architecture direction
+
+Target path:
+
+```text
+battle state
+  -> legal orders
+  -> intent extraction
+  -> intent candidates
+  -> short-horizon intent value
+  -> intent-adjusted joint scoring
+  -> selected joint order
+```
+
+The planner should expose audit fields for available candidates,
+selected intent, rejected reasons, future-value estimate, risk,
+confidence, and partner-action dependencies.
+
+### Recommended next phases
+
+1. **PLANNER-1 — Intent Planner Architecture Audit** (read-only).
+2. **PLANNER-2 — Intent Candidate Audit Fields** if gaps exist.
+3. **PLANNER-3 — Anti-Setup Intent MVP Design**.
+4. **PLANNER-4 — Dry-Run Intent Replay**.
+5. **PLANNER-5 — Opt-In MVP Implementation** only if dry-run passes.
+
+### Non-goals
+
+- No all-status-move bonus.
+- No broad setup bonus revival.
+- No immediate default flip.
+- No RL/training as the first step.
+- No weather/terrain combo planner until the intent framework exists.
+- No Beat Up / Weakness Policy scoring until curated scenarios prove
+  it.
+- No `test_51`.
+
+Next recommended phase: **PLANNER-1 — Intent Planner Architecture
+Audit**.
