@@ -1912,6 +1912,29 @@ class DoublesDecisionAuditLogger:
                 "opponent_used_protect": False,
                 "opponent_used_wide_guard": False,
                 "opponent_used_quick_guard": False,
+                # Phase COUNTER-2: per-turn opponent
+                # setup-move tracking. Per-move fields
+                # for the eight explicit COUNTER-1
+                # signals (speed_setup / redirection /
+                # tempo_disruption), plus four
+                # per-category fields for the broader
+                # detection. All default False and
+                # computed from the same turn-events
+                # stream that powers
+                # opponent_used_spread / _protect.
+                # Pure observation; no scoring change.
+                "opponent_used_tailwind": False,
+                "opponent_used_trickroom": False,
+                "opponent_used_followme": False,
+                "opponent_used_ragepowder": False,
+                "opponent_used_fakeout": False,
+                "opponent_used_encore": False,
+                "opponent_used_taunt": False,
+                "opponent_used_quash": False,
+                "opponent_used_stat_boost_setup": False,
+                "opponent_used_screen_setup": False,
+                "opponent_used_ally_activation_move": False,
+                "opponent_used_absorb_redirect_ally": False,
             },
             # Phase 6.4.10c.1: VSW candidate and raw
             # switch order counts per slot. The
@@ -2796,6 +2819,100 @@ class DoublesDecisionAuditLogger:
                         opp_actions["opponent_used_protect"] = True
                     if move_name in _OPP_SPREAD_LIKE:
                         opp_actions["opponent_used_spread"] = True
+
+            # Phase COUNTER-2: detect opponent setup
+            # moves from the same turn events.
+            # Per-move fields for the eight explicit
+            # COUNTER-1 signals, plus three
+            # per-category fields. Pure observation;
+            # no scoring change. The speed_setup
+            # category (tailwind / trickroom) is
+            # covered by per-move fields
+            # (``opponent_used_tailwind`` /
+            # ``opponent_used_trickroom``), so no
+            # separate category field is needed.
+            _OPP_REDIRECTION = frozenset({
+                "followme", "ragepowder",
+            })
+            _OPP_TEMPO_DISRUPT = frozenset({
+                "fakeout", "encore", "taunt", "quash",
+            })
+            _OPP_STAT_BOOST = frozenset({
+                "swordsdance", "nastyplot",
+                "dragondance", "calmmind", "bulkup",
+                "quiverdance", "shellsmash",
+                "workup", "agility", "cosmicpower",
+                "geomancy", "honeclaws", "charge",
+                "rockpolish", "growth", "howl",
+                "doubleteam", "acidarmor",
+                "irondefense", "minimize",
+                "autotomize",
+            })
+            _OPP_SCREEN = frozenset({
+                "reflect", "lightscreen", "auroraveil",
+            })
+            _OPP_ALLY_ACTIVATION = frozenset({
+                "beatup",
+            })
+            for msg in turn_events:
+                if len(msg) >= 3 and msg[0] == "move" and msg[1].startswith(opp_role):
+                    move_name = self._normalize_name(msg[2])
+                    if move_name == "tailwind":
+                        opp_actions["opponent_used_tailwind"] = True
+                    if move_name == "trickroom":
+                        opp_actions["opponent_used_trickroom"] = True
+                    if move_name == "followme":
+                        opp_actions["opponent_used_followme"] = True
+                    if move_name == "ragepowder":
+                        opp_actions["opponent_used_ragepowder"] = True
+                    if move_name == "fakeout":
+                        opp_actions["opponent_used_fakeout"] = True
+                    if move_name == "encore":
+                        opp_actions["opponent_used_encore"] = True
+                    if move_name == "taunt":
+                        opp_actions["opponent_used_taunt"] = True
+                    if move_name == "quash":
+                        opp_actions["opponent_used_quash"] = True
+                    if move_name == "beatup":
+                        opp_actions["opponent_used_ally_activation_move"] = True
+                    if move_name in _OPP_STAT_BOOST:
+                        opp_actions["opponent_used_stat_boost_setup"] = True
+                    if move_name in _OPP_SCREEN:
+                        opp_actions["opponent_used_screen_setup"] = True
+
+            # Phase COUNTER-2: detect partner
+            # absorb/redirect ability activations.
+            # Tracks whether an opponent's mon
+            # activated Lightning Rod, Storm Drain,
+            # Water Absorb, Flash Fire, or Sap Sipper
+            # during this turn (these would-be
+            # counterplay signals). Pure observation;
+            # no scoring change.
+            _OPP_ABSORB_REDIRECT_ABILITIES = frozenset({
+                "lightningrod", "stormdrain",
+                "waterabsorb", "flashfire",
+                "sapsipper", "wellbakedbody",
+            })
+            try:
+                for msg in turn_events:
+                    if (
+                        len(msg) >= 3
+                        and msg[0] == "-ability"
+                        and msg[1].startswith(opp_role)
+                    ):
+                        ability_name = self._normalize_name(
+                            msg[2]
+                        )
+                        if (
+                            ability_name
+                            in _OPP_ABSORB_REDIRECT_ABILITIES
+                        ):
+                            opp_actions[
+                                "opponent_used_absorb_redirect_ally"
+                            ] = True
+                            break
+            except Exception:
+                pass
 
             # Check if opponent moved before us
             # Find the indices of first move events

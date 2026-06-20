@@ -869,6 +869,47 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "missing_protect_like_available": 0,
         "unavailable": False,
     }
+    # Phase COUNTER-2: opponent setup / combo
+    # counterplay summary. Aggregates per-turn
+    # opp_actions fields into per-category counts.
+    # Pure observation; no scoring change. The
+    # 8 per-move fields + 3 per-category fields
+    # in opp_actions are mapped to the 8 COUNTER-1
+    # categories (speed_setup, redirection_setup,
+    # spread_defense [tracked in
+    # spread_defense_summary], tempo_disruption,
+    # ally_activation, partner_absorb_redirect,
+    # stat_boost_setup, screen_or_field_setup).
+    opp_setup_summary = {
+        # speed_setup (per-move)
+        "opp_used_tailwind_turn_count": 0,
+        "opp_used_trickroom_turn_count": 0,
+        # redirection_setup (per-move)
+        "opp_used_followme_turn_count": 0,
+        "opp_used_ragepowder_turn_count": 0,
+        # tempo_disruption (per-move)
+        "opp_used_fakeout_turn_count": 0,
+        "opp_used_encore_turn_count": 0,
+        "opp_used_taunt_turn_count": 0,
+        "opp_used_quash_turn_count": 0,
+        # stat_boost_setup (per-category)
+        "opp_used_stat_boost_setup_turn_count": 0,
+        # screen_or_field_setup (per-category)
+        "opp_used_screen_setup_turn_count": 0,
+        # ally_activation (per-move Beat Up)
+        "opp_used_ally_activation_move_turn_count": 0,
+        # partner_absorb_redirect (per-category
+        # ability activation)
+        "opp_used_absorb_redirect_ally_turn_count": 0,
+        # Aggregate counters per COUNTER-1 category
+        "speed_setup_total": 0,
+        "redirection_setup_total": 0,
+        "tempo_disruption_total": 0,
+        "stat_boost_setup_total": 0,
+        "screen_or_field_setup_total": 0,
+        "ally_activation_total": 0,
+        "partner_absorb_redirect_total": 0,
+    }
     speed_control_summary = {
         "slot0_speed_control_selected": 0,
         "slot1_speed_control_selected": 0,
@@ -1091,6 +1132,55 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
             spread_defense_summary["opp_used_wide_guard_turn_count"] += 1
         if opp_a.get("opponent_used_quick_guard"):
             spread_defense_summary["opp_used_quick_guard_turn_count"] += 1
+
+        # Phase COUNTER-2: aggregate per-turn
+        # opponent setup moves into
+        # ``opp_setup_summary``. Pure observation;
+        # no scoring change.
+        if opp_a.get("opponent_used_tailwind"):
+            opp_setup_summary["opp_used_tailwind_turn_count"] += 1
+            opp_setup_summary["speed_setup_total"] += 1
+        if opp_a.get("opponent_used_trickroom"):
+            opp_setup_summary["opp_used_trickroom_turn_count"] += 1
+            opp_setup_summary["speed_setup_total"] += 1
+        if opp_a.get("opponent_used_followme"):
+            opp_setup_summary["opp_used_followme_turn_count"] += 1
+            opp_setup_summary["redirection_setup_total"] += 1
+        if opp_a.get("opponent_used_ragepowder"):
+            opp_setup_summary["opp_used_ragepowder_turn_count"] += 1
+            opp_setup_summary["redirection_setup_total"] += 1
+        if opp_a.get("opponent_used_fakeout"):
+            opp_setup_summary["opp_used_fakeout_turn_count"] += 1
+            opp_setup_summary["tempo_disruption_total"] += 1
+        if opp_a.get("opponent_used_encore"):
+            opp_setup_summary["opp_used_encore_turn_count"] += 1
+            opp_setup_summary["tempo_disruption_total"] += 1
+        if opp_a.get("opponent_used_taunt"):
+            opp_setup_summary["opp_used_taunt_turn_count"] += 1
+            opp_setup_summary["tempo_disruption_total"] += 1
+        if opp_a.get("opponent_used_quash"):
+            opp_setup_summary["opp_used_quash_turn_count"] += 1
+            opp_setup_summary["tempo_disruption_total"] += 1
+        if opp_a.get("opponent_used_stat_boost_setup"):
+            opp_setup_summary[
+                "opp_used_stat_boost_setup_turn_count"
+            ] += 1
+            opp_setup_summary["stat_boost_setup_total"] += 1
+        if opp_a.get("opponent_used_screen_setup"):
+            opp_setup_summary[
+                "opp_used_screen_setup_turn_count"
+            ] += 1
+            opp_setup_summary["screen_or_field_setup_total"] += 1
+        if opp_a.get("opponent_used_ally_activation_move"):
+            opp_setup_summary[
+                "opp_used_ally_activation_move_turn_count"
+            ] += 1
+            opp_setup_summary["ally_activation_total"] += 1
+        if opp_a.get("opponent_used_absorb_redirect_ally"):
+            opp_setup_summary[
+                "opp_used_absorb_redirect_ally_turn_count"
+            ] += 1
+            opp_setup_summary["partner_absorb_redirect_total"] += 1
 
         # Phase SPREAD-4: collect score-gap values
         # for turns where WG is legal but NOT
@@ -1459,6 +1549,11 @@ def _aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "spread_defense_summary": _finalize_spread_defense_summary(
             spread_defense_summary
         ),
+        # Phase COUNTER-2: opponent setup / combo
+        # counterplay summary. Currently has no
+        # Counter fields so no finalize step is
+        # needed; pass-through is sufficient.
+        "opp_setup_summary": opp_setup_summary,
     }
 
 
@@ -1841,6 +1936,61 @@ def _write_markdown(
         lines.append(
             f"| max | {s.get('score_gap_wg_legal_not_selected_max', 0):.2f} |"
         )
+    lines.append("")
+    # Phase COUNTER-2: opponent setup / combo
+    # counterplay summary. Per-turn opp-action
+    # counts aggregated into per-category and
+    # per-move totals. Pure observation; no
+    # scoring change. Enables COUNTER-3 to
+    # answer "did opp setup Tailwind this turn"
+    # and "did the bot counter it?"
+    lines.append("## Opponent Setup / Counterplay Summary")
+    lines.append("")
+    o = agg.get("opp_setup_summary", {})
+    if not o or sum(o.get(k, 0) for k in o) == 0:
+        lines.append(
+            "No opponent setup events observed in "
+            "this artifact set (or artifact pre-"
+            "dates COUNTER-2 wiring)."
+        )
+    else:
+        lines.append("### Per-move counts")
+        lines.append("")
+        lines.append("| move | category | count |")
+        lines.append("|---|---|---:|")
+        for mv, cat in (
+            ("opp_used_tailwind_turn_count", "speed_setup"),
+            ("opp_used_trickroom_turn_count", "speed_setup"),
+            ("opp_used_followme_turn_count", "redirection_setup"),
+            ("opp_used_ragepowder_turn_count", "redirection_setup"),
+            ("opp_used_fakeout_turn_count", "tempo_disruption"),
+            ("opp_used_encore_turn_count", "tempo_disruption"),
+            ("opp_used_taunt_turn_count", "tempo_disruption"),
+            ("opp_used_quash_turn_count", "tempo_disruption"),
+            ("opp_used_stat_boost_setup_turn_count", "stat_boost_setup"),
+            ("opp_used_screen_setup_turn_count", "screen_or_field_setup"),
+            ("opp_used_ally_activation_move_turn_count", "ally_activation"),
+            ("opp_used_absorb_redirect_ally_turn_count", "partner_absorb_redirect"),
+        ):
+            lines.append(
+                f"| {mv} | {cat} | "
+                f"{o.get(mv, 0)} |"
+            )
+        lines.append("")
+        lines.append("### Per-category totals")
+        lines.append("")
+        lines.append("| category | count |")
+        lines.append("|---|---:|")
+        for cat in (
+            "speed_setup_total",
+            "redirection_setup_total",
+            "tempo_disruption_total",
+            "stat_boost_setup_total",
+            "screen_or_field_setup_total",
+            "ally_activation_total",
+            "partner_absorb_redirect_total",
+        ):
+            lines.append(f"| {cat} | {o.get(cat, 0)} |")
     lines.append("")
     lines.append("## Speed-Control Summary")
     lines.append("")
