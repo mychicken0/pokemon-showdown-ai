@@ -393,6 +393,63 @@ class TestTeampreviewOverride(unittest.TestCase):
         ]
         self.assertIn("Hatterene", lead_species, f"hatterene not in lead {lead_species}")
 
+    def test_lead_with_stat_boost_setter(self):
+        """Phase SCENARIO-8: Kingambit (SD) +
+        Incineroar (Protect) must BOTH be in
+        the lead positions. The previous
+        ``lead, back, lead, back`` interpretation
+        of the /team format would put the
+        SECOND lead at the 3rd position of
+        the 4-digit string, breaking
+        Kingambit + Incineroar as a lead pair.
+        This test pins the correct format.
+        """
+        from bot_vgc2026_scripted_opp import (
+            ScriptedOpponentPlayer,
+        )
+        scripted = ScriptedOpponentPlayer(
+            scenario_path=(
+                "data/curated_teams/scenarios/"
+                "anti_stat_boost_basic.json"
+            ),
+        )
+        team = [
+            {"species": "Gengar", "moves": ["Protect", "Shadow Ball"]},
+            {"species": "Floetteeternal", "moves": ["Dazzling Gleam", "Protect"]},
+            {"species": "Incineroar", "moves": ["Fake Out", "Protect"]},
+            {"species": "Kingambit", "moves": ["Swords Dance", "Protect"]},
+            {"species": "Sneasler", "moves": ["Fake Out", "Protect"]},
+            {"species": "Kommoo", "moves": ["Clanging Scales", "Protect"]},
+        ]
+        battle = self._make_battle(team)
+        order = scripted.teampreview(battle)
+        self.assertTrue(order.startswith("/team "), f"unexpected order: {order}")
+        positions = [int(c) for c in order.replace("/team ", "")]
+        # The /team string has 4 digits.
+        self.assertEqual(len(positions), 4, f"expected 4 digits, got {positions}")
+        # All positions must be unique.
+        self.assertEqual(len(set(positions)), 4, f"duplicate positions: {positions}")
+        # The first 2 positions of the /team
+        # string are the leads (showdown doubles
+        # /team format is lead, lead, back, back).
+        lead_species = sorted(
+            [list(battle.team.values())[p - 1].species for p in positions[:2]]
+        )
+        self.assertEqual(
+            lead_species,
+            ["Incineroar", "Kingambit"],
+            f"lead_species={lead_species} (positions={positions})",
+        )
+        # The last 2 positions are the backs.
+        back_species = sorted(
+            [list(battle.team.values())[p - 1].species for p in positions[2:]]
+        )
+        self.assertEqual(
+            set(back_species) & {"Incineroar", "Kingambit"},
+            set(),
+            f"leaks in backs: {back_species}",
+        )
+
     def test_fallback_to_random_when_no_match(self):
         """If the script's turn_1 has no matching
         species, fall back to random teampreview."""
