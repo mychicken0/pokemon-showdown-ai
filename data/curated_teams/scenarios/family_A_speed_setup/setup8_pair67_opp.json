@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair67_v1",
+  "rank": 74,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "lopunny",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Lopunnite",
+      "item_source": "source_provided",
+      "ability": "Limber",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Close Combat",
+        "Fake Out",
+        "Protect",
+        "Triple Axel"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "volcarona",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Leftovers",
+      "item_source": "source_provided",
+      "ability": "Flame Body",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Heat Wave",
+        "Giga Drain",
+        "Protect",
+        "Quiver Dance"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "primarina",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Mystic Water",
+      "item_source": "source_provided",
+      "ability": "Liquid Voice",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hyper Voice",
+        "Moonblast",
+        "Protect",
+        "Hydro Pump"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "meowscarada",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Focus Sash",
+      "item_source": "source_provided",
+      "ability": "Overgrow",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Flower Trick",
+        "Knock Off",
+        "Protect",
+        "Sucker Punch"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "dragonite",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Dragon Fang",
+      "item_source": "source_provided",
+      "ability": "Multiscale",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Scale Shot",
+        "Stomping Tantrum",
+        "Protect",
+        "Tailwind"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "orthworm",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Sitrus Berry",
+      "item_source": "source_provided",
+      "ability": "Earth Eater",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Body Press",
+        "Heavy Slam",
+        "Protect",
+        "Shed Tail"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair14_v1",
+  "rank": 17,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "drampa",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Sitrus Berry",
+      "item_source": "source_provided",
+      "ability": "Berserk",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Dragon Pulse",
+        "Hyper Voice",
+        "Calm Mind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "camerupt",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Cameruptite",
+      "item_source": "source_provided",
+      "ability": "Solid Rock",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Earth Power",
+        "Eruption",
+        "Protect",
+        "Heat Wave"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "gourgeist",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Occa Berry",
+      "item_source": "source_provided",
+      "ability": "Frisk",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Poltergeist",
+        "Trick Room",
+        "Protect",
+        "Power Whip"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "oranguru",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Colbur Berry",
+      "item_source": "source_provided",
+      "ability": "Inner Focus",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Psychic",
+        "Trick Room",
+        "Instruct",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "abomasnow",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Abomasite",
+      "item_source": "source_provided",
+      "ability": "Snow Warning",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Aurora Veil",
+        "Blizzard",
+        "Energy Ball",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "araquanid",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Mystic Water",
+      "item_source": "source_provided",
+      "ability": "Water Bubble",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Liquidation",
+        "Leech Life",
+        "Wide Guard",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

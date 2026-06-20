@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair82_v1",
+  "rank": 95,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "dragonite",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Dragoninite",
+      "item_source": "source_provided",
+      "ability": "Multiscale",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hurricane",
+        "Dragon Pulse",
+        "Tailwind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "pelipper",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Focus Sash",
+      "item_source": "source_provided",
+      "ability": "Drizzle",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hurricane",
+        "Weather Ball",
+        "Tailwind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "basculegion",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Choice Scarf",
+      "item_source": "source_provided",
+      "ability": "Adaptability",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Last Respects",
+        "Wave Crash",
+        "Aqua Jet",
+        "Flip Turn"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "scizor",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Scizorite",
+      "item_source": "source_provided",
+      "ability": "Technician",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Bullet Punch",
+        "Bug Bite",
+        "Swords Dance",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "archaludon",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Leftovers",
+      "item_source": "source_provided",
+      "ability": "Stamina",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Electro Shot",
+        "Draco Meteor",
+        "Aura Sphere",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "incineroar",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Sitrus Berry",
+      "item_source": "source_provided",
+      "ability": "Intimidate",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "",
+      "nature_source": "missing",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Fake Out",
+        "Flare Blitz",
+        "Throat Chop",
+        "Parting Shot"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

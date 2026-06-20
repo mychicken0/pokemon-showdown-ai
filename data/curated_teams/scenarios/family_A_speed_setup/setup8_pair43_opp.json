@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair43_v1",
+  "rank": 47,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "gardevoir",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Gardevoirite",
+      "item_source": "source_provided",
+      "ability": "Synchronize",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hyper Voice",
+        "Psyshock",
+        "Trick Room",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "maushold",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Chople Berry",
+      "item_source": "source_provided",
+      "ability": "Friend Guard",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Jolly",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Follow Me",
+        "After You",
+        "Protect",
+        "Super Fang"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "torkoal",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Charcoal",
+      "item_source": "source_provided",
+      "ability": "Drought",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Eruption",
+        "Heat Wave",
+        "Ancient Power",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "dragonite",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Dragon Fang",
+      "item_source": "source_provided",
+      "ability": "Multiscale",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Jolly",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Scale Shot",
+        "Low Kick",
+        "Tailwind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "basculegion",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Focus Sash",
+      "item_source": "source_provided",
+      "ability": "Adaptability",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Liquidation",
+        "Last Respects",
+        "Aqua Jet",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "venusaur",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Occa Berry",
+      "item_source": "source_provided",
+      "ability": "Chlorophyll",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Timid",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Sleep Powder",
+        "Sludge Bomb",
+        "Energy Ball",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair70_v1",
+  "rank": 77,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "charizard",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Charizardite X",
+      "item_source": "source_provided",
+      "ability": "Blaze",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Jolly",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Flare Blitz",
+        "Breaking Swipe",
+        "Roost",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "empoleon",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Sitrus Berry",
+      "item_source": "source_provided",
+      "ability": "Competitive",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hydro Pump",
+        "Flash Cannon",
+        "Icy Wind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "meowscarada",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Choice Scarf",
+      "item_source": "source_provided",
+      "ability": "Protean",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Flower Trick",
+        "Knock Off",
+        "Triple Axel",
+        "Low Kick"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "glimmora",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Focus Sash",
+      "item_source": "source_provided",
+      "ability": "Toxic Debris",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Timid",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Power Gem",
+        "Sludge Bomb",
+        "Earth Power",
+        "Spiky Shield"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "sylveon",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Fairy Feather",
+      "item_source": "source_provided",
+      "ability": "Pixilate",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Hyper Voice",
+        "Hyper Beam",
+        "Quick Attack",
+        "Detect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "dragonite",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Dragon Fang",
+      "item_source": "source_provided",
+      "ability": "Multiscale",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Scale Shot",
+        "Stomping Tantrum",
+        "Tailwind",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

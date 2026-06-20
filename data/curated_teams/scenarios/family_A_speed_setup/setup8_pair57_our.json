@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup8_pair57_v1",
+  "rank": 64,
+  "player": "curated",
+  "event": "setup8_100pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "gallade",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Galladite",
+      "item_source": "source_provided",
+      "ability": "Justified",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Drain Punch",
+        "Zen Headbutt",
+        "Protect",
+        "Bulk Up"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "araquanid",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Mystic Water",
+      "item_source": "source_provided",
+      "ability": "Water Bubble",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Brave",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Liquidation",
+        "Leech Life",
+        "Protect",
+        "Wide Guard"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "kangaskhan",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Leftovers",
+      "item_source": "source_provided",
+      "ability": "Scrappy",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Double-edge",
+        "Drain Punch",
+        "Protect",
+        "Fake Out"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "tsareena",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "White Herb",
+      "item_source": "source_provided",
+      "ability": "Queenly Majesty",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Trop Kick",
+        "Triple Axel",
+        "Protect",
+        "Taunt"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "chandelure",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Chandelurite",
+      "item_source": "source_provided",
+      "ability": "Flash Fire",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Heat Wave",
+        "Shadow Ball",
+        "Protect",
+        "Trick Room"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "goodrahisui",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Sitrus Berry",
+      "item_source": "source_provided",
+      "ability": "Gooey",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Draco Meteor",
+        "Thunderbolt",
+        "Protect",
+        "Flamethrower"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

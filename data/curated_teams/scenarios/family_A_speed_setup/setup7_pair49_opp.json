@@ -1,0 +1,252 @@
+{
+  "id": "curated_setup7_pair49_v1",
+  "rank": 54,
+  "player": "curated",
+  "event": "setup7_20pair_preview",
+  "record": "0-0",
+  "source_platform": "curated",
+  "source_url": "",
+  "parse_status": "complete_ots",
+  "team": [
+    {
+      "species": "dragonite",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Dragoninite",
+      "item_source": "source_provided",
+      "ability": "Multiscale",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Modest",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Extreme Speed",
+        "Dragon Pulse",
+        "Thunderbolt",
+        "Flamethrower"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "charizard",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Charizardite Y",
+      "item_source": "source_provided",
+      "ability": "Blaze",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Timid",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Weather Ball",
+        "Solar Beam",
+        "Heat Wave",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "whimsicott",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Focus Sash",
+      "item_source": "source_provided",
+      "ability": "Prankster",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Timid",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Moonblast",
+        "Tailwind",
+        "Encore",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "garchomp",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Roseli Berry",
+      "item_source": "source_provided",
+      "ability": "Rough Skin",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Jolly",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Earthquake",
+        "Poison Jab",
+        "Rock Slide",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "kingambit",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Chople Berry",
+      "item_source": "source_provided",
+      "ability": "Defiant",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Adamant",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Kowtow Cleave",
+        "Iron Head",
+        "Sucker Punch",
+        "Protect"
+      ],
+      "moves_source": "source_provided"
+    },
+    {
+      "species": "basculegion",
+      "nickname": null,
+      "gender": null,
+      "level": 50,
+      "level_source": "source_provided",
+      "item": "Choice Scarf",
+      "item_source": "source_provided",
+      "ability": "Adaptability",
+      "ability_source": "source_provided",
+      "tera_type": null,
+      "tera_type_source": "missing",
+      "nature": "Jolly",
+      "nature_source": "source_provided",
+      "evs": {
+        "hp": 4,
+        "atk": 0,
+        "def": 0,
+        "spa": 0,
+        "spd": 0,
+        "spe": 0
+      },
+      "evs_source": "simulation_default",
+      "ivs": {
+        "hp": 31,
+        "atk": 31,
+        "def": 31,
+        "spa": 31,
+        "spd": 31,
+        "spe": 31
+      },
+      "ivs_source": "simulation_default",
+      "moves": [
+        "Wave Crash",
+        "Last Respects",
+        "Aqua Jet",
+        "Flip Turn"
+      ],
+      "moves_source": "source_provided"
+    }
+  ]
+}

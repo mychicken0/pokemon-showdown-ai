@@ -48,7 +48,7 @@ from bot_vgc2026_phaseV2c import (
     validate_team_for_battle,
 )
 from team_preview_policy import choose_four_from_six
-from vgc_team_pool import load_vgc_pool
+from vgc_team_pool import VGCTeam, load_vgc_pool
 
 
 HEALTH_URL = "http://localhost:8000"
@@ -114,6 +114,79 @@ def _showdown_normalize(name: str) -> str:
     collisions before connecting.
     """
     return "".join(c for c in name.lower() if c.isalnum())
+
+
+def _load_team_file(path: str) -> VGCTeam:
+    """Phase CURATED-2: load a single VGC team from a JSON file.
+
+    The file must be a single-team dict in the same
+    schema as one entry of
+    ``data/vgc2026_topteams/vgc2026_top200_battle_ready.json``:
+    keys ``id``, ``rank``, ``player``, ``event``,
+    ``record``, ``source_platform``, ``source_url``,
+    ``parse_status``, and ``team`` (6 mons, each with
+    4 moves).
+
+    Returns a ``VGCTeam``. Raises ``ValueError`` on
+    schema violations.
+    """
+    with open(path) as f:
+        data = json.load(f)
+    required = {
+        "id", "rank", "team",
+    }
+    missing = required - set(data.keys())
+    if missing:
+        raise ValueError(
+            f"Team file {path!r} missing keys: "
+            f"{sorted(missing)}"
+        )
+    pokemon = data.get("team", [])
+    if len(pokemon) != 6:
+        raise ValueError(
+            f"Team file {path!r} has {len(pokemon)} "
+            f"pokemon, need 6"
+        )
+    for p in pokemon:
+        if not p.get("species") or not p.get("moves") \
+                or len(p.get("moves", [])) != 4:
+            raise ValueError(
+                f"Team file {path!r} pokemon missing "
+                f"species or 4-move moveset: {p}"
+            )
+    return VGCTeam(
+        id=data["id"],
+        rank=int(data.get("rank", 0)),
+        player=data.get("player", ""),
+        event=data.get("event", ""),
+        record=data.get("record", ""),
+        source_platform=data.get("source_platform", ""),
+        source_url=data.get("source_url", ""),
+        parse_status=data.get("parse_status", "complete_ots"),
+        pokemon=pokemon,
+    )
+
+
+class _TwoTeamPool:
+    """Phase CURATED-2: minimal pool wrapper for custom teams.
+
+    Mimics the ``VGCTeamPool`` interface used by
+    ``run_one_battle`` (only ``__len__`` and ``get_team``).
+    Index 0 is the "our" team; index 1 is the "opp" team.
+    The runner forces ``our_idx=0; opp_idx=1`` when this
+    pool is in use, so the modulo logic in
+    ``_run_all_pairs`` is bypassed.
+    """
+    def __init__(self, our_team: VGCTeam, opp_team: VGCTeam):
+        self._teams = [our_team, opp_team]
+
+    def __len__(self) -> int:
+        return 2
+
+    def get_team(self, index: int):
+        if 0 <= index < 2:
+            return self._teams[index]
+        return None
 
 
 def preflight_uniqueness_check(
@@ -329,6 +402,7 @@ async def run_one_battle(
     enable_behavior_15_piecewise: bool = False,
     enable_decision_timing_diagnostics: bool = False,
     enable_spread_defense_bonus: bool = False,
+    enable_setup_intent_speed_setup: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -466,6 +540,42 @@ async def run_one_battle(
                     **treatment_config.__dict__,
                     "enable_spread_defense_bonus": True,
                     "wide_guard_spread_pressure_bonus": 500.0,
+                }
+            )
+    # Phase SETUP-3A: opt-in speed-setup intent
+    # bonus. Default OFF keeps production scoring
+    # unchanged. When set, treatment bot adds
+    # setup_intent_speed_setup_bonus (+450.0
+    # default, was +350.0 in SETUP-3A) to
+    # Tailwind / Trick Room's raw score when all
+    # 6 guards pass. Other setup categories
+    # (stat_boost, redirection, spread_defense)
+    # are NOT in this design; only speed_setup.
+    # Magnitude updated in SETUP-5 based on
+    # dry-run (SETUP-4) evidence: 0% over-flip
+    # at 450, 9.1% at 550.
+    if is_treatment and enable_setup_intent_speed_setup:
+        from bot_doubles_damage_aware import (
+            DoublesDamageAwareConfig,
+        )
+        setup3a_cfg = DoublesDamageAwareConfig(
+            enable_setup_intent_policy=True,
+            setup_intent_speed_setup_bonus=450.0,
+            setup_intent_max_picks_per_game=3,
+            setup_intent_min_turn_between_picks=2,
+            setup_intent_require_survival=True,
+        )
+        if treatment_config is None:
+            treatment_config = setup3a_cfg
+        else:
+            treatment_config = DoublesDamageAwareConfig(
+                **{
+                    **treatment_config.__dict__,
+                    "enable_setup_intent_policy": True,
+                    "setup_intent_speed_setup_bonus": 450.0,
+                    "setup_intent_max_picks_per_game": 3,
+                    "setup_intent_min_turn_between_picks": 2,
+                    "setup_intent_require_survival": True,
                 }
             )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
@@ -748,6 +858,25 @@ def main():
         ),
     )
     parser.add_argument(
+        "--enable-setup-intent-speed-setup", action="store_true",
+        help=(
+            "Phase SETUP-3A / SETUP-5 probe: enable "
+            "opt-in speed-setup intent bonus "
+            "(setup_intent_speed_setup_bonus = +450.0, "
+            "was +350.0) on the treatment "
+            "arm only. Default OFF. Bonus fires only "
+            "on Tailwind / Trick Room candidates when "
+            "all 6 guards pass: (1) flag ON; (2) move "
+            "is TW/TR; (3) user survives; (4) "
+            "speed-setup not already active; (5) not "
+            "Taunted/Encored; (6) per-game pick cap and "
+            "turn interval. Stat_boost / redirection / "
+            "spread_defense categories are NOT in this "
+            "design. Magnitude updated in SETUP-5 "
+            "based on dry-run: 0%% over-flip at +450."
+        ),
+    )
+    parser.add_argument(
         "--audit-decisions", action="store_true",
         help=(
             "Phase BI-3F-1 probe: attach a "
@@ -773,6 +902,38 @@ def main():
             "--enable-mega-evolution and "
             "--enable-behavior-15-piecewise. Only takes "
             "effect when --audit-decisions is also set."
+        ),
+    )
+    # Phase CURATED-2: opt-in custom team files for
+    # targeted scenario probes. When BOTH flags are set,
+    # the runner uses these two files directly and
+    # bypasses the ``pair_id % pool_size`` logic.
+    # Theour team is the bot under test (p1 in d1, p2
+    # in d2). The opp team is the controlled opponent.
+    # This is mechanical wiring only; the bot's
+    # scoring function is unchanged.
+    parser.add_argument(
+        "--our-team-file", type=str, default=None,
+        help=(
+            "Phase CURATED-2: JSON path to a custom "
+            "'our' team (the bot under test). Schema: "
+            "one entry of "
+            "data/vgc2026_topteams/"
+            "vgc2026_top200_battle_ready.json. "
+            "Requires --opp-team-file. "
+            "Default: None (use pool)."
+        ),
+    )
+    parser.add_argument(
+        "--opp-team-file", type=str, default=None,
+        help=(
+            "Phase CURATED-2: JSON path to a custom "
+            "'opp' team (the controlled opponent). "
+            "Schema: one entry of "
+            "data/vgc2026_topteams/"
+            "vgc2026_top200_battle_ready.json. "
+            "Requires --our-team-file. "
+            "Default: None (use pool)."
         ),
     )
     args = parser.parse_args()
@@ -853,6 +1014,29 @@ def main():
     # Stable team indices.
     my_count = len(pool)
     opp_count = len(pool)
+    # Phase CURATED-2: custom team override. When both
+    # flags are set, the runner uses these two teams
+    # directly and forces our_idx=0, opp_idx=1 below.
+    # This bypasses the pair_id % pool_size logic.
+    curated_pool = None
+    if (args.our_team_file is None) != (args.opp_team_file is None):
+        print(
+            "ERROR: --our-team-file and --opp-team-file "
+            "must be set together (both or neither)."
+        )
+        sys.exit(3)
+    if args.our_team_file and args.opp_team_file:
+        our_team = _load_team_file(args.our_team_file)
+        opp_team = _load_team_file(args.opp_team_file)
+        curated_pool = _TwoTeamPool(our_team, opp_team)
+        pool = curated_pool
+        my_count = 2
+        opp_count = 2
+        print(
+            f"  CURATED: our_team={our_team.id} "
+            f"({our_team.player}) | "
+            f"opp_team={opp_team.id} ({opp_team.player})"
+        )
     results: List[Dict[str, Any]] = []
     start_time = time.time()
     # Phase BI-3K.5: sanitize run id and run preflight
@@ -874,8 +1058,15 @@ def main():
         for pair_id in range(
             args.start_pair, args.start_pair + args.n_pairs
         ):
-            our_idx = pair_id % my_count
-            opp_idx = pair_id % opp_count
+            # Phase CURATED-2: when custom team files
+            # are set, force our_idx=0 / opp_idx=1
+            # (bypasses pair_id % pool_size).
+            if curated_pool is not None:
+                our_idx = 0
+                opp_idx = 1
+            else:
+                our_idx = pair_id % my_count
+                opp_idx = pair_id % opp_count
             d1 = await run_one_battle(
                 pair_id, "p1",
                 args.learned_policy, "matchup_top4_v3",
@@ -891,6 +1082,9 @@ def main():
                 ),
                 enable_spread_defense_bonus=(
                     args.enable_spread_defense_bonus
+                ),
+                enable_setup_intent_speed_setup=(
+                    args.enable_setup_intent_speed_setup
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
@@ -910,6 +1104,9 @@ def main():
                 ),
                 enable_spread_defense_bonus=(
                     args.enable_spread_defense_bonus
+                ),
+                enable_setup_intent_speed_setup=(
+                    args.enable_setup_intent_speed_setup
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,

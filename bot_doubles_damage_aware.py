@@ -423,6 +423,37 @@ class DoublesDamageAwareConfig:
     enable_spread_defense_bonus: bool = False
     wide_guard_spread_pressure_bonus: float = 500.0
 
+    # Phase SETUP-3A: opt-in speed-setup intent bonus.
+    # Applies ONLY to Tailwind / Trick Room candidate
+    # actions, and ONLY when all 5 guards pass (see
+    # score_action). Default OFF. Per AGENTS.md,
+    # the default stays OFF until adoption gates pass.
+    # Phase SETUP-5: default magnitude updated from
+    # 350.0 → 450.0 based on dry-run (SETUP-4)
+    # evidence: 0% over-flip at 450, 9.1% over-flip
+    # at 550. The 450 value trades a small increase
+    # in flips for 0% over-flip rate.
+    # Phase SETUP-7A: added KO priority guard
+    # (``setup_intent_require_ko_check`` +
+    # ``setup_intent_ko_opp_hp_threshold``) to
+    # address 12.9% over-select rate observed in
+    # SETUP-7 20-pair preview. The guard
+    # suppresses the setup bonus when the opp's
+    # lowest active HP is below the threshold
+    # (default 0.10, conservative). Catches 2 of
+    # 4 SETUP-7 over-select cases (the CLEAR
+    # cases with opp_hp < 0.05). A higher
+    # threshold (e.g. 0.30) was tested but caused
+    # -10pp win rate regression (over-suppressed
+    # valid setup picks). 0.10 strikes balance.
+    enable_setup_intent_policy: bool = False
+    setup_intent_speed_setup_bonus: float = 450.0
+    setup_intent_max_picks_per_game: int = 3
+    setup_intent_min_turn_between_picks: int = 2
+    setup_intent_require_survival: bool = True
+    setup_intent_require_ko_check: bool = True
+    setup_intent_ko_opp_hp_threshold: float = 0.10
+
     # Phase 6.3.5: Ground-into-Flying audit fields (generic dual-type)
     # (no config fields needed for Part 0A - the fix is in the scoring logic)
 
@@ -2300,6 +2331,15 @@ class DoublesDamageAwarePlayer(Player):
         self._b17_protect_floor_debug = {}
         self._order_aware_overkill_penalty_applied = {}
 
+        # Phase SETUP-3A: per-battle state for the
+        # setup-intent anti-spam guards.
+        #   _setup_intent_picks_per_game: battle_tag ->
+        #     count of setup-move picks in this game
+        #   _setup_intent_last_pick_turn: battle_tag ->
+        #     last turn a setup move was picked
+        self._setup_intent_picks_per_game = {}
+        self._setup_intent_last_pick_turn = {}
+
         # Phase 6.3 tracking state (per battle tag)
         self._ability_hard_block_avoided = {}
         self._ability_immune_move_selected = {}
@@ -4011,6 +4051,259 @@ class DoublesDamageAwarePlayer(Player):
         del active_idx  # currently unused
         return compute_opp_pressure_state_for_battle(battle)
 
+    def _setup_intent_speed_setup_eligible(
+        self, order, active_idx: int, battle
+    ) -> bool:
+        """Phase SETUP-3A: return True if the bonus
+        should apply to this order.
+
+        Guards (all must pass):
+        1. ``enable_setup_intent_policy`` is True.
+        2. ``order`` is a Tailwind or Trick Room move.
+        3. Active user survives this turn (HP > 25%
+           OR ``setup_intent_require_survival=False``).
+        4. Speed-setup is not already active on the
+           field (no Tailwind, no Trick Room up).
+        5. User is not visibly Taunted or Encored
+           (information-integrity: only visible).
+        6. Anti-spam: per-game pick count
+           < ``setup_intent_max_picks_per_game`` AND
+           turns since last pick >=
+           ``setup_intent_min_turn_between_picks``.
+
+        KO priority suppression: the bonus is
+        implicitly suppressed when a damage move in
+        the same slot would still score higher than
+        setup + bonus. The natural score ranking
+        handles this without an explicit guard.
+        """
+        # Guard 1: master switch
+        if not getattr(
+            self.config, "enable_setup_intent_policy", False
+        ):
+            return False
+        # Guard 2: move is Tailwind or Trick Room
+        if not isinstance(getattr(order, "order", None), Move):
+            return False
+        move_id = _normalize_move_id_for_spread_defense(
+            getattr(order.order, "id", "")
+        )
+        if move_id not in ("tailwind", "trickroom"):
+            return False
+        # Guard 3: active user survives
+        if getattr(
+            self.config, "setup_intent_require_survival", True
+        ):
+            battle_tag = getattr(battle, "battle_tag", "")
+            if self._expected_to_faint_before_moving.get(
+                battle_tag, {}
+            ).get(active_idx, False):
+                return False
+            try:
+                our_active = (
+                    battle.active_pokemon[active_idx]
+                    if active_idx < len(battle.active_pokemon)
+                    else None
+                )
+                if our_active is not None:
+                    hp_frac = (
+                        our_active.current_hp_fraction
+                        if hasattr(
+                            our_active, "current_hp_fraction"
+                        )
+                        else (
+                            our_active.current_hp
+                            / max(1, our_active.max_hp)
+                            if hasattr(our_active, "current_hp")
+                            and hasattr(our_active, "max_hp")
+                            else 1.0
+                        )
+                    )
+                    if hp_frac is not None and hp_frac < 0.25:
+                        return False
+            except Exception:
+                # If we can't determine HP, be safe and
+                # let the bonus fire (assume alive).
+                pass
+        # Guard 4: speed-setup not already active.
+        # Phase SETUP-6A: fixed to also check
+        # ``battle.fields``. Tailwind is a
+        # ``side_condition``; Trick Room is a
+        # ``field`` effect. The previous version
+        # only checked ``side_conditions``, so
+        # it missed already-active Trick Room.
+        # Test: 96495 T3 picked TR when fields
+        # had ``trick_room``. See SETUP-6
+        # report and SETUP-6A fix.
+        # Phase SETUP-6A v2: poke-env exposes
+        # ``battle.fields`` as a list of
+        # ``Field`` enum objects. Each has a
+        # ``.name`` attribute (e.g. ``TRICK_ROOM``).
+        # Need to convert to normalized strings.
+        try:
+            our_side = (
+                getattr(battle, "side_conditions", None) or {}
+            )
+            sc_has_tw = "tailwind" in our_side
+            sc_has_tr = "trickroom" in our_side
+            our_fields = (
+                getattr(battle, "fields", None) or []
+            )
+            fld_has_tw = False
+            fld_has_tr = False
+            for f in our_fields:
+                # Convert to normalized string
+                if hasattr(f, "name"):
+                    f_str = f.name.lower()
+                else:
+                    f_str = str(f).lower()
+                f_str = (
+                    f_str.replace("_", "").replace(" ", "")
+                )
+                if "tailwind" in f_str:
+                    fld_has_tw = True
+                if "trickroom" in f_str:
+                    fld_has_tr = True
+            if sc_has_tw or sc_has_tr or fld_has_tw or fld_has_tr:
+                return False
+        except Exception:
+            pass
+        # Guard 5: not visibly Taunted or Encored
+        try:
+            our_active = (
+                battle.active_pokemon[active_idx]
+                if active_idx < len(battle.active_pokemon)
+                else None
+            )
+            if our_active is not None:
+                if getattr(our_active, "taunted", False):
+                    return False
+                if getattr(our_active, "encored", False):
+                    return False
+                # Some poke-env versions use
+                # ``must_recharge`` etc. but Taunt/
+                # Encore are the relevant volátiles
+                # for status-move setup.
+        except Exception:
+            pass
+        # Guard 6: anti-spam
+        battle_tag = getattr(battle, "battle_tag", "")
+        picks = self._setup_intent_picks_per_game.get(
+            battle_tag, 0
+        )
+        if picks >= getattr(
+            self.config,
+            "setup_intent_max_picks_per_game",
+            3,
+        ):
+            return False
+        current_turn = getattr(battle, "turn", 0)
+        last_turn = self._setup_intent_last_pick_turn.get(
+            battle_tag, -999
+        )
+        if current_turn - last_turn < getattr(
+            self.config,
+            "setup_intent_min_turn_between_picks",
+            2,
+        ):
+            return False
+        # Guard 7: KO priority. Phase SETUP-7A.
+        # SETUP-7 20-pair preview showed 12.9%
+        # over-select rate (4/31 setup picks) where
+        # the bot picked setup when the opp was
+        # in KO range (opp_hp 0.01-0.28 with
+        # top_dmg 554-587). The SETUP-2 design
+        # documented this as "implicit via
+        # natural ranking" but that wasn't
+        # strong enough — the joint scoring
+        # sometimes picked setup over a
+        # near-guaranteed KO. This guard
+        # explicitly checks opp's lowest active
+        # HP and suppresses the setup bonus if
+        # the opp is in KO range. Threshold
+        # ``setup_intent_ko_opp_hp_threshold``
+        # (default 0.30). Catches the 4 SETUP-7
+        # over-select cases:
+        # - battle 96525 T4: opp_hp 0.04
+        # - battle 96527 T3: opp_hp 0.28
+        # - battle 96534 T5: opp_hp 0.01
+        # - battle 96555 T3: opp_hp 0.20
+        if getattr(
+            self.config,
+            "setup_intent_require_ko_check",
+            True,
+        ):
+            opp_hp_min = None
+            try:
+                ss = getattr(
+                    battle, "state_snapshot", None
+                )
+                if ss is not None:
+                    for hp in (
+                        ss.get("opp_active_hp_fraction", [])
+                        or []
+                    ):
+                        if hp is None:
+                            continue
+                        if (
+                            opp_hp_min is None
+                            or hp < opp_hp_min
+                        ):
+                            opp_hp_min = hp
+                if opp_hp_min is None:
+                    # Fallback: try poke-env directly
+                    for opp in (
+                        getattr(
+                            battle,
+                            "opponent_active_pokemon",
+                            None,
+                        )
+                        or []
+                    ):
+                        if opp is None:
+                            continue
+                        hp = (
+                            getattr(
+                                opp,
+                                "current_hp_fraction",
+                                None,
+                            )
+                        )
+                        if hp is None:
+                            continue
+                        if (
+                            opp_hp_min is None
+                            or hp < opp_hp_min
+                        ):
+                            opp_hp_min = hp
+            except Exception:
+                opp_hp_min = None
+            threshold = getattr(
+                self.config,
+                "setup_intent_ko_opp_hp_threshold",
+                0.30,
+            )
+            if (
+                opp_hp_min is not None
+                and opp_hp_min < threshold
+            ):
+                return False
+        return True
+
+    def record_setup_intent_pick(
+        self, battle_tag: str, turn: int
+    ):
+        """Phase SETUP-3A: record a setup-move pick
+        for the anti-spam guards. Called from
+        ``choose_move`` seam when the selected joint
+        order includes a setup-move action.
+        """
+        self._setup_intent_picks_per_game[battle_tag] = (
+            self._setup_intent_picks_per_game.get(battle_tag, 0)
+            + 1
+        )
+        self._setup_intent_last_pick_turn[battle_tag] = turn
+
     def _is_all_target_immune_damaging_spread(
         self, order, slot_idx: int, battle, config
     ) -> bool:
@@ -4532,6 +4825,17 @@ class DoublesDamageAwarePlayer(Player):
             ):
                 score = float(score) + float(
                     self.config.wide_guard_spread_pressure_bonus
+                )
+            # Phase SETUP-3A: opt-in speed-setup intent
+            # bonus. Applies ONLY to Tailwind / Trick Room
+            # candidate actions, and ONLY when all 5 guards
+            # pass. Default OFF. See SETUP-2 design for
+            # full guard spec.
+            if self._setup_intent_speed_setup_eligible(
+                order, active_idx, battle
+            ):
+                score = float(score) + float(
+                    self.config.setup_intent_speed_setup_bonus
                 )
             # Phase BEHAVIOR-12: Expected-faint attack penalty.
             # Applied to non-Protect, non-switch, non-pass
@@ -11708,6 +12012,26 @@ class DoublesDamageAwarePlayer(Player):
                     best_joint
                 )
             )
+            # Phase SETUP-3A: record setup-move picks for
+            # the anti-spam guards. Check each slot's
+            # selected order for a TW/TR move and record
+            # the pick if any.
+            for _si, _sel_order in (
+                (0, best_joint.first_order),
+                (1, best_joint.second_order),
+            ):
+                if _sel_order is None:
+                    continue
+                _sel_move = getattr(_sel_order, "order", None)
+                if not isinstance(_sel_move, Move):
+                    continue
+                _mid = _normalize_move_id_for_spread_defense(
+                    getattr(_sel_move, "id", "")
+                )
+                if _mid in ("tailwind", "trickroom"):
+                    self.record_setup_intent_pick(
+                        battle_tag, current_turn
+                    )
 
             self.audit_logger.log_turn_decision(
                 battle_tag=battle_tag,
