@@ -4083,3 +4083,60 @@ for the full inventory.
 
 See `logs/phaseCOMBO5_combo_support_closeout.md`
 for full closeout.
+
+---
+
+## CONTROL-PLAN-1 — Support / Field Control Roadmap
+
+**Decision:** `PLAN_RECORDED` / `IMPLEMENTATION_DEFERRED`.
+
+The current default bot is best described as a damage-aware doubles
+bot with substantial safety instrumentation. It recognizes many
+control mechanics, but it is not yet a full support/control VGC
+planner.
+
+The forward plan is saved in:
+
+- `logs/phaseCONTROLPLAN1_support_control_roadmap.md`
+
+### Control families to make useful
+
+- Defensive stall: Protect-like moves to preserve board position or
+  stall opposing field turns.
+- Speed control: Tailwind, Trick Room, Icy Wind, Electroweb,
+  Thunder Wave.
+- Anti-setup disruption: Taunt, Encore, Disable, Torment, Quash.
+- Field control: weather, terrain, screens.
+- Redirection: Follow Me, Rage Powder.
+- Spread defense: Wide Guard, Quick Guard, Crafty Shield.
+- Combo support: Beat Up + Justified, Weakness Policy, ally absorb /
+  redirect activation.
+
+### Recommended order
+
+1. **CONTROL-1 — Unified Control Move Evidence Audit** (read-only).
+2. **CONTROL-2 — Audit Gap Seal** only if fields are missing.
+3. **CONTROL-3 — Anti-Setup Disruption Design**.
+4. **CONTROL-4A — Opt-In Taunt / Encore / Disable Implementation**.
+5. **CONTROL-5A — Validation Ladder**: fixture → 1-pair → 5-pair
+   → 20-pair, with 100/200-pair only for default adoption.
+
+### Why anti-setup first
+
+SETUP proved that proactive Tailwind/Trick Room bonuses can trigger
+but regress at scale. Anti-setup disruption is narrower: it reacts to
+opponent setup/support evidence and can be guarded by target validity,
+known move use, and obvious-KO suppression.
+
+### Non-goals
+
+- No all-status-move bonus.
+- No broad setup intent revival.
+- No default flip.
+- No RL/training.
+- No Mega/weather/terrain combo planner yet.
+- No Beat Up / Weakness Policy scoring yet.
+- No `test_51`.
+
+Next recommended phase: **CONTROL-1 — Unified Control Move Evidence
+Audit**.

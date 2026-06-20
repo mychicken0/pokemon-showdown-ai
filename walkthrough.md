@@ -7391,3 +7391,47 @@ See `logs/phaseCOMBO1_doubles_combo_support_inventory.md`.
 
 See `logs/phaseCOMBO5_combo_support_closeout.md`
 for full closeout.
+
+---
+
+## CONTROL-PLAN-1 — Support / Field Control Roadmap
+
+The user asked to make Protect, Tailwind, Trick Room, weather,
+terrain, Taunt, Encore, Disable, and other control/support tools work
+as real VGC plans rather than just known move names.
+
+The plan is recorded in:
+
+- `logs/phaseCONTROLPLAN1_support_control_roadmap.md`
+
+Core conclusion:
+
+- The bot already has many safety rules and recognizes many
+  mechanics.
+- Recognition is not enough. The missing layer is intent: when a
+  support/control move should be worth giving up immediate damage.
+- SETUP showed that broad proactive setup bonuses can regress at
+  scale, so the next work must be narrow and evidence-backed.
+
+Recommended path:
+
+1. **CONTROL-1:** read-only unified control move evidence audit.
+2. **CONTROL-2:** audit field gap seal if needed.
+3. **CONTROL-3:** anti-setup disruption design.
+4. **CONTROL-4A:** opt-in Taunt / Encore / Disable implementation.
+5. **CONTROL-5A:** fixture, 1-pair, 5-pair, 20-pair validation.
+
+Implementation priority:
+
+- Start with anti-setup disruption (Taunt / Encore / Disable), not
+  Tailwind/TR/weather/terrain. It is easier to guard because it reacts
+  to opponent setup/support evidence.
+
+Non-goals:
+
+- No all-status-move bonus.
+- No default flip.
+- No RL/training.
+- No broad setup revival.
+- No Mega/weather/terrain combo planner yet.
+- No `test_51`.
