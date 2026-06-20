@@ -198,16 +198,20 @@ class ScriptedOpponentPlayer(Player):
             p for p in members if p not in lead_positions
         ]
         random.shuffle(back_positions)
-        # /team format: lead, back, lead, back
-        # Need at least 2 back positions for
-        # 4-mon bring. If we have fewer,
-        # fall back to random_teampreview.
+        # /team format: lead, lead, back, back
+        # (showdown's doubles teampreview
+        # interprets the FIRST 2 digits of
+        # the /team string as the leads).
+        # Need at least 2 back positions
+        # for 4-mon bring. If we have
+        # fewer, fall back to
+        # random_teampreview.
         if len(back_positions) < 2:
             return self.random_teampreview(battle)
         chosen = [
             lead_positions[0],
-            back_positions[0],
             lead_positions[1],
+            back_positions[0],
             back_positions[1],
         ]
         return "/team " + "".join(str(c) for c in chosen)

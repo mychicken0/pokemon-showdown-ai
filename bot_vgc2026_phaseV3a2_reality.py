@@ -700,7 +700,15 @@ async def run_one_battle(
             max_concurrent_battles=1,
             battle_format=BATTLE_FORMAT,
             log_level=30,
-            team=opp_team_str if side == "p1" else our_team_str,
+            # Phase SCENARIO-8 fix: the scripted
+            # player IS the opp in the scenario
+            # file. Its team is always the
+            # scenario's ``opp_team_file``
+            # (NOT swapped based on side). The
+            # ``side`` flag controls whether the
+            # bot is p1 or p2, but the scripted
+            # player always uses opp_team_str.
+            team=opp_team_str,
             server_configuration=LocalhostServerConfiguration,
         )
         # Phase SCENARIO-5: attach the
