@@ -3135,8 +3135,23 @@ class DoublesDecisionAuditLogger:
             "player_side": str(player_side),
             "player_name": str(player_name),
             "scenario_id": scenario_id,
-            "scripted_actions": list(scripted_actions or []),
-            "script_failures": list(script_failures or []),
+            # Phase SCENARIO-5: store the live
+            # list reference (no copy) so
+            # save_battle's later copy captures
+            # the final state. Use
+            # ``is not None`` (not truthiness)
+            # since an empty list is a valid
+            # live reference.
+            "scripted_actions": (
+                scripted_actions
+                if scripted_actions is not None
+                else []
+            ),
+            "script_failures": (
+                script_failures
+                if script_failures is not None
+                else []
+            ),
         }
 
     def save_battle(self, battle_tag, winner, battle):

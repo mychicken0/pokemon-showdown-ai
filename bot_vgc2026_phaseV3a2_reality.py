@@ -703,6 +703,20 @@ async def run_one_battle(
             team=opp_team_str if side == "p1" else our_team_str,
             server_configuration=LocalhostServerConfiguration,
         )
+        # Phase SCENARIO-5: attach the
+        # appropriate audit logger so the
+        # baseline audit file is populated
+        # for both side="p1" and side="p2".
+        # The base Player doesn't have an
+        # ``audit_logger`` slot, so we
+        # monkey-patch it onto the scripted
+        # player (its only purpose is to
+        # trigger save_battle on the logger
+        # when the battle ends).
+        if p2_is_treatment and audit_logger_treatment is not None:
+            scripted_opp_player.audit_logger = audit_logger_treatment
+        elif audit_logger_baseline is not None:
+            scripted_opp_player.audit_logger = audit_logger_baseline
         p2 = scripted_opp_player
     else:
         p2 = ControlledTeamPreviewPlayer(**p2_kwargs)
@@ -742,12 +756,12 @@ async def run_one_battle(
             else None
         )
         _scen_actions = (
-            list(scripted_opp_player.scenario_actions)
+            scripted_opp_player.scenario_actions
             if scripted_opp_player is not None
             else []
         )
         _scen_failures = (
-            list(scripted_opp_player.scenario_failures)
+            scripted_opp_player.scenario_failures
             if scripted_opp_player is not None
             else []
         )
@@ -783,12 +797,12 @@ async def run_one_battle(
             else None
         )
         _scen_actions = (
-            list(scripted_opp_player.scenario_actions)
+            scripted_opp_player.scenario_actions
             if scripted_opp_player is not None
             else []
         )
         _scen_failures = (
-            list(scripted_opp_player.scenario_failures)
+            scripted_opp_player.scenario_failures
             if scripted_opp_player is not None
             else []
         )
@@ -825,6 +839,52 @@ async def run_one_battle(
             for bt, b in p1.battles.items():
                 turns = max(turns, int(getattr(b, "turn", 0) or 0))
                 break
+            # Phase SCENARIO-5: also call
+            # save_battle on the OTHER arm's
+            # logger so the audit file is
+            # populated for both arms. The
+            # bot only has one logger attached
+            # (treatment or baseline based on
+            # side), so we manually save to the
+            # other one. Use the most recent
+            # battle from p1.
+            if scenario_path is not None and finished > 0:
+                for bt, b in p1.battles.items():
+                    most_recent_battle = b
+                    most_recent_tag = bt
+                    break
+                if p1_is_treatment:
+                    # Bot is treatment; save to
+                    # baseline as well.
+                    if (
+                        audit_logger_baseline is not None
+                        and hasattr(
+                            audit_logger_baseline,
+                            "save_battle",
+                        )
+                    ):
+                        winner_str = "?"
+                        if our_win is True:
+                            winner_str = (
+                                p2_name if side == "p1" else p1_name
+                            )
+                        elif our_win is False:
+                            winner_str = (
+                                p1_name if side == "p1" else p2_name
+                            )
+                        audit_logger_baseline.save_battle(
+                            battle_tag=most_recent_tag,
+                            winner=winner_str,
+                            battle=most_recent_battle,
+                        )
+                elif p2_is_treatment:
+                    # Bot is treatment on p2;
+                    # save to treatment as well
+                    # (p1 is the scripted player
+                    # here, so the baseline logger
+                    # already saved from bot's
+                    # callback).
+                    pass
     except asyncio.TimeoutError:
         status = "timeout"
         error_detail = f"timeout after {timeout}s"

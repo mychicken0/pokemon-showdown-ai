@@ -383,13 +383,13 @@ class TestTeampreviewOverride(unittest.TestCase):
         # Order should be /team XXXX
         self.assertTrue(order.startswith("/team "), f"unexpected order: {order}")
         positions = [int(c) for c in order.replace("/team ", "")]
-        # Lead mons are positions 1 and 2 in
-        # doubles. Position 3 is hatterene in
-        # the team_dicts above (index 2 -> pos 3).
-        # Check the species at lead positions.
+        # Phase SCENARIO-5: in doubles /team
+        # format, leads are at positions 1
+        # and 3 of the 4-digit string
+        # (lead, back, lead, back).
         lead_species = [
             list(battle.team.values())[p - 1].species
-            for p in positions[:2]
+            for p in [positions[0], positions[2]]
         ]
         self.assertIn("Hatterene", lead_species, f"hatterene not in lead {lead_species}")
 

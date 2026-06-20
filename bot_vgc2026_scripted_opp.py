@@ -148,7 +148,7 @@ class ScriptedOpponentPlayer(Player):
         lead_map = getattr(self.scenario, "lead", None) or {}
         if lead_map:
             return self._build_team_from_lead(
-                int_to_species, lead_map
+                int_to_species, lead_map, battle
             )
         return self.random_teampreview(battle)
 
@@ -156,15 +156,22 @@ class ScriptedOpponentPlayer(Player):
         self,
         int_to_species: Dict[int, str],
         lead_map: Dict[str, str],
+        battle: AbstractBattle,
     ) -> str:
         """Build a /team order that brings
         4 mons and leads with the species
-        named in ``lead_map``."""
+        named in ``lead_map``.
+
+        Phase SCENARIO-5 fix: the
+        showdown doubles /team format is
+        ``lead, back, lead, back`` (the
+        leads are at positions 1 and 3 of
+        the 4-digit string). The /team
+        ``6253`` means: lead 6, back 2,
+        lead 5, back 3 — NOT lead 6, 2.
+        """
         if not int_to_species:
-            return self.random_teampreview(
-                # Use empty battle stub if needed
-                None
-            )
+            return self.random_teampreview(battle)
         species_to_pos = {
             self._norm(sp): pos
             for pos, sp in int_to_species.items()
@@ -185,16 +192,24 @@ class ScriptedOpponentPlayer(Player):
                 if len(lead_positions) == 2:
                     break
         if len(lead_positions) < 2:
-            return self.random_teampreview(
-                # Use empty battle stub if needed
-                None
-            )
+            return self.random_teampreview(battle)
         members = list(int_to_species.keys())
         back_positions = [
             p for p in members if p not in lead_positions
         ]
         random.shuffle(back_positions)
-        chosen = lead_positions + back_positions[:2]
+        # /team format: lead, back, lead, back
+        # Need at least 2 back positions for
+        # 4-mon bring. If we have fewer,
+        # fall back to random_teampreview.
+        if len(back_positions) < 2:
+            return self.random_teampreview(battle)
+        chosen = [
+            lead_positions[0],
+            back_positions[0],
+            lead_positions[1],
+            back_positions[1],
+        ]
         return "/team " + "".join(str(c) for c in chosen)
 
     @staticmethod
