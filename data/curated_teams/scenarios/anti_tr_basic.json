@@ -1,16 +1,20 @@
 {
   "scenario_id": "anti_tr_basic",
   "description": "Opp scripts Trick Room on turn 1; bot must counter with Taunt/Encore",
-  "version": 1,
+  "version": 2,
   "our_team_file": "data/curated_teams/control4a/team_027.json",
   "opp_team_file": "data/curated_teams/control4a/team_020.json",
+  "lead": {
+    "opp_slot_0": "Hatterene",
+    "opp_slot_1": "Blastoise"
+  },
   "script": {
     "turn_1": {
       "opp_slot_0": {"move": "trickroom"},
       "opp_slot_1": {"move": "protect"}
     },
     "turn_2": {
-      "opp_slot_0": {"move": "calmmind"}
+      "opp_slot_0": {"move": "psychic"}
     }
   },
   "validators": [

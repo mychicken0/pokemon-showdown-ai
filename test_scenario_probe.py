@@ -636,3 +636,111 @@ class TestPureFunction(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLeadField(unittest.TestCase):
+    """Phase SCENARIO-4: scenario file may
+    include a 'lead' dict mapping slot
+    keys to species names."""
+
+    def test_lead_field_parsed(self):
+        from scenario_probe import load_scenario_dict
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "lead": {
+                "opp_slot_0": "Hatterene",
+                "opp_slot_1": "Tinkaton"
+            },
+            "script": {},
+        }
+        sc = load_scenario_dict(data, source_path="<test>")
+        self.assertEqual(sc.lead, {
+            "opp_slot_0": "Hatterene",
+            "opp_slot_1": "Tinkaton"
+        })
+
+    def test_lead_optional(self):
+        from scenario_probe import load_scenario_dict
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "script": {},
+        }
+        sc = load_scenario_dict(data, source_path="<test>")
+        self.assertIsNone(sc.lead)
+
+    def test_lead_invalid_slot_raises(self):
+        from scenario_probe import (
+            load_scenario_dict, ScenarioValidationError,
+        )
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "lead": {
+                "opp_slot_99": "Hatterene",
+            },
+            "script": {},
+        }
+        with self.assertRaises(ScenarioValidationError):
+            load_scenario_dict(data, source_path="<test>")
+
+
+class TestLeadField(unittest.TestCase):
+    """Phase SCENARIO-4: scenario file may
+    include a 'lead' dict mapping slot
+    keys to species names."""
+
+    def test_lead_field_parsed(self):
+        from scenario_probe import load_scenario_dict
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "lead": {
+                "opp_slot_0": "Hatterene",
+                "opp_slot_1": "Tinkaton"
+            },
+            "script": {},
+        }
+        sc = load_scenario_dict(data, source_path="<test>")
+        self.assertEqual(sc.lead, {
+            "opp_slot_0": "Hatterene",
+            "opp_slot_1": "Tinkaton"
+        })
+
+    def test_lead_optional(self):
+        from scenario_probe import load_scenario_dict
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "script": {},
+        }
+        sc = load_scenario_dict(data, source_path="<test>")
+        self.assertIsNone(sc.lead)
+
+    def test_lead_invalid_slot_raises(self):
+        from scenario_probe import (
+            load_scenario_dict, ScenarioValidationError,
+        )
+        data = {
+            "scenario_id": "test",
+            "our_team_file": "data/curated_teams/control4a/team_027.json",
+            "opp_team_file": "data/curated_teams/control4a/team_020.json",
+            "lead": {
+                "opp_slot_99": "Hatterene",
+            },
+            "script": {},
+        }
+        with self.assertRaises(ScenarioValidationError):
+            load_scenario_dict(data, source_path="<test>")

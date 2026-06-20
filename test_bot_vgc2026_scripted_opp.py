@@ -310,3 +310,104 @@ class TestHelpFunction(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTeampreviewOverride(unittest.TestCase):
+    """Phase SCENARIO-4: scripted player must
+    lead with the mon that owns the script's
+    turn_1 slot 0 move."""
+
+    def _make_battle(self, team_dicts):
+        """Build a mock battle with a team of
+        simple stand-in mon objects. Avoids
+        poke-env's Pokemon class complexity
+        for the teampreview test."""
+        class _MockMove:
+            def __init__(self, name):
+                self.id = name
+
+        class _MockMon:
+            def __init__(self, species, moves):
+                self.species = species
+                self._moves = {
+                    mv.lower().replace(" ", "").replace("-", ""): _MockMove(mv)
+                    for mv in moves
+                }
+                self.moves = self._moves
+                self.base_moves = [
+                    mv.lower().replace(" ", "").replace("-", "")
+                    for mv in moves
+                ]
+                self._selected_in_teampreview = False
+
+        class _MockBattle:
+            def __init__(self, mons):
+                self.team = {}
+                for i, m in enumerate(mons):
+                    self.team[str(i + 1)] = _MockMon(
+                        m["species"], m["moves"]
+                    )
+                # Use a private ``format`` so
+                # ``battle.format`` returns the
+                # value (random_teampreview needs
+                # this).
+                self._format = "gen9championsvgc2026regma"
+
+            @property
+            def format(self):
+                return self._format
+
+        battle = _MockBattle(team_dicts)
+        return battle
+
+    def test_lead_with_tr_setter(self):
+        """Hatterene with TR should be one of
+        the two lead positions when the script
+        says opp_slot_0 uses TR."""
+        from bot_vgc2026_scripted_opp import (
+            ScriptedOpponentPlayer,
+        )
+        scripted = ScriptedOpponentPlayer(
+            scenario_path="data/curated_teams/scenarios/anti_tr_basic.json",
+        )
+        team = [
+            {"species": "Volcarona", "moves": ["Heat Wave", "Protect"]},
+            {"species": "Blastoise", "moves": ["Water Pulse", "Protect"]},
+            {"species": "Hatterene", "moves": ["Dazzling Gleam", "Trick Room", "Protect"]},
+            {"species": "Tinkaton", "moves": ["Fake Out", "Protect"]},
+            {"species": "Meowscarada", "moves": ["Flower Trick", "Protect"]},
+            {"species": "Torterra", "moves": ["Wood Hammer", "Protect"]},
+        ]
+        battle = self._make_battle(team)
+        order = scripted.teampreview(battle)
+        # Order should be /team XXXX
+        self.assertTrue(order.startswith("/team "), f"unexpected order: {order}")
+        positions = [int(c) for c in order.replace("/team ", "")]
+        # Lead mons are positions 1 and 2 in
+        # doubles. Position 3 is hatterene in
+        # the team_dicts above (index 2 -> pos 3).
+        # Check the species at lead positions.
+        lead_species = [
+            list(battle.team.values())[p - 1].species
+            for p in positions[:2]
+        ]
+        self.assertIn("Hatterene", lead_species, f"hatterene not in lead {lead_species}")
+
+    def test_fallback_to_random_when_no_match(self):
+        """If the script's turn_1 has no matching
+        species, fall back to random teampreview."""
+        from bot_vgc2026_scripted_opp import (
+            ScriptedOpponentPlayer,
+        )
+        scripted = ScriptedOpponentPlayer(
+            scenario_path="data/curated_teams/scenarios/anti_tr_basic.json",
+        )
+        team = [
+            {"species": "Volcarona", "moves": ["Heat Wave", "Protect"]},
+            {"species": "Blastoise", "moves": ["Water Pulse", "Protect"]},
+        ]
+        battle = self._make_battle(team)
+        # No hatterene -> random teampreview
+        order = scripted.teampreview(battle)
+        # Just verify it returns a /team order
+        self.assertTrue(order.startswith("/team "))

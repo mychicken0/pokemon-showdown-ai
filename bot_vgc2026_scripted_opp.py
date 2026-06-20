@@ -31,6 +31,7 @@ audit logger:
 """
 from __future__ import annotations
 
+import random
 from typing import Any, Dict, List, Optional, Tuple
 
 from poke_env.battle.abstract_battle import AbstractBattle
@@ -93,12 +94,126 @@ class ScriptedOpponentPlayer(Player):
                 base Player
         """
         super().__init__(*args, **kwargs)
+        self._accept_open_team_sheet = False
         # Load scenario
         self.scenario = load_scenario_file(scenario_path)
         # Metadata for audit
         self.scenario_id = self.scenario.scenario_id
         self.scenario_failures: List[Dict[str, Any]] = []
         self.scenario_actions: List[Dict[str, Any]] = []
+
+    def teampreview(self, battle: AbstractBattle) -> str:
+        """Phase SCENARIO-4: lead with the
+        species specified in the scenario's
+        ``lead`` field, if present.
+
+        At teampreview time, ``battle.team``
+        may have None placeholders or empty
+        species. We use the team that was
+        loaded at construction time
+        (``self._team``) for the species
+        lookup. The team has stable
+        1-indexed positions matching the
+        packed team string format.
+        """
+        int_to_species: Dict[int, str] = {}
+        if self._team is not None:
+            try:
+                team_list = self._team.team
+                for i, mon in enumerate(team_list, start=1):
+                    sp = getattr(mon, "species", None) or ""
+                    if not sp and hasattr(mon, "name"):
+                        sp = getattr(mon, "name", "") or ""
+                    if sp:
+                        int_to_species[i] = sp
+            except Exception:
+                pass
+        # Fallback to battle.team if
+        # self._team is empty or unusable.
+        if not int_to_species:
+            for k, v in battle.team.items():
+                if v is None:
+                    continue
+                sp = getattr(v, "species", None) or ""
+                if not sp:
+                    try:
+                        sp = v.species
+                    except AttributeError:
+                        sp = ""
+                if sp:
+                    try:
+                        int_to_species[int(k)] = sp
+                    except (ValueError, TypeError):
+                        continue
+        lead_map = getattr(self.scenario, "lead", None) or {}
+        if lead_map:
+            return self._build_team_from_lead(
+                int_to_species, lead_map
+            )
+        return self.random_teampreview(battle)
+
+    def _build_team_from_lead(
+        self,
+        int_to_species: Dict[int, str],
+        lead_map: Dict[str, str],
+    ) -> str:
+        """Build a /team order that brings
+        4 mons and leads with the species
+        named in ``lead_map``."""
+        if not int_to_species:
+            return self.random_teampreview(
+                # Use empty battle stub if needed
+                None
+            )
+        species_to_pos = {
+            self._norm(sp): pos
+            for pos, sp in int_to_species.items()
+        }
+        lead_positions: list = []
+        for slot_key, species in lead_map.items():
+            if slot_key not in (
+                "opp_slot_0", "opp_slot_1"
+            ):
+                continue
+            pos = species_to_pos.get(self._norm(species))
+            if pos is not None and pos not in lead_positions:
+                lead_positions.append(pos)
+        if len(lead_positions) < 2:
+            for pos in sorted(int_to_species.keys()):
+                if pos not in lead_positions:
+                    lead_positions.append(pos)
+                if len(lead_positions) == 2:
+                    break
+        if len(lead_positions) < 2:
+            return self.random_teampreview(
+                # Use empty battle stub if needed
+                None
+            )
+        members = list(int_to_species.keys())
+        back_positions = [
+            p for p in members if p not in lead_positions
+        ]
+        random.shuffle(back_positions)
+        chosen = lead_positions + back_positions[:2]
+        return "/team " + "".join(str(c) for c in chosen)
+
+    @staticmethod
+    def _norm(species: str) -> str:
+        return _normalize_species(species)
+
+    def _find_species_with_move(
+        self, battle: AbstractBattle, move_name: str,
+    ) -> Optional[str]:
+        target = _normalize_move_id(move_name)
+        for mon in battle.team.values():
+            if mon is None:
+                continue
+            mon_moves = getattr(mon, "moves", None) or {}
+            for mv in mon_moves.values():
+                mv_id = getattr(mv, "id", "")
+                if _normalize_move_id(mv_id) == target:
+                    return getattr(mon, "species", None)
+        return None
 
     def choose_move(
         self, battle: AbstractBattle,

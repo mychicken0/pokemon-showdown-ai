@@ -62,6 +62,11 @@ REQUIRED_TOP_FIELDS = frozenset({
 OPTIONAL_TOP_FIELDS = frozenset({
     "description", "version", "seed", "audit_path_suffix",
     "validators",
+    # Phase SCENARIO-4: optional lead
+    # spec; maps slot keys to species
+    # names. The scripted opp leads with
+    # these species at teampreview.
+    "lead",
 })
 ALLOWED_SLOT_KEYS = frozenset({"opp_slot_0", "opp_slot_1"})
 ALLOWED_ACTION_KEYS = frozenset({"move", "switch", "target_pos"})
@@ -181,7 +186,14 @@ class Scenario:
     audit_path_suffix: Optional[str]
     script: Dict[int, ScenarioTurn]  # turn -> actions
     validators: List[ScenarioValidator]
-    raw: Dict[str, Any]  # original parsed JSON
+    # Phase SCENARIO-4: optional lead
+    # specification. Maps slot keys
+    # ('opp_slot_0', 'opp_slot_1') to
+    # species names. The scripted opp
+    # leads with these species at
+    # teampreview.
+    lead: Optional[Dict[str, str]] = None
+    raw: Dict[str, Any] = field(default_factory=dict)  # original parsed JSON
 
 
 # ----------------------------------------------------------------------------
@@ -546,6 +558,30 @@ def load_scenario_dict(
         )
     for idx, vraw in enumerate(validators_raw):
         validators.append(_parse_validator(vraw, idx))
+    # Phase SCENARIO-4: optional lead dict
+    lead: Optional[Dict[str, str]] = None
+    lead_raw = data.get("lead", None)
+    if lead_raw is not None:
+        if not isinstance(lead_raw, dict):
+            raise ScenarioValidationError(
+                f"scenario {src}: 'lead' must be a "
+                f"dict, got {type(lead_raw).__name__}"
+            )
+        for slot_key, species in lead_raw.items():
+            if slot_key not in ALLOWED_SLOT_KEYS:
+                raise ScenarioValidationError(
+                    f"scenario {src}: 'lead' has "
+                    f"invalid slot key {slot_key!r}, "
+                    f"expected one of "
+                    f"{sorted(ALLOWED_SLOT_KEYS)}"
+                )
+            if not isinstance(species, str) or not species.strip():
+                raise ScenarioValidationError(
+                    f"scenario {src}: 'lead' has "
+                    f"non-string or empty species "
+                    f"for {slot_key!r}"
+                )
+        lead = {k: v for k, v in lead_raw.items()}
     return Scenario(
         scenario_id=scenario_id,
         description=description,
@@ -556,6 +592,7 @@ def load_scenario_dict(
         audit_path_suffix=audit_suffix,
         script=script,
         validators=validators,
+        lead=lead,
         raw=data,
     )
 
