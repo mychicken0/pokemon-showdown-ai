@@ -403,6 +403,7 @@ async def run_one_battle(
     enable_decision_timing_diagnostics: bool = False,
     enable_spread_defense_bonus: bool = False,
     enable_setup_intent_speed_setup: bool = False,
+    enable_accuracy_self_ally_block: bool = False,
     audit_logger_treatment=None,
     audit_logger_baseline=None,
 ) -> Dict[str, Any]:
@@ -576,6 +577,28 @@ async def run_one_battle(
                     "setup_intent_max_picks_per_game": 3,
                     "setup_intent_min_turn_between_picks": 2,
                     "setup_intent_require_survival": True,
+                }
+            )
+    # Phase ACCURACY-2: opt-in hard-safety block
+    # for damaging moves targeting self/ally.
+    # Default OFF. When True, sets v2l1 score=0
+    # for any damaging move with target=-1 or
+    # target=-2 so the joint scoring won't pick
+    # a wasted-turn option.
+    if is_treatment and enable_accuracy_self_ally_block:
+        from bot_doubles_damage_aware import (
+            DoublesDamageAwareConfig,
+        )
+        acc2_cfg = DoublesDamageAwareConfig(
+            enable_accuracy_self_ally_block=True,
+        )
+        if treatment_config is None:
+            treatment_config = acc2_cfg
+        else:
+            treatment_config = DoublesDamageAwareConfig(
+                **{
+                    **treatment_config.__dict__,
+                    "enable_accuracy_self_ally_block": True,
                 }
             )
     # Phase BI-3K.6: build BOTH p1_kwargs and p2_kwargs
@@ -863,7 +886,7 @@ def main():
             "Phase SETUP-3A / SETUP-5 probe: enable "
             "opt-in speed-setup intent bonus "
             "(setup_intent_speed_setup_bonus = +450.0, "
-            "was +350.0) on the treatment "
+            "was +350.0) in SETUP-3A) on the treatment "
             "arm only. Default OFF. Bonus fires only "
             "on Tailwind / Trick Room candidates when "
             "all 6 guards pass: (1) flag ON; (2) move "
@@ -874,6 +897,20 @@ def main():
             "spread_defense categories are NOT in this "
             "design. Magnitude updated in SETUP-5 "
             "based on dry-run: 0%% over-flip at +450."
+        ),
+    )
+    parser.add_argument(
+        "--enable-accuracy-self-ally-block", action="store_true",
+        help=(
+            "Phase ACCURACY-2 probe: enable opt-in "
+            "hard-safety block for damaging moves "
+            "targeting self (target=-1) or ally "
+            "(target=-2). When True, sets v2l1 score=0 "
+            "for such moves so the joint scoring won't "
+            "pick a wasted-turn option. ACCURACY-1 "
+            "audit found 45 such cases (100%% of zero-"
+            "damage damaging picks) across SETUP probes. "
+            "Default OFF; opt-in for safe rollout."
         ),
     )
     parser.add_argument(
@@ -1086,6 +1123,9 @@ def main():
                 enable_setup_intent_speed_setup=(
                     args.enable_setup_intent_speed_setup
                 ),
+                enable_accuracy_self_ally_block=(
+                    args.enable_accuracy_self_ally_block
+                ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,
             )
@@ -1107,6 +1147,9 @@ def main():
                 ),
                 enable_setup_intent_speed_setup=(
                     args.enable_setup_intent_speed_setup
+                ),
+                enable_accuracy_self_ally_block=(
+                    args.enable_accuracy_self_ally_block
                 ),
                 audit_logger_treatment=audit_logger_treatment,
                 audit_logger_baseline=audit_logger_baseline,

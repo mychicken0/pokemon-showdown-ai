@@ -454,6 +454,17 @@ class DoublesDamageAwareConfig:
     setup_intent_require_ko_check: bool = True
     setup_intent_ko_opp_hp_threshold: float = 0.10
 
+    # Phase ACCURACY-2: opt-in hard-safety block
+    # for damaging moves targeting self (target=-1)
+    # or ally (target=-2). When True, sets v2l1
+    # score=0 for any damaging move with self/ally
+    # target, so the joint scoring won't pick a
+    # wasted-turn option. ACCURACY-1 audit found
+    # 45 such cases (100% of zero-damage damaging
+    # picks) across SETUP-5/6/6A/7/7A/8 probes.
+    # Default OFF; opt-in for safe rollout.
+    enable_accuracy_self_ally_block: bool = False
+
     # Phase 6.3.5: Ground-into-Flying audit fields (generic dual-type)
     # (no config fields needed for Part 0A - the fix is in the scoring logic)
 
@@ -4837,6 +4848,26 @@ class DoublesDamageAwarePlayer(Player):
                 score = float(score) + float(
                     self.config.setup_intent_speed_setup_bonus
                 )
+            # Phase ACCURACY-2: hard-safety block for
+            # damaging moves targeting self (target=-1) or
+            # ally (target=-2). When enabled, sets score=0
+            # so the joint scoring won't pick a wasted-turn
+            # option. ACCURACY-1 audit found 45 such cases
+            # across SETUP-5/6/6A/7/7A/8 probes (100% bug
+            # rate). Default OFF; opt-in for safe rollout.
+            if getattr(
+                self.config,
+                "enable_accuracy_self_ally_block",
+                False,
+            ):
+                try:
+                    _inner_acc = getattr(order, "order", None)
+                    if isinstance(_inner_acc, Move):
+                        _tgt_acc = getattr(order, "move_target", 0)
+                        if _tgt_acc in (-1, -2):
+                            score = 0.0
+                except Exception:
+                    pass
             # Phase BEHAVIOR-12: Expected-faint attack penalty.
             # Applied to non-Protect, non-switch, non-pass
             # actions when the active slot is expected to
