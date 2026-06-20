@@ -173,6 +173,11 @@ class TestStateSnapshotDirect(unittest.TestCase):
             "our_active_species", "opp_active_species",
             "our_active_hp_fraction", "opp_active_hp_fraction",
             "our_active_types", "opp_active_types",
+            # Phase ITEM-2: ability/item/revealed-moves
+            "our_active_ability", "opp_active_ability",
+            "our_active_item", "opp_active_item",
+            "our_active_moves_revealed",
+            "opp_active_moves_revealed",
             "weather", "fields",
             "side_conditions", "opponent_side_conditions",
         }
@@ -300,14 +305,24 @@ class TestStateSnapshotDirect(unittest.TestCase):
         self.assertIn("lightscreen", snap["opponent_side_conditions"])
 
     def test_helper_no_hidden_info(self):
-        """The snapshot must not include ability, item, moves,
-        EVs, nature, or any full Pokemon object repr.
+        """The snapshot must not include EVs, nature,
+        or any hidden meta.
+
+        Phase ITEM-2 update: ability/item/moves
+        ARE now captured for OUR active pokemon
+        (visible by design — we know our own
+        team). For the OPP slot, ability/item
+        are only captured when revealed by
+        protocol; moves are only revealed moves.
+        Hidden meta (EVs, nature, base stats)
+        must never appear.
         """
         from doubles_decision_audit_logger import (
             DoublesDecisionAuditLogger,
         )
         pkmn = _FakePokemon("pikachu", 0.5, [_FakeType("ELECTRIC")])
-        # Add forbidden fields — the helper must NOT read them.
+        # Add fields — for our own pokemon these
+        # are visible and ARE captured.
         pkmn.ability = "static"
         pkmn.item = "lightball"
         pkmn.moves = ["thunderbolt", "volttackle"]
@@ -317,16 +332,14 @@ class TestStateSnapshotDirect(unittest.TestCase):
         snap = DoublesDecisionAuditLogger._build_compact_state_snapshot(
             battle, "tag-h"
         )
+        # Our visible data IS captured.
+        self.assertEqual(snap["our_active_ability"][0], "static")
+        self.assertEqual(snap["our_active_item"][0], "lightball")
         # Flatten snapshot to check no forbidden keys.
         flat = json.dumps(snap)
-        self.assertNotIn("static", flat)
-        self.assertNotIn("lightball", flat)
-        self.assertNotIn("thunderbolt", flat)
-        self.assertNotIn("volttackle", flat)
+        # EV / nature must not be exposed (hidden meta).
         self.assertNotIn("jolly", flat)
-        self.assertNotIn("ability", flat)
-        self.assertNotIn("item", flat)
-        self.assertNotIn("moves", flat)
+        self.assertNotIn("252", flat)
         self.assertNotIn("evs", flat)
         self.assertNotIn("nature", flat)
 

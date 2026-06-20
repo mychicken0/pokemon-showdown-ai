@@ -1,0 +1,1264 @@
+{
+  "teams": [
+    {
+      "id": "pikalytics_rank_001",
+      "rank": 1,
+      "player": "ARSAL PURI",
+      "event": "2026 Indianapolis Pok\u00e9mon VGC Regional Championships",
+      "record": "15-1",
+      "source_platform": "rk9",
+      "source_url": "https://rk9.gg/teamlist/public/IN02wbUMQOt2eNv12cgC/8VoM9hgsZ4lhRhaviG1m",
+      "parse_status": "complete_ots",
+      "team": [
+        {
+          "species": "venusaur",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Focus Sash",
+          "item_source": "source_provided",
+          "ability": "Chlorophyll",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Timid",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Sleep Powder",
+            "Sludge Bomb",
+            "Earth Power",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "charizard",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Charizardite Y",
+          "item_source": "source_provided",
+          "ability": "Blaze",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Modest",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Heat Wave",
+            "Solar Beam",
+            "Weather Ball",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "garchomp",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Choice Scarf",
+          "item_source": "source_provided",
+          "ability": "Rough Skin",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Adamant",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Earthquake",
+            "Rock Slide",
+            "Stomping Tantrum",
+            "Dragon Claw"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "incineroar",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Sitrus Berry",
+          "item_source": "source_provided",
+          "ability": "Intimidate",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Careful",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Fake Out",
+            "Flare Blitz",
+            "Parting Shot",
+            "Throat Chop"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "floetteeternal",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Floettite",
+          "item_source": "source_provided",
+          "ability": "Flower Veil",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Modest",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Moonblast",
+            "Dazzling Gleam",
+            "Calm Mind",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "sinistcha",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Kasib Berry",
+          "item_source": "source_provided",
+          "ability": "Hospitality",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Relaxed",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Matcha Gotcha",
+            "Rage Powder",
+            "Trick Room",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        }
+      ]
+    },
+    {
+      "id": "pikalytics_rank_003",
+      "rank": 3,
+      "player": "Wolfe Glick",
+      "event": "2026 Indianapolis Pok\u00e9mon VGC Regional Championships",
+      "record": "14-2",
+      "source_platform": "rk9",
+      "source_url": "https://rk9.gg/teamlist/public/IN02wbUMQOt2eNv12cgC/MsT07hHqKtXSdPePxzOG",
+      "parse_status": "complete_ots",
+      "team": [
+        {
+          "species": "sneasler",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "White Herb",
+          "item_source": "source_provided",
+          "ability": "Unburden",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Protect",
+            "Close Combat",
+            "Dire Claw",
+            "Fake Out"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "sinistcha",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Sitrus Berry",
+          "item_source": "source_provided",
+          "ability": "Hospitality",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Relaxed",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Rage Powder",
+            "Trick Room",
+            "Matcha Gotcha",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "talonflame",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Sharp Beak",
+          "item_source": "source_provided",
+          "ability": "Gale Wings",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Protect",
+            "Brave Bird",
+            "Flare Blitz",
+            "Swords Dance"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "steelix",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Steelixite",
+          "item_source": "source_provided",
+          "ability": "Sturdy",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Brave",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Protect",
+            "Heavy Slam",
+            "High Horsepower",
+            "Wide Guard"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "rotomwash",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Leftovers",
+          "item_source": "source_provided",
+          "ability": "Levitate",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Bold",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Will-O-Wisp",
+            "Thunderbolt",
+            "Hydro Pump",
+            "Light Screen"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "tyranitar",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Tyranitarite",
+          "item_source": "source_provided",
+          "ability": "Sand Stream",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Protect",
+            "Rock Slide",
+            "Knock Off",
+            "Dragon Dance"
+          ],
+          "moves_source": "source_provided"
+        }
+      ]
+    },
+    {
+      "id": "pikalytics_rank_013",
+      "rank": 13,
+      "player": "Michael Zhang",
+      "event": "2026 Indianapolis Pok\u00e9mon VGC Regional Championships",
+      "record": "12-3",
+      "source_platform": "rk9",
+      "source_url": "https://rk9.gg/teamlist/public/IN02wbUMQOt2eNv12cgC/ByRb88oyZmnEyj1PEN23",
+      "parse_status": "complete_ots",
+      "team": [
+        {
+          "species": "corviknight",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Occa Berry",
+          "item_source": "source_provided",
+          "ability": "Mirror Armor",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Adamant",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Brave Bird",
+            "Tailwind",
+            "Protect",
+            "Iron Head"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "tyranitar",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Tyranitarite",
+          "item_source": "source_provided",
+          "ability": "Sand Stream",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Adamant",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Rock Slide",
+            "Knock Off",
+            "Protect",
+            "Low Kick"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "hydreigon",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Choice Scarf",
+          "item_source": "source_provided",
+          "ability": "Levitate",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Timid",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Dark Pulse",
+            "Draco Meteor",
+            "Earth Power",
+            "Snarl"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "froslass",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Froslassite",
+          "item_source": "source_provided",
+          "ability": "Cursed Body",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Timid",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Blizzard",
+            "Protect",
+            "Shadow Ball",
+            "Weather Ball"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "garchomp",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Sitrus Berry",
+          "item_source": "source_provided",
+          "ability": "Rough Skin",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Adamant",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Earthquake",
+            "Dragon Claw",
+            "Rock Slide",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "arcaninehisui",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Focus Sash",
+          "item_source": "source_provided",
+          "ability": "Rock Head",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Protect",
+            "Head Smash",
+            "Extreme Speed",
+            "Flare Blitz"
+          ],
+          "moves_source": "source_provided"
+        }
+      ]
+    },
+    {
+      "id": "pikalytics_rank_030",
+      "rank": 30,
+      "player": "aerxdri",
+      "event": "Thalera Champions Cheese #04 - Gera\u00e7\u00f5es",
+      "record": "7-0",
+      "source_platform": "limitless",
+      "source_url": "https://play.limitlesstcg.com/tournament/6a15cd8b0f6c1f08998617be/player/aerxdri/teamlist",
+      "parse_status": "complete_ots",
+      "team": [
+        {
+          "species": "chandelure",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Chandelurite",
+          "item_source": "source_provided",
+          "ability": "Flash Fire",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Modest",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Heat Wave",
+            "Shadow Ball",
+            "Minimize",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "sneasler",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "White Herb",
+          "item_source": "source_provided",
+          "ability": "Unburden",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Close Combat",
+            "Dire Claw",
+            "Swords Dance",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "basculegion",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Choice Scarf",
+          "item_source": "source_provided",
+          "ability": "Adaptability",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Jolly",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Last Respects",
+            "Wave Crash",
+            "Flip Turn",
+            "Aqua Jet"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "whimsicott",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Focus Sash",
+          "item_source": "source_provided",
+          "ability": "Prankster",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Modest",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Moonblast",
+            "Tailwind",
+            "Encore",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "zoroarkhisui",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Spell Tag",
+          "item_source": "source_provided",
+          "ability": "Illusion",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Timid",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Bitter Malice",
+            "Icy Wind",
+            "Taunt",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "hatterene",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Fairy Feather",
+          "item_source": "source_provided",
+          "ability": "Magic Bounce",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "Quiet",
+          "nature_source": "source_provided",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Psychic",
+            "Dazzling Gleam",
+            "Trick Room",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        }
+      ]
+    },
+    {
+      "id": "pikalytics_rank_033",
+      "rank": 33,
+      "player": "TypNull07",
+      "event": "[REG M-A] LearningtoSam's Weekly",
+      "record": "7-0",
+      "source_platform": "limitless",
+      "source_url": "https://play.limitlesstcg.com/tournament/6a0b24c113f957d6d4b4ac3a/player/typnull07/teamlist",
+      "parse_status": "partial_ots",
+      "team": [
+        {
+          "species": "excadrill",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Focus Sash",
+          "item_source": "source_provided",
+          "ability": "Sand Rush",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Iron Head",
+            "Earthquake",
+            "Rock Slide",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "tyranitar",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Tyranitarite",
+          "item_source": "source_provided",
+          "ability": "Sand Stream",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Rock Slide",
+            "Knock Off",
+            "Low Kick",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "corviknight",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Leftovers",
+          "item_source": "source_provided",
+          "ability": "Mirror Armor",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Brave Bird",
+            "Body Press",
+            "Bulk Up",
+            "Tailwind"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "hydreigon",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Choice Scarf",
+          "item_source": "source_provided",
+          "ability": "Levitate",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Dark Pulse",
+            "Draco Meteor",
+            "Heat Wave",
+            "Snarl"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "rotomwash",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Sitrus Berry",
+          "item_source": "source_provided",
+          "ability": "Levitate",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Thunderbolt",
+            "Hydro Pump",
+            "Will-o-wisp",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        },
+        {
+          "species": "mimikyu",
+          "nickname": null,
+          "gender": null,
+          "level": 50,
+          "level_source": "source_provided",
+          "item": "Fairy Feather",
+          "item_source": "source_provided",
+          "ability": "Disguise",
+          "ability_source": "source_provided",
+          "tera_type": null,
+          "tera_type_source": "missing",
+          "nature": "",
+          "nature_source": "missing",
+          "evs": {
+            "hp": 4,
+            "atk": 0,
+            "def": 0,
+            "spa": 0,
+            "spd": 0,
+            "spe": 0
+          },
+          "evs_source": "simulation_default",
+          "ivs": {
+            "hp": 31,
+            "atk": 31,
+            "def": 31,
+            "spa": 31,
+            "spd": 31,
+            "spe": 31
+          },
+          "ivs_source": "simulation_default",
+          "moves": [
+            "Shadow Claw",
+            "Shadow Sneak",
+            "Play Rough",
+            "Protect"
+          ],
+          "moves_source": "source_provided"
+        }
+      ]
+    }
+  ]
+}

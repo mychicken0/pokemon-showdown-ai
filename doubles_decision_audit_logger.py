@@ -190,6 +190,18 @@ class DoublesDecisionAuditLogger:
             "opp_active_hp_fraction": [None, None],
             "our_active_types": [[], []],
             "opp_active_types": [[], []],
+            # Phase ITEM-2: ability/item/revealed-moves
+            # fields. Per AGENTS.md, only visible data
+            # is captured (no hidden info, no meta, no
+            # random-set inference). Poke-env exposes
+            # these via Pokemon.ability / Pokemon.item /
+            # Pokemon.moves (revealed subset).
+            "our_active_ability": [None, None],
+            "opp_active_ability": [None, None],
+            "our_active_item": [None, None],
+            "opp_active_item": [None, None],
+            "our_active_moves_revealed": [[], []],
+            "opp_active_moves_revealed": [[], []],
             "weather": None,
             "fields": [],
             "side_conditions": [],
@@ -207,10 +219,18 @@ class DoublesDecisionAuditLogger:
             snap["our_active_species"][slot_index] = DoublesDecisionAuditLogger._safe_species(pokemon)
             snap["our_active_hp_fraction"][slot_index] = DoublesDecisionAuditLogger._safe_hp_fraction(pokemon)
             snap["our_active_types"][slot_index] = DoublesDecisionAuditLogger._safe_types(pokemon)
+            # ITEM-2: ability/item/revealed-moves
+            snap["our_active_ability"][slot_index] = DoublesDecisionAuditLogger._safe_ability(pokemon)
+            snap["our_active_item"][slot_index] = DoublesDecisionAuditLogger._safe_item(pokemon)
+            snap["our_active_moves_revealed"][slot_index] = DoublesDecisionAuditLogger._safe_moves_revealed(pokemon)
         for slot_index, pokemon in enumerate(opp_active[:2]):
             snap["opp_active_species"][slot_index] = DoublesDecisionAuditLogger._safe_species(pokemon)
             snap["opp_active_hp_fraction"][slot_index] = DoublesDecisionAuditLogger._safe_hp_fraction(pokemon)
             snap["opp_active_types"][slot_index] = DoublesDecisionAuditLogger._safe_types(pokemon)
+            # ITEM-2: ability/item/revealed-moves
+            snap["opp_active_ability"][slot_index] = DoublesDecisionAuditLogger._safe_ability(pokemon)
+            snap["opp_active_item"][slot_index] = DoublesDecisionAuditLogger._safe_item(pokemon)
+            snap["opp_active_moves_revealed"][slot_index] = DoublesDecisionAuditLogger._safe_moves_revealed(pokemon)
         snap["weather"] = DoublesDecisionAuditLogger._enum_keys(battle, "weather")
         snap["fields"] = DoublesDecisionAuditLogger._enum_keys(battle, "fields")
         snap["side_conditions"] = DoublesDecisionAuditLogger._enum_keys(battle, "side_conditions")
@@ -293,6 +313,119 @@ class DoublesDecisionAuditLogger:
                     name = None
             if name:
                 out.append(str(name).lower())
+        return out
+
+    @staticmethod
+    def _safe_ability(pokemon):
+        """ITEM-2: extract ability name from a
+        Pokemon object, normalized to lowercase
+        alphanumeric. Returns None if unknown
+        (ability not yet revealed or pokemon
+        fainted)."""
+        if pokemon is None:
+            return None
+        try:
+            ab = getattr(pokemon, "ability", None)
+        except Exception:
+            ab = None
+        if ab is None:
+            return None
+        try:
+            name = getattr(ab, "name", None)
+        except Exception:
+            name = None
+        if name is None:
+            try:
+                name = str(ab)
+            except Exception:
+                return None
+        try:
+            normalized = "".join(
+                c for c in str(name).lower() if c.isalnum()
+            )
+        except Exception:
+            return None
+        return normalized or None
+
+    @staticmethod
+    def _safe_item(pokemon):
+        """ITEM-2: extract item name, normalized
+        to lowercase alphanumeric. Returns None
+        if no item (e.g., no held item) or
+        item not yet revealed."""
+        if pokemon is None:
+            return None
+        try:
+            item = getattr(pokemon, "item", None)
+        except Exception:
+            item = None
+        if item is None:
+            return None
+        try:
+            name = getattr(item, "name", None)
+        except Exception:
+            name = None
+        if name is None:
+            try:
+                name = str(item)
+            except Exception:
+                return None
+        # Strip non-alphanumeric and lowercase
+        try:
+            normalized = "".join(
+                c for c in str(name).lower() if c.isalnum()
+            )
+        except Exception:
+            return None
+        if normalized in ("noitem", "none", ""):
+            return None
+        return normalized or None
+
+    @staticmethod
+    def _safe_moves_revealed(pokemon):
+        """ITEM-2: extract revealed move IDs.
+        Returns empty list if no revealed moves.
+
+        Note: only VISIBLE moves (per poke-env)
+        are returned. Hidden info is not exposed
+        per AGENTS.md.
+
+        poke-env ``Pokemon.moves`` is a ``MoveSet``
+        (dict-like, id -> Move). Iterate values,
+        not keys.
+        """
+        if pokemon is None:
+            return []
+        try:
+            moves = getattr(pokemon, "moves", None)
+        except Exception:
+            moves = None
+        if moves is None:
+            return []
+        out = []
+        try:
+            # MoveSet is dict-like; iterate values
+            items = list(moves.values())
+        except Exception:
+            try:
+                items = list(moves)
+            except Exception:
+                return out
+        for mv in items:
+            try:
+                mid = getattr(mv, "id", None)
+            except Exception:
+                mid = None
+            if mid is None:
+                try:
+                    mid = getattr(mv, "name", None)
+                except Exception:
+                    mid = None
+            if mid is not None:
+                try:
+                    out.append(str(mid).lower())
+                except Exception:
+                    continue
         return out
 
     @staticmethod
