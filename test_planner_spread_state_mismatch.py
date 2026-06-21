@@ -27,10 +27,24 @@ def make_player(opp_press_value=False):
     return player
 
 
-def make_battle():
+def make_battle(our_hp_0=0.5, our_hp_1=0.5):
+    """Build a mock battle with HP for the partner threat guard.
+
+    our_hp_0 / our_hp_1: HP fractions for our active slots 0/1.
+    Default 0.5 (both threatened) so the partner threat guard passes.
+    """
     battle = MagicMock()
     battle.battle_tag = "test"
     battle.turn = 3
+    mon_0 = MagicMock()
+    mon_0.species = "testmon0"
+    mon_0.current_hp_fraction = our_hp_0
+    mon_0.fainted = False
+    mon_1 = MagicMock()
+    mon_1.species = "testmon1"
+    mon_1.current_hp_fraction = our_hp_1
+    mon_1.fainted = False
+    battle.active_pokemon = [mon_0, mon_1]
     return battle
 
 

@@ -63,8 +63,14 @@ def make_order(move_id):
 
 
 def make_battle(turn=1, opp_pressure=True, has_decision=True,
-                 decision_intent="SPREAD_DEFENSE", decision_confidence=0.65):
-    """Build a mock battle."""
+                 decision_intent="SPREAD_DEFENSE", decision_confidence=0.65,
+                 our_hp_0=0.5, our_hp_1=0.5):
+    """Build a mock battle.
+
+    our_hp_0 / our_hp_1: HP fractions for our active slots 0/1.
+    Default 0.5 (both threatened) so the partner threat guard passes.
+    Tests that want both at full HP should pass 1.0/1.0 explicitly.
+    """
     battle = MagicMock()
     battle.battle_tag = "test-battle"
     battle.turn = turn
@@ -75,6 +81,16 @@ def make_battle(turn=1, opp_pressure=True, has_decision=True,
         battle._planner_intent_decision = decision
     else:
         battle._planner_intent_decision = None
+    # Set up active_pokemon with HP for partner threat guard
+    mon_0 = MagicMock()
+    mon_0.species = "testmon0"
+    mon_0.current_hp_fraction = our_hp_0
+    mon_0.fainted = False
+    mon_1 = MagicMock()
+    mon_1.species = "testmon1"
+    mon_1.current_hp_fraction = our_hp_1
+    mon_1.fainted = False
+    battle.active_pokemon = [mon_0, mon_1]
     return battle
 
 

@@ -508,6 +508,13 @@ class DoublesDamageAwareConfig:
     # Anti-spam: max picks per game, min turns between picks.
     planner_spread_defense_max_picks_per_game: int = 3
     planner_spread_defense_min_turn_between_picks: int = 2
+    # PLANNER-SPREAD-8B: partner threat relevance guard. Suppress
+    # WG boost when the team is not in actual spread-move danger
+    # (both mons at/above the threat threshold). The threshold
+    # represents the HP below which a single spread hit is
+    # meaningful (e.g., a Rock Slide or Heat Wave at ~30-50% HP).
+    # Default 0.7: a mon with >=70% HP can comfortably tank one hit.
+    planner_spread_defense_partner_threat_threshold: float = 0.7
 
     # Phase ACCURACY-2: opt-in hard-safety block
     # for damaging moves targeting self (target=-1)
@@ -4128,6 +4135,90 @@ class DoublesDamageAwarePlayer(Player):
         del active_idx  # currently unused
         return compute_opp_pressure_state_for_battle(battle)
 
+    def _planner_spread_defense_partner_threat_relevant(
+        self, decision, active_idx: int, battle
+    ) -> bool:
+        """PLANNER-SPREAD-8B: partner threat relevance guard.
+
+        Returns True if applying the WG bonus would provide
+        meaningful team value. The guard is threat-based, not
+        pure HP-based:
+
+        - If BOTH allies are at/above the threat threshold
+          (default 0.7 HP), there is no immediate spread-move
+          danger. Both can tank a hit. Suppress (no team value).
+        - If WG user is below threshold (self-preservation
+          scenario), allow.
+        - If partner is below threshold (capitalization
+          scenario), allow.
+        - If partner is fainted (None) and WG user is also
+          safe, suppress (no team benefit, only individual).
+        - If partner is fainted and WG user is threatened,
+          allow (self-preservation).
+
+        The threshold represents the HP below which a single
+        spread hit is meaningful (typical Rock Slide or Heat
+        Wave does 30-50% HP). A mon with >=70% HP can
+        comfortably tank one hit.
+        """
+        threshold = float(getattr(
+            self.config,
+            "planner_spread_defense_partner_threat_threshold", 0.7
+        ))
+
+        # Get both mons (active_idx is the WG user's slot, partner is other slot)
+        try:
+            active_pokemon = getattr(battle, "active_pokemon", None) or []
+        except Exception:
+            active_pokemon = []
+        try:
+            partner_idx = 1 - int(active_idx)
+        except Exception:
+            partner_idx = 1 - active_idx
+
+        wg_user_mon = None
+        if 0 <= active_idx < len(active_pokemon):
+            wg_user_mon = active_pokemon[active_idx]
+        partner_mon = None
+        if 0 <= partner_idx < len(active_pokemon):
+            partner_mon = active_pokemon[partner_idx]
+
+        # Get HP fractions defensively
+        def _safe_hp(mon):
+            if mon is None:
+                return None
+            if getattr(mon, "fainted", False):
+                return 0.0
+            hp = getattr(mon, "current_hp_fraction", None)
+            if hp is None:
+                return 1.0
+            try:
+                return float(hp)
+            except (TypeError, ValueError):
+                # Mock or non-numeric; treat as healthy
+                return 1.0
+
+        wg_user_hp = _safe_hp(wg_user_mon)
+        partner_hp = _safe_hp(partner_mon)
+
+        # Partner fainted (None or 0 HP)
+        if partner_hp is None or partner_hp <= 0.0:
+            # Only allow if WG user is also threatened (self-preservation)
+            if wg_user_hp is None or wg_user_hp >= threshold:
+                return False
+            return True
+
+        # Both alive. Check if at least one is threatened.
+        wg_user_threatened = wg_user_hp < threshold
+        partner_threatened = partner_hp < threshold
+
+        # If at least one is threatened, allow WG (team value)
+        if wg_user_threatened or partner_threatened:
+            return True
+
+        # Neither threatened: no immediate danger, suppress
+        return False
+
     def _planner_spread_defense_eligible(
         self, order, active_idx: int, battle
     ) -> bool:
@@ -4208,7 +4299,17 @@ class DoublesDamageAwarePlayer(Player):
         else:
             if not self._slot_in_opp_pressure(active_idx, battle):
                 return False
-        # Guard 6: anti-spam
+        # Guard 6: partner threat relevance (PLANNER-SPREAD-8B)
+        # Suppress WG boost when the team is not in actual
+        # spread-move danger (both mons at/above threat threshold).
+        # Pure HP-based guards would be too aggressive; this guard
+        # uses threat-relevance: is there a team value from
+        # preventing spread damage?
+        if not self._planner_spread_defense_partner_threat_relevant(
+            decision, active_idx, battle
+        ):
+            return False
+        # Guard 7: anti-spam
         battle_tag = getattr(battle, "battle_tag", "")
         if not battle_tag:
             return False
