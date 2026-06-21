@@ -1,0 +1,101 @@
+{
+  "id": "planner_spread_opp_rockslide_v2",
+  "team": [
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Earthquake",
+        "Rock Slide",
+        "Protect",
+        "Scale Shot"
+      ]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Choice Scarf",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Rock Slide",
+        "Crunch",
+        "Dragon Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Landorus",
+      "ability": "Intimidate",
+      "item": "Choice Scarf",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Earthquake",
+        "Rock Slide",
+        "U-turn",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Sitrus Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Protect",
+        "Extreme Speed",
+        "Flare Blitz",
+        "Crunch"
+      ]
+    },
+    {
+      "species": "Dragonite",
+      "ability": "Multiscale",
+      "item": "Choice Band",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Extreme Speed",
+        "Outrage",
+        "Ice Punch",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Lum Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Heat Wave",
+        "Quiver Dance",
+        "Protect",
+        "Bug Buzz"
+      ]
+    }
+  ]
+}
