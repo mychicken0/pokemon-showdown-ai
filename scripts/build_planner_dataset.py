@@ -72,17 +72,29 @@ def load_audits(tag: str):
 
 
 def scripted_actions_by_battle_turn(baseline_records):
-    """Index scripted_actions by (battle_tag, turn) -> list of actions."""
+    """Index scripted_actions by (battle_tag, turn) -> list of unique actions.
+
+    The baseline audit's `turn` field is the script's execution index,
+    not the game turn. Dedupes by (turn, slot, move) to avoid the
+    ScriptedOpponentPlayer's per-turn retry noise.
+    """
     by_bt_turn = {}
     for rec in baseline_records:
         bt = rec.get("battle_tag")
+        seen = set()
         for a in rec.get("scripted_actions", []):
             if not a.get("executed"):
                 continue
             turn = a.get("turn")
+            slot = a.get("slot_idx")
+            move = a.get("move")
+            key = (turn, slot, move)
+            if key in seen:
+                continue
+            seen.add(key)
             by_bt_turn.setdefault((bt, turn), []).append({
-                "slot": a.get("slot_idx"),
-                "move": a.get("move"),
+                "slot": slot,
+                "move": move,
                 "target_pos": a.get("target_pos"),
             })
     return by_bt_turn

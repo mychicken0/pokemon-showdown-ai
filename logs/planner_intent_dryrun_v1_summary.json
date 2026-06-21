@@ -1,0 +1,219 @@
+{
+  "totals": {
+    "total_rows": 101,
+    "correct": 101,
+    "accuracy": 1.0,
+    "rows_with_scripted_action": 15,
+    "correct_with_scripted_action": 15,
+    "accuracy_with_scripted_action": 1.0,
+    "rows_no_scripted_action": 86,
+    "correct_no_scripted_action": 86,
+    "accuracy_no_scripted_action": 1.0
+  },
+  "per_family": {
+    "anti_tr": {
+      "total": 7,
+      "correct": 7,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "ANTI_TRICK_ROOM": 1,
+        "NO_INTENT": 6
+      },
+      "ground_truth_dist": {
+        "ANTI_TRICK_ROOM": 7
+      }
+    },
+    "anti_tw": {
+      "total": 6,
+      "correct": 6,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "ANTI_TAILWIND": 1,
+        "NO_INTENT": 5
+      },
+      "ground_truth_dist": {
+        "ANTI_TAILWIND": 6
+      }
+    },
+    "anti_boost": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "ANTI_STAT_BOOST": 2,
+        "NO_INTENT": 3
+      },
+      "ground_truth_dist": {
+        "ANTI_STAT_BOOST": 5
+      }
+    },
+    "spread_def": {
+      "total": 24,
+      "correct": 24,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "SPREAD_DEFENSE": 4,
+        "NO_INTENT": 20
+      },
+      "ground_truth_dist": {
+        "SPREAD_DEFENSE": 24
+      }
+    },
+    "redir": {
+      "total": 17,
+      "correct": 17,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "REDIRECTION_RESPONSE": 2,
+        "NO_INTENT": 15
+      },
+      "ground_truth_dist": {
+        "REDIRECTION_RESPONSE": 17
+      }
+    },
+    "weather": {
+      "total": 8,
+      "correct": 8,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "WEATHER_CONTROL": 1,
+        "NO_INTENT": 7
+      },
+      "ground_truth_dist": {
+        "WEATHER_CONTROL": 8
+      }
+    },
+    "beatup_justified": {
+      "total": 14,
+      "correct": 14,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "COMBO_ENABLE": 1,
+        "NO_INTENT": 13
+      },
+      "ground_truth_dist": {
+        "COMBO_ENABLE": 14
+      }
+    },
+    "terrain": {
+      "total": 20,
+      "correct": 20,
+      "accuracy": 1.0,
+      "predicted_dist": {
+        "TERRAIN_CONTROL": 3,
+        "NO_INTENT": 17
+      },
+      "ground_truth_dist": {
+        "TERRAIN_CONTROL": 20
+      }
+    }
+  },
+  "per_intent": {
+    "ANTI_TRICK_ROOM": {
+      "total": 7,
+      "correct": 7,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "ANTI_TRICK_ROOM": 1,
+        "NO_INTENT": 6
+      }
+    },
+    "ANTI_TAILWIND": {
+      "total": 6,
+      "correct": 6,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "ANTI_TAILWIND": 1,
+        "NO_INTENT": 5
+      }
+    },
+    "ANTI_STAT_BOOST": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "ANTI_STAT_BOOST": 2,
+        "NO_INTENT": 3
+      }
+    },
+    "SPREAD_DEFENSE": {
+      "total": 24,
+      "correct": 24,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "SPREAD_DEFENSE": 4,
+        "NO_INTENT": 20
+      }
+    },
+    "REDIRECTION_RESPONSE": {
+      "total": 17,
+      "correct": 17,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "REDIRECTION_RESPONSE": 2,
+        "NO_INTENT": 15
+      }
+    },
+    "WEATHER_CONTROL": {
+      "total": 8,
+      "correct": 8,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "WEATHER_CONTROL": 1,
+        "NO_INTENT": 7
+      }
+    },
+    "COMBO_ENABLE": {
+      "total": 14,
+      "correct": 14,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "COMBO_ENABLE": 1,
+        "NO_INTENT": 13
+      }
+    },
+    "TERRAIN_CONTROL": {
+      "total": 20,
+      "correct": 20,
+      "accuracy": 1.0,
+      "predicted_as_dist": {
+        "TERRAIN_CONTROL": 3,
+        "NO_INTENT": 17
+      }
+    }
+  },
+  "confusion": {
+    "ANTI_TRICK_ROOM": {
+      "ANTI_TRICK_ROOM": 1,
+      "NO_INTENT": 6
+    },
+    "ANTI_TAILWIND": {
+      "ANTI_TAILWIND": 1,
+      "NO_INTENT": 5
+    },
+    "ANTI_STAT_BOOST": {
+      "ANTI_STAT_BOOST": 2,
+      "NO_INTENT": 3
+    },
+    "SPREAD_DEFENSE": {
+      "SPREAD_DEFENSE": 4,
+      "NO_INTENT": 20
+    },
+    "REDIRECTION_RESPONSE": {
+      "REDIRECTION_RESPONSE": 2,
+      "NO_INTENT": 15
+    },
+    "WEATHER_CONTROL": {
+      "WEATHER_CONTROL": 1,
+      "NO_INTENT": 7
+    },
+    "COMBO_ENABLE": {
+      "COMBO_ENABLE": 1,
+      "NO_INTENT": 13
+    },
+    "TERRAIN_CONTROL": {
+      "TERRAIN_CONTROL": 3,
+      "NO_INTENT": 17
+    }
+  }
+}
