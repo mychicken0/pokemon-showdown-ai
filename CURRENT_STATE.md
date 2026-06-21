@@ -4380,3 +4380,32 @@ Start with **Anti-Trick Room**:
 - No `test_51`.
 
 Next recommended phase: **SCENARIO-1 — Scenario Framework Design**.
+
+### PLANNER-ANTI-TR-EVAL-1 — 20-pair pilot (added 2026-06-22)
+
+**Decision:** `OPT_IN_ONLY` (keep opt-in, no default flip).
+
+20 paired trials with custom `DoublesTRUserPlayer` opp and the
+existing TR-heavy opp team.
+
+- **Win rate**: ON 14/20 (70%), OFF 18/20 (90%), **delta = -20pp**
+- **Sign test p-value**: 0.145 (not significant at 0.10)
+- **TR prevented**: ON 12/20, OFF 10/20 (+2pp, ON slightly better)
+- **TR-active turns**: ON 40, OFF 46 (ON has fewer)
+- **Taunt selected**: 1/20 trials (trial 15 t2, Hatterene 1.0 HP, correct)
+- **Wrong Taunt over clear KO**: 0
+- **Spam violations**: 0
+- **Errors**: 0
+
+**Gates passed**: 1-4, 6. **Gate 5 (ON >= OFF paired delta) failed**.
+**Gate 7 (no-response when Taunt legal) N/A** (Incineroar rarely active).
+
+The feature is implemented correctly. The -20pp delta is likely
+variance, not feature regression (TR prevented 12 vs 10, ON
+has fewer TR-active turns, but matchup is hard for our team).
+
+**Recommendation**: keep opt-in. Need 100-pair confirmation or
+different team/matchup to consider default flip.
+
+See `logs/phasePLANNER_ANTI_TR_EVAL_1.md` for full design and
+analysis. Eval harness in `bot_doubles_anti_tr_eval.py`.
