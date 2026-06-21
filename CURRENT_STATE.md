@@ -4221,3 +4221,162 @@ confidence, and partner-action dependencies.
 
 Next recommended phase: **PLANNER-1 — Intent Planner Architecture
 Audit**.
+
+---
+
+## PLANNER-ANTI-TR — Anti-Trick Room Response Closeout (added 2026-06-22)
+
+**Decision:** `IMPLEMENTED / BEHAVIOR_CORRECT / DEFAULT_OFF`.
+Closeout label: `+500 tuned correctly / t4 Taunt competitive / t5 KO
+preferred correctly / no default flip yet / next adoption requires
+paired or scenario evaluation, not magnitude bump`.
+
+The anti-Trick Room response feature ships as opt-in with the tuned
+bonus (`500.0` / `200.0`). The feature correctly fires `ANTI_TRICK_ROOM`
+intent and selects Taunt when appropriate, but does not override
+legitimate KO pressure on low-HP TR setters.
+
+### What ships
+
+- New config field `enable_anti_trick_room_response: bool = False`
+  (default OFF, opt-in)
+- Tuned bonuses:
+  - `anti_trick_room_response_bonus: float = 500.0` (Taunt/Encore/Disable)
+  - `anti_trick_room_ko_bonus: float = 200.0` (Damaging moves vs TR)
+- Anti-spam guards:
+  - `anti_trick_room_response_max_picks_per_game: int = 2`
+  - `anti_trick_room_response_min_turn_between_picks: int = 3`
+  - `anti_trick_room_ko_max_picks_per_game: int = 3`
+  - `anti_trick_room_ko_min_turn_between_picks: int = 1`
+  - `anti_trick_room_response_require_survival: bool = True`
+- 2 eligibility methods on `DoublesDamageAwarePlayer`:
+  - `_anti_trick_room_response_eligible(order, active_idx, battle)`
+  - `_anti_trick_room_ko_pressure_eligible(order, active_idx, battle)`
+- 2 scoring paths in `score_action` apply the bonuses
+
+### Verification (v3 + v4 + investigation)
+
+- **v3**: Custom TR-user opp (`bot_doubles_tr_user.py`) verified
+  `ANTI_TRICK_ROOM` intent fires when TR is active. Bot selected
+  damage moves over Taunt (+200 bonus insufficient).
+- **v4**: Tuned bonus 200→500. In 3 trials, trial 3 t6 selected
+  `taunt 1, move protect` (canonical anti-TR response).
+- **Investigation (B)**: Trial 2 t5 still selected damage over
+  Taunt. Analysis showed Hatterene (TR setter) was at 0.59 HP — the
+  bot correctly preferred KO pressure on the low-HP TR setter
+  over Taunting her. This is correct bot behavior, not a bug.
+- **Fixture test** (`test_planner_anti_tr_eligible.py`, 8 tests):
+  eligible check verified at HP=0.67, HP=1.0, HP<0.25, target=0.
+
+### Why +500 is the right magnitude (not +800)
+
+- t5 is not a bug: Hatterene at 0.59 HP, bot correctly chose KO
+  pressure. KO removes the TR setter entirely.
+- +800 would make Taunt win over KO on the setter = overcorrection.
+- Correct anti-TR semantics: "Taunt when can't kill, kill setter
+  when can". +500 implements this correctly:
+  - t4 (Hatterene 1.0 HP): Taunt eligible and competitive (rank 2)
+  - t5 (Hatterene 0.59 HP): KO preferred (correct)
+
+### Test count
+
+- 231 unit tests pass (was 223, +8 investigation tests)
+- All defaults remain OFF
+
+### Files
+
+- `bot_doubles_damage_aware.py`: 7 config fields, 2 eligible methods,
+  2 scoring paths, 2 pick recorders
+- `bot_doubles_intent_classifier.py`: routes `ANTI_TRICK_ROOM` to
+  `ROUTE_ANTI_SETUP` policy
+- `bot_doubles_tr_user.py`: custom `DoublesTRUserPlayer` for smoke
+  testing
+- `test_planner_anti_tr.py`: 16 unit tests
+- `test_planner_anti_tr_eligible.py`: 8 fixture tests
+- `data/curated_teams/custom/planner_anti_tr_wg_team.json`: valid
+  VGC team with Incineroar (Taunt), Garganacl, Arcanine, Kingambit,
+  Garchomp, Volcarona
+- `logs/phasePLANNER_ANTI_TR.md`: full report (v1, v2, v3, v4, v5
+  closeout)
+- 12 audit JSONL files in `logs/`
+
+### Path to adoption (deferred)
+
+Anti-TR remains opt-in. Future adoption requires paired or scenario
+evaluation, not a magnitude bump:
+
+1. **Paired benchmark** vs OFF arm on a TR-heavy matchup set
+   (target: 20-50 pairs, not 100+).
+2. **Scenario probe** to verify Taunt is selected in the right
+   states (full-HP setter, mid-HP setter, low-HP setter).
+3. **Win-rate delta** must be positive (or neutral with
+   anti-mispredict gain).
+4. **Adoption gate table** (per AGENTS.md):
+   - all tests pass (231+),
+   - no crashes/stalls/timeouts,
+   - anti-TR creates non-zero opportunities (verified in trial 3),
+   - ON vs OFF win rate is at least 50% over 20+ pairs.
+
+Do not bypass these gates by tuning the bonus magnitude. Adoption
+is a paired-evaluation decision, not a tuning decision.
+
+---
+
+## SCENARIO-ROADMAP-1 — Runner Scenario Tooling Plan
+
+**Decision:** `PLAN_RECORDED` / `IMPLEMENTATION_DEFERRED`.
+
+The next infrastructure need is targeted scenario tooling. Previous
+tracks showed that simply choosing teams with the desired move is not
+enough: the AI often chooses damage instead of Tailwind, Trick Room,
+stat boosts, or other support/control moves.
+
+The full plan is saved in:
+
+- `logs/phaseSCENARIOROADMAP1_runner_scenario_tooling_plan.md`
+
+### Core principle
+
+A useful scenario needs three layers:
+
+1. Curated team: the required move, ability, or item exists.
+2. Curated matchup: the board state makes the move meaningful.
+3. Scripted behavior: the key action actually happens so the bot's
+   response can be measured.
+
+### Required tooling
+
+- Scenario JSON schema.
+- Scenario loader / validator.
+- Scripted opponent player that can force turn-specific legal moves.
+- Scenario validation analyzer that checks audit signals and bot
+  response opportunities.
+
+### First scenario family
+
+Start with **Anti-Trick Room**:
+
+- Opponent scripted to use Trick Room.
+- Our bot has Taunt / Encore / Disable legal.
+- Audit must show `opponent_used_trickroom`.
+- Validation must show whether bot had and selected counterplay.
+
+### Recommended phases
+
+1. **SCENARIO-1 — Framework Design**.
+2. **SCENARIO-2 — Scenario Loader + Validator**.
+3. **SCENARIO-3 — Scripted Opponent Player**.
+4. **SCENARIO-4 — First Anti-Trick Room Scenario**.
+5. **SCENARIO-5 — 1-Pair Validation**.
+6. **SCENARIO-6 — Scenario Library Expansion**.
+
+### Non-goals
+
+- No scoring change.
+- No RL/training.
+- No default flip.
+- No 100/200-pair debug runs.
+- No hidden information leakage to the damage-aware bot.
+- No `test_51`.
+
+Next recommended phase: **SCENARIO-1 — Scenario Framework Design**.

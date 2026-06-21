@@ -341,3 +341,61 @@ is at low HP. This is the correct behavior of the bot.
 - 0 production behavior change
 - +500/200 bonus is correct
 - Eligible check verified via fixture test
+
+## PLANNER-ANTI-TR — CLOSEOUT
+
+**Status**: `IMPLEMENTED / BEHAVIOR_CORRECT / DEFAULT_OFF`
+
+**Adoption decision**: Ship v4 + v5 report as final state. Do not
+tune bonus further to +800.
+
+### Why not +800
+
+- t5 of trial 2 is **not a bug**. Hatterene (TR setter) at 0.59 HP.
+  Bot correctly prefers KO pressure on the low-HP setter.
+- +800 would make Taunt win over KO on the setter = overcorrection.
+- Correct anti-TR semantics: "Taunt when can't kill" and "Kill
+  setter when can".
+- +500 already implements this correctly:
+  - t4 (Hatterene 1.0 HP): Taunt eligible and competitive (rank 2)
+  - t5 (Hatterene 0.59 HP): KO preferred (correct)
+- Fixture test (`test_planner_anti_tr_eligible.py`, 8 tests)
+  prevents regression.
+
+### Final defaults (UNCHANGED from v4)
+
+```python
+enable_anti_trick_room_response = False  # opt-in
+anti_trick_room_response_bonus = 500.0   # tuned
+anti_trick_room_ko_bonus = 200.0        # tuned
+```
+
+### Closeout checklist
+
+- [x] Implementation correct (16 base tests + 8 investigation tests = 24)
+- [x] +500 bonus tuned correctly
+- [x] t4 Taunt eligible and competitive
+- [x] t5 KO preferred correctly
+- [x] No default flip (opt-in)
+- [x] Fixture test prevents regression
+- [x] Phase 6 not started
+- [ ] Adoption requires paired/scenario evaluation, not magnitude bump
+
+### Path to adoption (deferred)
+
+Anti-TR remains opt-in. Future adoption requires:
+
+1. **Paired benchmark** vs OFF arm on a TR-heavy matchup set
+   (target: 20-50 pairs, not 100+).
+2. **Scenario probe** to verify Taunt is selected in the right
+   states (full-HP setter, mid-HP setter, low-HP setter).
+3. **Win-rate delta** must be positive (or neutral with
+   anti-mispredict gain).
+4. **Adoption gate table** (per AGENTS.md):
+   - all tests pass (231+),
+   - no crashes/stalls/timeouts,
+   - anti-TR creates non-zero opportunities (verified in trial 3),
+   - ON vs OFF win rate is at least 50% over 20+ pairs.
+
+Do **not** bypass these gates by tuning the bonus magnitude.
+Adoption is a paired-evaluation decision, not a tuning decision.
