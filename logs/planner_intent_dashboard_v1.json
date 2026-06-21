@@ -1,0 +1,171 @@
+{
+  "version": "v1",
+  "summary": {
+    "scenario_rows": 101,
+    "dryrun_rows": 101,
+    "mixed_rows": 2155,
+    "runtime_smoke_battles": 10,
+    "runtime_smoke_turns": 66,
+    "all_intents_covered": [
+      "ANTI_STAT_BOOST",
+      "ANTI_TAILWIND",
+      "ANTI_TRICK_ROOM",
+      "COMBO_ENABLE",
+      "NO_INTENT",
+      "REDIRECTION_RESPONSE",
+      "SPREAD_DEFENSE",
+      "TERRAIN_CONTROL",
+      "WEATHER_CONTROL"
+    ]
+  },
+  "per_source": {
+    "scenario_dataset": {
+      "path": "logs/planner_dataset_v1.jsonl",
+      "total_rows": 101,
+      "parse_errors": [],
+      "intent_distribution": {
+        "NO_INTENT": 0,
+        "ANTI_TRICK_ROOM": 7,
+        "ANTI_TAILWIND": 6,
+        "ANTI_STAT_BOOST": 5,
+        "SPREAD_DEFENSE": 24,
+        "MISSING": 0
+      },
+      "no_intent_ratio": 0.0
+    },
+    "dryrun_dataset": {
+      "path": "logs/planner_intent_dryrun_v1.jsonl",
+      "total_rows": 101,
+      "parse_errors": [],
+      "intent_distribution": {
+        "NO_INTENT": 0,
+        "ANTI_TRICK_ROOM": 7,
+        "ANTI_TAILWIND": 6,
+        "ANTI_STAT_BOOST": 5,
+        "SPREAD_DEFENSE": 24,
+        "MISSING": 0
+      },
+      "no_intent_ratio": 0.0
+    },
+    "mixed_dataset": {
+      "path": "logs/planner_mixed_stability_v1.jsonl",
+      "total_rows": 2155,
+      "parse_errors": [],
+      "sources": {
+        "scenario": {
+          "rows": 101,
+          "intent_distribution": {
+            "NO_INTENT": 24,
+            "ANTI_TRICK_ROOM": 1,
+            "ANTI_TAILWIND": 1,
+            "ANTI_STAT_BOOST": 20,
+            "SPREAD_DEFENSE": 12,
+            "MISSING": 0
+          },
+          "no_intent_ratio": 0.2376237623762376
+        },
+        "real_acc3": {
+          "rows": 1807,
+          "intent_distribution": {
+            "NO_INTENT": 1402,
+            "ANTI_TRICK_ROOM": 1,
+            "ANTI_TAILWIND": 0,
+            "ANTI_STAT_BOOST": 0,
+            "SPREAD_DEFENSE": 0,
+            "MISSING": 0
+          },
+          "no_intent_ratio": 0.7758716104039846
+        },
+        "real_acc2": {
+          "rows": 81,
+          "intent_distribution": {
+            "NO_INTENT": 50,
+            "ANTI_TRICK_ROOM": 5,
+            "ANTI_TAILWIND": 0,
+            "ANTI_STAT_BOOST": 0,
+            "SPREAD_DEFENSE": 0,
+            "MISSING": 0
+          },
+          "no_intent_ratio": 0.6172839506172839
+        },
+        "real_ctrl": {
+          "rows": 166,
+          "intent_distribution": {
+            "NO_INTENT": 166,
+            "ANTI_TRICK_ROOM": 0,
+            "ANTI_TAILWIND": 0,
+            "ANTI_STAT_BOOST": 0,
+            "SPREAD_DEFENSE": 0,
+            "MISSING": 0
+          },
+          "no_intent_ratio": 1.0
+        }
+      }
+    },
+    "runtime_smoke": {
+      "glob": "vgc2026_phasePLANNER_IMPL_2b_*_treatment_audit.jsonl",
+      "n_files": 10,
+      "total_battles": 10,
+      "total_turns": 66,
+      "total_turns_on_arm": 37,
+      "parse_errors": [],
+      "intent_distribution": {
+        "NO_INTENT": 29,
+        "ANTI_TRICK_ROOM": 0,
+        "ANTI_TAILWIND": 0,
+        "ANTI_STAT_BOOST": 0,
+        "SPREAD_DEFENSE": 8,
+        "MISSING": 29
+      },
+      "no_intent_ratio": 0.8787878787878788,
+      "confidence_buckets": {
+        "0.0 (NO_INTENT)": 29,
+        "0.5-0.65 (low)": 8
+      },
+      "evidence_source_distribution": {
+        "MISSING": 29,
+        "revealed_moves": 8
+      },
+      "matched_moves_top": {
+        "waterpulse": 5,
+        "dazzlinggleam": 3
+      }
+    }
+  },
+  "recommendation": {
+    "top_intent": "SPREAD_DEFENSE",
+    "top_count": 8,
+    "total_real_turns": 2091,
+    "fire_rate": 0.003825920612147298,
+    "all_intents": {
+      "SPREAD_DEFENSE": 8,
+      "ANTI_TRICK_ROOM": 6,
+      "ANTI_TAILWIND": 0,
+      "ANTI_STAT_BOOST": 0
+    },
+    "verdict": "REPORT_READY: SPREAD_DEFENSE has only 8 real positives (0.4% of 2091 real turns). Keep collecting data; scoring not yet warranted."
+  },
+  "real_positives": {
+    "mixed_dataset_real": {
+      "NO_INTENT": 0,
+      "ANTI_TRICK_ROOM": 6,
+      "ANTI_TAILWIND": 0,
+      "ANTI_STAT_BOOST": 0,
+      "SPREAD_DEFENSE": 0
+    },
+    "runtime_smoke_on_arm": {
+      "NO_INTENT": 0,
+      "ANTI_TRICK_ROOM": 0,
+      "ANTI_TAILWIND": 0,
+      "ANTI_STAT_BOOST": 0,
+      "SPREAD_DEFENSE": 8
+    },
+    "combined": {
+      "NO_INTENT": 0,
+      "ANTI_TRICK_ROOM": 6,
+      "ANTI_TAILWIND": 0,
+      "ANTI_STAT_BOOST": 0,
+      "SPREAD_DEFENSE": 8
+    }
+  }
+}
