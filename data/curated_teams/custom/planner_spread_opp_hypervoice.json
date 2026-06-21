@@ -1,0 +1,59 @@
+{
+  "id": "planner_spread_opp_hypervoice_v1",
+  "team": [
+    {
+      "species": "Primarina",
+      "ability": "Torrent",
+      "item": "Leftovers",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Hyper Voice", "Moonblast", "Psychic", "Protect"]
+    },
+    {
+      "species": "Sylveon",
+      "ability": "Pixilate",
+      "item": "Choice Scarf",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Hyper Voice", "Moonblast", "Protect", "Wish"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Sitrus Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Heat Wave", "Bug Buzz", "Protect", "Flare Blitz"]
+    },
+    {
+      "species": "Hydreigon",
+      "ability": "Levitate",
+      "item": "Lum Berry",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Dark Pulse", "Draco Meteor", "Flamethrower", "Protect"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Earthquake", "Rock Slide", "Stone Edge", "Protect"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Rock Slide", "Crunch", "Stone Edge", "Ice Punch"]
+    }
+  ]
+}

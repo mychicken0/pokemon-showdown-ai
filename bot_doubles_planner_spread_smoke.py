@@ -48,11 +48,15 @@ CUSTOM_OPP_TEAMS = [
     ("data/curated_teams/custom/planner_spread_opp_heatwave.json", "heatwave_opp"),
     ("data/curated_teams/custom/planner_spread_opp_rockslide.json", "rockslide_opp"),
     ("data/curated_teams/custom/planner_spread_opp_snarl.json", "snarl_opp"),
+    ("data/curated_teams/custom/planner_spread_opp_dazzlinggleam.json", "dazzlinggleam_opp"),
+    ("data/curated_teams/custom/planner_spread_opp_hypervoice.json", "hypervoice_opp"),
 ]
 PAIRS = [
     (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[0][0], "wg_vs_heatwave"),
     (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[1][0], "wg_vs_rockslide"),
     (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[2][0], "wg_vs_snarl"),
+    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[3][0], "wg_vs_dazzlinggleam"),
+    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[4][0], "wg_vs_hypervoice"),
 ]
 
 # Battle format: VGC 2026 Champions
@@ -264,14 +268,20 @@ def validate_audit_fields(results: Dict[str, List[Dict[str, Any]]]) -> Dict[str,
     def analyze_arm(label, files):
         total_turns = 0
         wg_selections = 0
-        wg_legal = 0
+        wg_legal_turns = 0
+        wg_legal_and_intent = 0  # WG legal AND intent=SPREAD_DEFENSE
         intent_label_dist = {}
-        picks_this_game = 0
+        picks_this_game_max = 0
+        picks_this_game_total = 0  # sum across battles
+        battles_with_picks = 0
         bonus_applied_turns = 0
         bonus_values = []
+        selected_wg_pick_turns = 0  # turns where WG was both legal and selected
         for f in files:
             if f["status"] != "ok":
                 continue
+            battle_max_picks = 0
+            battle_has_pick = False
             with open(f["log_path"]) as fh:
                 for line in fh:
                     if not line.strip():
@@ -282,24 +292,62 @@ def validate_audit_fields(results: Dict[str, List[Dict[str, Any]]]) -> Dict[str,
                         total_turns += 1
                         il = snap.get("planner_intent_label")
                         intent_label_dist[il] = intent_label_dist.get(il, 0) + 1
-                        picks_this_game = max(
-                            picks_this_game,
-                            snap.get("planner_spread_defense_picks_this_game", 0)
-                        )
-                        bonus = snap.get("planner_spread_defense_bonus_applied", 0.0)
+                        picks_this_game = snap.get(
+                            "planner_spread_defense_picks_this_game", 0
+                        ) or 0
+                        if picks_this_game > battle_max_picks:
+                            battle_max_picks = picks_this_game
+                        if picks_this_game > 0 and not battle_has_pick:
+                            battle_has_pick = True
+                        bonus = snap.get(
+                            "planner_spread_defense_bonus_applied", 0.0
+                        ) or 0.0
                         if bonus > 0:
                             bonus_applied_turns += 1
                             bonus_values.append(bonus)
                         # Check if WG was selected
-                        sel = turn.get("selected_joint_order", "")
-                        if sel and "wideguard" in sel.lower():
+                        sel = turn.get("selected_joint_order", "") or ""
+                        sel_is_wg = "wideguard" in sel.lower()
+                        if sel_is_wg:
                             wg_selections += 1
-                        # Check if WG was legal (we don't have direct access; skip)
+                        # Check if WG was legal (slot_0/1.wide_guard_legal)
+                        slot_0 = turn.get("slot_0", {}) or {}
+                        slot_1 = turn.get("slot_1", {}) or {}
+                        wg_0 = bool(slot_0.get("wide_guard_legal"))
+                        wg_1 = bool(slot_1.get("wide_guard_legal"))
+                        is_wg_legal = wg_0 or wg_1
+                        if is_wg_legal:
+                            wg_legal_turns += 1
+                            if il == "SPREAD_DEFENSE":
+                                wg_legal_and_intent += 1
+                            if sel_is_wg:
+                                selected_wg_pick_turns += 1
+            picks_this_game_max = max(picks_this_game_max, battle_max_picks)
+            picks_this_game_total += battle_max_picks
+            if battle_has_pick:
+                battles_with_picks += 1
+        # Compute rates
+        n_battles = len([f for f in files if f["status"] == "ok"])
+        pick_rate_per_battle = (
+            picks_this_game_total / n_battles if n_battles else 0.0
+        )
+        wg_select_rate = (
+            selected_wg_pick_turns / wg_legal_and_intent
+            if wg_legal_and_intent else 0.0
+        )
         return {
             "total_turns": total_turns,
+            "n_battles": n_battles,
+            "wg_legal_turns": wg_legal_turns,
+            "wg_legal_and_intent_spread": wg_legal_and_intent,
             "wg_selections": wg_selections,
+            "selected_wg_pick_turns": selected_wg_pick_turns,
+            "wg_select_rate_when_legal_and_intent": round(wg_select_rate, 3),
             "intent_label_dist": intent_label_dist,
-            "picks_this_game_max": picks_this_game,
+            "picks_this_game_max": picks_this_game_max,
+            "picks_this_game_total": picks_this_game_total,
+            "battles_with_picks": battles_with_picks,
+            "picks_per_battle_avg": round(pick_rate_per_battle, 2),
             "bonus_applied_turns": bonus_applied_turns,
             "bonus_values_sample": bonus_values[:5],
         }
@@ -391,20 +439,26 @@ def main():
     on = validation["on_arm"]["checks"]
     print(f"OFF arm:")
     print(f"  total turns: {off['total_turns']}")
+    print(f"  WG legal turns: {off['wg_legal_turns']}")
+    print(f"  WG legal + SPREAD_DEFENSE intent: {off['wg_legal_and_intent_spread']}")
     print(f"  WG selections: {off['wg_selections']}")
     print(f"  intent_label dist: {off['intent_label_dist']}")
     print(f"  picks_this_game max: {off['picks_this_game_max']}")
     print(f"  bonus_applied turns: {off['bonus_applied_turns']}")
     print(f"ON arm:")
     print(f"  total turns: {on['total_turns']}")
+    print(f"  WG legal turns: {on['wg_legal_turns']}")
+    print(f"  WG legal + SPREAD_DEFENSE intent: {on['wg_legal_and_intent_spread']}")
     print(f"  WG selections: {on['wg_selections']}")
     print(f"  intent_label dist: {on['intent_label_dist']}")
     print(f"  picks_this_game max: {on['picks_this_game_max']}")
+    print(f"  picks per battle avg: {on['picks_per_battle_avg']}")
+    print(f"  battles with picks: {on['battles_with_picks']}/{on['n_battles']}")
     print(f"  bonus_applied turns: {on['bonus_applied_turns']}")
     print(f"  bonus sample: {on['bonus_values_sample']}")
     print(f"WG comparison: {validation['wg_selection_comparison']}")
 
-    # Pass criteria
+    # Pass criteria (PLANNER-SPREAD-4 — 5-pair, behavior validation)
     n_total_expected = args.n_pairs * 2
     passes = []
     passes.append((f"{n_total_expected}/{n_total_expected} battles ok",
@@ -413,16 +467,17 @@ def main():
                    off["bonus_applied_turns"] == 0))
     passes.append(("ON arm: bonus applied (spread_scoring ON)",
                    on["bonus_applied_turns"] > 0))
-    passes.append(("ON arm: picks per game <= 3 (anti-spam)",
+    passes.append(("ON arm: picks per game <= 3 (anti-spam cap)",
                    on["picks_this_game_max"] <= 3))
     passes.append(("OFF arm: picks per game == 0 (no scoring)",
                    off["picks_this_game_max"] == 0))
+    passes.append(("ON arm: pick rate (per battle avg) <= 1.0",
+                   on["picks_per_battle_avg"] <= 1.0))
+    passes.append(("ON arm: WG selected >= OFF arm WG (loose)",
+                   on["wg_selections"] >= off["wg_selections"] * 0.5))
     passes.append(("no timeout/error",
                    all(r["status"] == "ok" for r in results["off"])
                    and all(r["status"] == "ok" for r in results["on"])))
-    # WG selection is optional; per-battle variance is high
-    passes.append(("ON arm WG >= OFF arm WG (loose check)",
-                   on["wg_selections"] >= off["wg_selections"] * 0.5))
 
     print(f"\n=== Pass criteria ===")
     for label, ok in passes:
