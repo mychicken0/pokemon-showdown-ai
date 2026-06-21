@@ -1,0 +1,39 @@
+{
+  "off_arm": {
+    "status": "ok",
+    "checks": {
+      "audit_fields_present": 29,
+      "total_turns": 29,
+      "intent_label_none_count": 29,
+      "intent_label_none_rate": 1.0,
+      "intent_changed_selection_false_count": 29,
+      "bonus_applied_zero_count": 29
+    }
+  },
+  "on_arm": {
+    "status": "ok",
+    "checks": {
+      "audit_fields_present": 37,
+      "total_turns": 37,
+      "intent_label_valid_count": 37,
+      "intent_label_valid_rate": 1.0,
+      "intent_changed_selection_false_count": 37,
+      "bonus_applied_zero_count": 37,
+      "label_distribution": {
+        "NO_INTENT": 29,
+        "SPREAD_DEFENSE": 8
+      }
+    }
+  },
+  "behavior_parity": {
+    "status": "ok",
+    "checks": {
+      "parity_method": {
+        "all_match": true,
+        "method": "bonus_applied_zero_and_changed_selection_false",
+        "note": "OFF and ON arms run SEPARATE battles (different random outcomes), so direct selected_joint_order comparison is not meaningful. Parity is verified via audit fields: planner_intent_bonus_applied=0.0 and planner_intent_changed_selection=False in BOTH arms."
+      },
+      "all_match": true
+    }
+  }
+}
