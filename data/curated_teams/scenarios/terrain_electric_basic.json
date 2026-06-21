@@ -1,0 +1,33 @@
+{
+  "scenario_id": "terrain_electric_basic",
+  "description": "Terrain family (Electric Terrain variant): opp scripts Electric Terrain on turn 1; terrain should be set in the audit state",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/custom/electric_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Jolteon",
+    "opp_slot_1": "Arcanine"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "electricterrain"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "electric_terrain_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "electricterrain"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}

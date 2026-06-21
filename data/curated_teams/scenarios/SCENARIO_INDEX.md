@@ -11,13 +11,13 @@
 - **Probes**: 1 (SCENARIO-10A, pre-library)
 - **Deferred scenarios**: 4
 - **Banned items in VGC 2026**: 5
-- **Custom teams**: 4 (`data/curated_teams/custom/`)
+- **Custom teams**: 7 (`data/curated_teams/custom/`)
 - **Custom scenario path**: `data/curated_teams/scenarios/SCENARIO_INDEX.md`
   (this file)
 
 ---
 
-## Active scenarios (10)
+## Active scenarios (13)
 
 | # | scenario_id | family | priority | v | opp lead | scripted move | bot response | status | report |
 |---|---|---|---|---|---|---|---|---|---|
@@ -31,6 +31,9 @@
 | 8 | `weather_rain_basic` | weather | P2 | v2 | Politoed + Arcanine | Rain Dance | state_snapshot.weather = ['raindance'] | PASS | [report](logs/phaseSCENARIO16_weather_rain_basic_report.md) |
 | 9 | `beatup_justified_basic` | beatup_justified | P2 | v2 | Houndoom + Gallade | Beat Up | (Justified ally ready) | PASS | [report](logs/phaseSCENARIO17_beatup_justified_basic_report.md) |
 | 10 | `terrain_psychic_basic` | terrain | P2 | v2 | Espathra + Arcanine | Psychic Terrain | state_snapshot.fields = ['psychic_terrain'] | PASS | [report](logs/phaseTERRAIN1_terrain_psychic_basic_report.md) |
+| 11 | `terrain_electric_basic` | terrain | P2 | v2 | Jolteon + Arcanine | Electric Terrain | bot has some response | PASS | [report](logs/phaseSCENARIO21_terrain_electric_basic_report.md) |
+| 12 | `terrain_grassy_basic` | terrain | P2 | v2 | Tsareena + Arcanine | Grassy Terrain | bot has some response | PASS | [report](logs/phaseSCENARIO22_terrain_grassy_basic_report.md) |
+| 13 | `redir_followme_true_basic` | redir | P1 | v2 | Clefable + Arcanine | Follow Me | bot has AoE response (Heat Wave) | PASS | [report](logs/phaseSCENARIO23_redir_followme_true_basic_report.md) |
 
 ### Detailed scenario descriptions
 
@@ -186,6 +189,33 @@ All custom teams are in
 - **Kingambit** (Defiant, Leftovers)
 - **Garchomp** (Rough Skin, Yache Berry)
 - **Tyranitar** (Sand Stream, Choice Scarf)
+
+### `electric_demo_v1.json` (used by SCENARIO-21)
+
+- **Jolteon** (Volt Absorb, Leftovers, Timid, Electric Terrain / Volt Switch / Thunderbolt / Protect) — the Electric Terrain setter
+- **Arcanine** (Intimidate, Sitrus Berry, Jolly, Protect / Extreme Speed / Flare Blitz / Crunch) — the Protect partner
+- **Kingambit** (Defiant, Shuca Berry, Adamant, Kowtow Cleave / Sucker Punch / Iron Head / Protect)
+- **Garchomp** (Rough Skin, Yache Berry, Jolly, Earthquake / Rock Slide / Protect / Scale Shot)
+- **Tyranitar** (Sand Stream, Choice Scarf, Adamant, Rock Slide / Crunch / Dragon Dance / Protect)
+- **Volcarona** (Flame Body, Lum Berry, Timid, Heat Wave / Quiver Dance / Protect / Bug Buzz)
+
+### `grassy_demo_v1.json` (used by SCENARIO-22)
+
+- **Tsareena** (Queenly Majesty, Leftovers, Adamant, Grassy Terrain / Trop Kick / Triple Axel / Protect) — the Grassy Terrain setter
+- **Arcanine** (Intimidate, Sitrus Berry, Jolly, Protect / Extreme Speed / Flare Blitz / Crunch) — the Protect partner
+- **Kingambit** (Defiant, Shuca Berry, Adamant, Kowtow Cleave / Sucker Punch / Iron Head / Protect)
+- **Garchomp** (Rough Skin, Yache Berry, Jolly, Earthquake / Rock Slide / Protect / Scale Shot)
+- **Tyranitar** (Sand Stream, Choice Scarf, Adamant, Rock Slide / Crunch / Dragon Dance / Protect)
+- **Volcarona** (Flame Body, Lum Berry, Timid, Heat Wave / Quiver Dance / Protect / Bug Buzz)
+
+### `followme_demo_v1.json` (used by SCENARIO-23)
+
+- **Clefable** (Magic Guard, Leftovers, Calm, Follow Me / Moonblast / Wish / Protect) — the Follow Me user
+- **Arcanine** (Intimidate, Sitrus Berry, Jolly, Protect / Extreme Speed / Flare Blitz / Crunch) — the Protect partner
+- **Kingambit** (Defiant, Shuca Berry, Adamant, Kowtow Cleave / Sucker Punch / Iron Head / Protect)
+- **Garchomp** (Rough Skin, Yache Berry, Jolly, Earthquake / Rock Slide / Protect / Scale Shot)
+- **Tyranitar** (Sand Stream, Choice Scarf, Adamant, Rock Slide / Crunch / Dragon Dance / Protect)
+- **Volcarona** (Flame Body, Lum Berry, Timid, Heat Wave / Quiver Dance / Protect / Bug Buzz)
 
 ### `terrain_demo_v1.json` (used by TERRAIN-1)
 

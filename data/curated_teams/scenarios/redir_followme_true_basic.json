@@ -1,0 +1,33 @@
+{
+  "scenario_id": "redir_followme_true_basic",
+  "description": "Redirection family (true Follow Me variant): opp scripts Follow Me on turn 1; Follow Me redirects opp attacks to the user",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/custom/followme_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Clefable",
+    "opp_slot_1": "Arcanine"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "followme"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "follow_me_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "followme"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}

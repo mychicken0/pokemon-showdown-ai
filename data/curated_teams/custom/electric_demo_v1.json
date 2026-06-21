@@ -1,0 +1,66 @@
+{
+  "id": "electric_demo_v1",
+  "rank": 0,
+  "player": "custom",
+  "event": "SCENARIO-21",
+  "record": "0-0",
+  "source_platform": "custom",
+  "source_url": "",
+  "parse_status": "ok",
+  "team": [
+    {
+      "species": "Jolteon",
+      "ability": "Volt Absorb",
+      "item": "Leftovers",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Electric Terrain", "Volt Switch", "Thunderbolt", "Protect"]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Sitrus Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Protect", "Extreme Speed", "Flare Blitz", "Crunch"]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Kowtow Cleave", "Sucker Punch", "Iron Head", "Protect"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Choice Scarf",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Rock Slide", "Crunch", "Dragon Dance", "Protect"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Lum Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Heat Wave", "Quiver Dance", "Protect", "Bug Buzz"]
+    }
+  ]
+}
