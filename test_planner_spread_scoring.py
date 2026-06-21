@@ -307,8 +307,12 @@ class TestConfigDefaults(unittest.TestCase):
         self.assertGreater(config.planner_spread_defense_wg_bonus, 0.0)
 
     def test_default_min_confidence(self):
+        # PLANNER-SPREAD-8A: tightened default to 0.65 (was 0.5).
+        # The revealed_moves detector path returns 0.65 conf, so this
+        # threshold matches the detector's confidence and filters
+        # the lower-confidence opp_pressure-only branch.
         config = DoublesDamageAwareConfig()
-        self.assertEqual(config.planner_spread_defense_min_confidence, 0.5)
+        self.assertEqual(config.planner_spread_defense_min_confidence, 0.65)
 
 
 if __name__ == "__main__":

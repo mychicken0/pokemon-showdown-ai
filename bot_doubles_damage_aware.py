@@ -500,7 +500,11 @@ class DoublesDamageAwareConfig:
     #   - opp pressure detected (reuses _slot_in_opp_pressure)
     enable_planner_spread_defense_scoring: bool = False
     planner_spread_defense_wg_bonus: float = 150.0
-    planner_spread_defense_min_confidence: float = 0.5
+    # PLANNER-SPREAD-2 + 8A: confidence gate. Default 0.65.
+    # PLANNER-SPREAD-8A: tightened from 0.5 to 0.65 to filter the
+    # opp_pressure-only branch (0.6 conf) and any borderline decisions.
+    # The revealed_moves path returns 0.65, so 0.65 still allows that path.
+    planner_spread_defense_min_confidence: float = 0.65
     # Anti-spam: max picks per game, min turns between picks.
     planner_spread_defense_max_picks_per_game: int = 3
     planner_spread_defense_min_turn_between_picks: int = 2

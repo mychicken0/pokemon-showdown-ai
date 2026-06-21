@@ -1,0 +1,58 @@
+{
+  "off_arm": {
+    "status": "ok",
+    "checks": {
+      "total_turns": 45,
+      "n_battles": 5,
+      "wg_legal_turns": 7,
+      "wg_legal_and_intent_spread": 1,
+      "wg_selections": 0,
+      "selected_wg_pick_turns": 0,
+      "wg_select_rate_when_legal_and_intent": 0.0,
+      "intent_label_dist": {
+        "NO_INTENT": 29,
+        "SPREAD_DEFENSE": 16
+      },
+      "picks_this_game_max": 0,
+      "picks_this_game_total": 0,
+      "battles_with_picks": 0,
+      "picks_per_battle_avg": 0.0,
+      "bonus_applied_turns": 0,
+      "bonus_values_sample": []
+    }
+  },
+  "on_arm": {
+    "status": "ok",
+    "checks": {
+      "total_turns": 38,
+      "n_battles": 5,
+      "wg_legal_turns": 9,
+      "wg_legal_and_intent_spread": 2,
+      "wg_selections": 1,
+      "selected_wg_pick_turns": 1,
+      "wg_select_rate_when_legal_and_intent": 0.5,
+      "intent_label_dist": {
+        "NO_INTENT": 27,
+        "SPREAD_DEFENSE": 11
+      },
+      "picks_this_game_max": 1,
+      "picks_this_game_total": 1,
+      "battles_with_picks": 1,
+      "picks_per_battle_avg": 0.2,
+      "bonus_applied_turns": 5,
+      "bonus_values_sample": [
+        150.0,
+        150.0,
+        150.0,
+        150.0,
+        150.0
+      ]
+    }
+  },
+  "wg_selection_comparison": {
+    "off_wg": 0,
+    "on_wg": 1,
+    "diff": 1,
+    "note": "ON arm should have >= OFF arm WG selections (spread_scoring boosts WG when SPREAD_DEFENSE intent fires). Per-battle variance is high; small differences are OK."
+  }
+}
