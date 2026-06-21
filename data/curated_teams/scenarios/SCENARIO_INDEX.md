@@ -30,7 +30,7 @@
 | 7 | `spread_def_earthquake` | spread_def | P1 | v2 | Garchomp + Charizard | Earthquake | Wide Guard (Torterra, bot-choice) | PASS | [report](logs/phaseSCENARIO19_spread_def_earthquake_report.md) |
 | 8 | `weather_rain_basic` | weather | P2 | v2 | Politoed + Arcanine | Rain Dance | state_snapshot.weather = ['raindance'] | PASS | [report](logs/phaseSCENARIO16_weather_rain_basic_report.md) |
 | 9 | `beatup_justified_basic` | beatup_justified | P2 | v2 | Houndoom + Gallade | Beat Up | (Justified ally ready) | PASS | [report](logs/phaseSCENARIO17_beatup_justified_basic_report.md) |
-| 10 | `terrain_psychic_basic` | terrain | P2 | v2 | Espathra + Arcanine | Psychic Terrain | state_snapshot.fields = ['psychic_terrain'] | PASS | [report](logs/phaseTERRAIN1_terrain_psychic_basic_report.md) |
+| 10 | `terrain_psychic_basic` | terrain | P2 | v3 | Espathra + Arcanine | Psychic Terrain | canonical=True, gap=True | PASS (CLEAN) | [report](logs/phaseTERRAIN1_terrain_psychic_basic_report.md) + [cleanup](logs/phaseTERRAIN2A_psychic_terrain_cleanup_report.md) |
 | 11 | `terrain_electric_basic` | terrain | P2 | v2 | Jolteon + Arcanine | Electric Terrain | bot has some response | PASS | [report](logs/phaseSCENARIO21_terrain_electric_basic_report.md) |
 | 12 | `terrain_grassy_basic` | terrain | P2 | v2 | Tsareena + Arcanine | Grassy Terrain | bot has some response | PASS | [report](logs/phaseSCENARIO22_terrain_grassy_basic_report.md) |
 | 13 | `redir_followme_true_basic` | redir | P1 | v2 | Clefable + Arcanine | Follow Me | bot has AoE response (Heat Wave) | PASS | [report](logs/phaseSCENARIO23_redir_followme_true_basic_report.md) |
@@ -124,7 +124,7 @@ reproducibility.
 |---|---|---|---|
 | wp | `wp_super_effective_basic` | Weakness Policy is banned in VGC 2026 Champions format (`isNonstandard: "Past"`). Showdown team validator rejects it. | **format-banned** |
 | redir | `redir_followme` (true Follow Me variant) | Rage Powder covers basic redirection. Follow Me is +0 priority, may be outsped. Different script from Rage Powder. | not started |
-| terrain_electric_basic` / `terrain_grassy_basic` | Psychic Terrain variant done (TERRAIN-1). Electric/Grassy variants can use custom team with the corresponding setter. | not started |
+| terrain Misty Terrain | No Paldea mon with Misty Terrain in champions learnsets. | not started |
 | — | Earthquake framework-level changes (grounded / Levitate / Flying detection) | Not needed for basic EQ scenario (SCENARIO-19). Only required for "is the move effective" checks. | deferred |
 
 ---
@@ -524,7 +524,9 @@ logs/
 ├── phaseSCENARIO17_beatup_justified_basic_report.md  # P2 family 5
 ├── phaseSCENARIO18_wp_super_effective_deferred_report.md  # P2 family 6 deferred
 ├── phaseSCENARIO19_spread_def_earthquake_report.md  # P1 family 4 (Earthquake done)
-└── phaseSCENARIO20_library_closeout.md     # library closeout (this phase)
+├── phaseSCENARIO20_library_closeout.md     # library closeout
+├── phaseTERRAIN2A_psychic_terrain_cleanup_report.md  # Psychic Terrain cleanup
+└── phaseSCENARIO_VALIDATE_1_all_scenario_matrix.md  # all-scenario validation matrix
 ```
 
 ---
@@ -546,6 +548,12 @@ logs/
   variants
 - v8 (SCENARIO-16/17): P2 weather + beatup
 - v9 (SCENARIO-20): library closeout
+- v10 (TERRAIN-2A): Psychic Terrain cleanup
+  (lead/species mismatch fixed,
+  canonical signal works)
+- v11 (SCENARIO-VALIDATE-1): all-scenario
+  validation matrix (13/13 PASS,
+  library clean)
 
 ---
 

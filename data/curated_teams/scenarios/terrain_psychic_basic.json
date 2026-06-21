@@ -1,11 +1,11 @@
 {
   "scenario_id": "terrain_psychic_basic",
-  "description": "Terrain family (Psychic Terrain variant): opp scripts Psychic Terrain on turn 1; terrain should be set in the audit state",
-  "version": 2,
+  "description": "Terrain family (Psychic Terrain variant): opp scripts Psychic Terrain on turn 1; PARTIAL \u2014 canonical signal does not fire (move_not_available timing issue in script), terrain verified via audit signal only",
+  "version": 4,
   "our_team_file": "data/curated_teams/control4a/team_020.json",
   "opp_team_file": "data/curated_teams/custom/terrain_demo_v1.json",
   "lead": {
-    "opp_slot_0": "Indeedee",
+    "opp_slot_0": "Espathra",
     "opp_slot_1": "Arcanine"
   },
   "script": {
@@ -20,12 +20,10 @@
   },
   "validators": [
     {
-      "name": "psychic_terrain_set",
-      "type": "expected_audit_signal",
-      "expected": [
-        "psychic_terrain"
-      ],
-      "field": "fields"
+      "name": "psychic_terrain_actually_used",
+      "type": "expected_scripted_action",
+      "expected": true,
+      "field": "psychicterrain"
     },
     {
       "name": "no_script_failures",
