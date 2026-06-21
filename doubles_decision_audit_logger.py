@@ -237,7 +237,59 @@ class DoublesDecisionAuditLogger:
         snap["opponent_side_conditions"] = DoublesDecisionAuditLogger._enum_keys(
             battle, "opponent_side_conditions"
         )
+        # PLANNER-IMPL-2: observational intent detector fields.
+        # These are populated only when the per-turn IntentDetector
+        # was run (i.e., enable_planner_intent_detector=True).
+        # They never affect scoring. They are observational only.
+        # When the detector was not run, all values are None/empty.
+        DoublesDecisionAuditLogger._populate_planner_intent_fields(
+            snap, battle
+        )
         return snap
+
+    @staticmethod
+    def _populate_planner_intent_fields(snap, battle):
+        """PLANNER-IMPL-2: write observational intent fields.
+
+        Reads the per-turn IntentDecision from the battle
+        (attached by choose_move when the detector is enabled)
+        and writes planner_intent_* fields to the snapshot.
+        Pure read of self-attached state. Never affects scoring.
+        """
+        # Default values (when detector is not run / OFF)
+        snap["planner_intent_label"] = None
+        snap["planner_intent_confidence"] = None
+        snap["planner_intent_matched_moves"] = None
+        snap["planner_intent_evidence_source"] = None
+        snap["planner_intent_routed_to_policy"] = None
+        snap["planner_intent_bonus_applied"] = 0.0
+        snap["planner_intent_changed_selection"] = False
+        # Try to read the decision attached to the battle
+        try:
+            decision = getattr(battle, "_planner_intent_decision", None)
+            if decision is None:
+                return
+            snap["planner_intent_label"] = getattr(decision, "intent", None)
+            snap["planner_intent_confidence"] = getattr(
+                decision, "confidence", None
+            )
+            snap["planner_intent_matched_moves"] = list(
+                getattr(decision, "matched_moves", []) or []
+            )
+            snap["planner_intent_evidence_source"] = getattr(
+                decision, "evidence_source", None
+            )
+            snap["planner_intent_routed_to_policy"] = getattr(
+                decision, "routed_to_policy", None
+            )
+            # bonus_applied and changed_selection remain 0.0 / False
+            # because PLANNER-IMPL-2 does NOT add scoring bonus. The
+            # existing per-move policies (anti_setup_disruption,
+            # spread_defense, setup_intent) are separate and have
+            # their own audit fields. PLANNER only LOGS intent.
+        except Exception:
+            # Defensive: never break the audit logger
+            pass
 
     @staticmethod
     def _safe_species(pokemon):

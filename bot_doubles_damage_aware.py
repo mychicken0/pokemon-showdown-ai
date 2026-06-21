@@ -471,6 +471,21 @@ class DoublesDamageAwareConfig:
     anti_setup_disruption_require_survival: bool = True
     anti_setup_disruption_min_opp_setup_signal: float = 1.0
 
+    # PLANNER-IMPL-2: opt-in per-turn intent detector.
+    # When True, the bot runs IntentDetector.detect() per
+    # turn and writes observational audit fields
+    # (planner_intent_label, planner_intent_confidence, etc.).
+    # Default OFF. NO scoring change. NO default flip.
+    # The detector only LOGS; it does NOT add bonus tables
+    # and does NOT trigger existing per-move policies.
+    # The existing enable_anti_setup_disruption_intent /
+    # enable_spread_defense_bonus / enable_setup_intent_policy
+    # flags remain the source of truth for per-move bonuses.
+    # See logs/phasePLANNER_IMPL_1B_bonus_table_hardening.md
+    # for the full design.
+    enable_planner_intent_detector: bool = False
+    planner_intent_min_confidence: float = 0.5
+
     # Phase ACCURACY-2: opt-in hard-safety block
     # for damaging moves targeting self (target=-1)
     # or ally (target=-2). When True, sets v2l1
@@ -4499,6 +4514,146 @@ class DoublesDamageAwarePlayer(Player):
             return False
         return True
 
+    def _run_planner_intent_detector(self, battle):
+        """PLANNER-IMPL-2: per-turn intent detector runner.
+
+        Pure observation. No scoring change. No side effects
+        beyond storing the decision on self for the audit logger.
+
+        Reads visible state only (per AGENTS.md):
+        - opp_revealed_moves: from poke-env's opponent_active_pokemon
+        - fields: from battle.fields (e.g., "trick_room")
+        - side_conditions: from battle.side_conditions (e.g., "tailwind")
+        - opp_used_tr / opp_used_tw / opp_used_stat_boost: counters
+        - opp_pressure: from existing _slot_in_opp_pressure
+        - active_user_hp_fraction: from battle.active_pokemon[0].hp
+        - expected_to_faint: from _expected_to_faint_before_moving
+        - target_already_taunted: best-effort from battle state
+
+        Returns an IntentDecision or None on error.
+        """
+        try:
+            from bot_doubles_intent_classifier import (
+                IntentDetector, IntentDecision,
+            )
+        except ImportError:
+            return None
+
+        try:
+            # Build context (visible-only)
+            ctx = {
+                "opp_revealed_moves": self._safe_opp_revealed_moves(battle),
+                "fields": self._safe_field_names(battle),
+                "side_conditions": self._safe_side_condition_names(battle),
+                "opp_used_tr": self._safe_get_last_opp_signal(
+                    battle, "trickroom"
+                ),
+                "opp_used_tw": self._safe_get_last_opp_signal(
+                    battle, "tailwind"
+                ),
+                "opp_used_stat_boost": self._safe_get_last_opp_signal(
+                    battle, "stat_boost"
+                ),
+                "opp_pressure": self._safe_opp_pressure(battle),
+                "active_user_hp_fraction": self._safe_active_hp_fraction(
+                    battle, 0
+                ),
+                "expected_to_faint": self._safe_expected_to_faint(
+                    battle, 0
+                ),
+                "target_already_taunted": False,
+            }
+            min_conf = float(getattr(
+                self.config, "planner_intent_min_confidence", 0.5
+            ))
+            det = IntentDetector(min_confidence=min_conf)
+            return det.detect(ctx)
+        except Exception:
+            # Defensive: detector failure must NEVER affect scoring
+            return None
+
+    def _safe_opp_revealed_moves(self, battle):
+        """Collect opp revealed moves from poke-env battle state."""
+        try:
+            opp_actives = (
+                getattr(battle, "opponent_active_pokemon", None) or []
+            )
+            moves = set()
+            for pkmn in opp_actives:
+                if pkmn is None:
+                    continue
+                pkmn_moves = getattr(pkmn, "moves", None) or {}
+                for mv_id in pkmn_moves.keys():
+                    if mv_id:
+                        moves.add(str(mv_id))
+            return list(moves)
+        except Exception:
+            return []
+
+    def _safe_field_names(self, battle):
+        """Extract field-effect names (lowercased)."""
+        try:
+            fields = getattr(battle, "fields", None) or []
+            names = []
+            for f in fields:
+                if hasattr(f, "name"):
+                    names.append(str(f.name).lower())
+                else:
+                    names.append(str(f).lower())
+            return names
+        except Exception:
+            return []
+
+    def _safe_side_condition_names(self, battle):
+        """Extract side-condition names."""
+        try:
+            sc = getattr(battle, "side_conditions", None) or {}
+            if isinstance(sc, dict):
+                return [str(k).lower() for k in sc.keys()]
+            return []
+        except Exception:
+            return []
+
+    def _safe_get_last_opp_signal(self, battle, key):
+        """Read from _last_opp_action_signals (or compatible)."""
+        try:
+            sig = getattr(self, "_last_opp_action_signals", None) or {}
+            return bool(sig.get(key, False))
+        except Exception:
+            return False
+
+    def _safe_opp_pressure(self, battle):
+        """Reuse existing _slot_in_opp_pressure helper (best-effort)."""
+        try:
+            return bool(self._slot_in_opp_pressure(0, battle))
+        except Exception:
+            return False
+
+    def _safe_active_hp_fraction(self, battle, slot):
+        try:
+            active = getattr(battle, "active_pokemon", None) or []
+            if slot < 0 or slot >= len(active) or active[slot] is None:
+                return 1.0
+            p = active[slot]
+            frac = getattr(p, "current_hp_fraction", None)
+            if frac is not None:
+                return float(frac)
+            cur = getattr(p, "current_hp", None)
+            mx = getattr(p, "max_hp", None)
+            if cur is not None and mx and mx > 0:
+                return float(cur) / float(mx)
+            return 1.0
+        except Exception:
+            return 1.0
+
+    def _safe_expected_to_faint(self, battle, slot):
+        try:
+            bt = getattr(battle, "battle_tag", "")
+            slot_map = self._expected_to_faint_before_moving.get(bt, {})
+            return bool(slot_map.get(slot, False))
+        except Exception:
+            return False
+
     def _compute_opp_setup_signal(
         self, battle, target_slot: int, scoring_move: str
     ) -> float:
@@ -7561,6 +7716,30 @@ class DoublesDamageAwarePlayer(Player):
     def choose_move(self, battle: AbstractBattle) -> BattleOrder:
         if not isinstance(battle, DoubleBattle):
             return self.choose_random_move(battle)
+
+        # PLANNER-IMPL-2: per-turn intent detector (observational only).
+        # When enable_planner_intent_detector is False, this block is
+        # skipped entirely — no behavior change, no audit, no scoring.
+        # When True, it stores an IntentDecision on self AND on
+        # battle._planner_intent_decision for the audit logger.
+        # NO scoring change. NO default flip.
+        if getattr(
+            self.config, "enable_planner_intent_detector", False
+        ):
+            decision = self._run_planner_intent_detector(battle)
+            self._planner_intent_decision = decision
+            # Attach to battle so the audit logger can read it
+            try:
+                setattr(battle, "_planner_intent_decision", decision)
+            except Exception:
+                pass
+        else:
+            # Default OFF path: no detector run, no decision.
+            self._planner_intent_decision = None
+            try:
+                setattr(battle, "_planner_intent_decision", None)
+            except Exception:
+                pass
 
         # Phase BEHAVIOR-17: reset the per-turn Protect
         # floor diagnostic for this battle_tag. The dict
