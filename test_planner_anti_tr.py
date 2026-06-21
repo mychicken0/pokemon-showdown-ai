@@ -19,8 +19,8 @@ def make_player():
     """Make a player with the anti-TR response enabled."""
     config = DoublesDamageAwareConfig()
     config.enable_anti_trick_room_response = True
-    config.anti_trick_room_response_bonus = 200.0
-    config.anti_trick_room_ko_bonus = 100.0
+    config.anti_trick_room_response_bonus = 500.0
+    config.anti_trick_room_ko_bonus = 200.0
 
     player = mod.DoublesDamageAwarePlayer.__new__(mod.DoublesDamageAwarePlayer)
     player.config = config

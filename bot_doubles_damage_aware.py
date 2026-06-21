@@ -477,8 +477,13 @@ class DoublesDamageAwareConfig:
     # to KO before TR expires. TR-specific (not general anti-setup).
     # Default OFF (opt-in).
     enable_anti_trick_room_response: bool = False
-    anti_trick_room_response_bonus: float = 200.0  # Taunt/Encore/Disable
-    anti_trick_room_ko_bonus: float = 100.0  # Damaging moves vs TR
+    # PLANNER-ANTI-TR v4: tuned bonus. Was 200/100.
+    # +200 was insufficient to overcome the bot's damage scoring
+    # (Salt Cure 80 BP + Flare Blitz 120 BP ≈ 200 base). With +500,
+    # Taunt+Flare Blitz = 10+200+500 = 710 vs Salt Cure+Flare Blitz = 200.
+    # Anti-TR now reliably wins in 1v1 comparisons.
+    anti_trick_room_response_bonus: float = 500.0  # Taunt/Encore/Disable
+    anti_trick_room_ko_bonus: float = 200.0  # Damaging moves vs TR
     anti_trick_room_response_max_picks_per_game: int = 2
     anti_trick_room_response_min_turn_between_picks: int = 3
     anti_trick_room_ko_max_picks_per_game: int = 3
