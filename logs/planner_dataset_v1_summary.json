@@ -1,0 +1,176 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "anti_tr_basic",
+      "family": "anti_tr",
+      "priority": "P0",
+      "intent_label": "ANTI_TRICK_ROOM",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 7,
+      "battles": 1
+    },
+    {
+      "scenario_id": "anti_tw_basic",
+      "family": "anti_tw",
+      "priority": "P0",
+      "intent_label": "ANTI_TAILWIND",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 6,
+      "battles": 1
+    },
+    {
+      "scenario_id": "anti_stat_boost_basic",
+      "family": "anti_boost",
+      "priority": "P0",
+      "intent_label": "ANTI_STAT_BOOST",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 5,
+      "battles": 1
+    },
+    {
+      "scenario_id": "spread_def_heat_wave",
+      "family": "spread_def",
+      "priority": "P1",
+      "intent_label": "SPREAD_DEFENSE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 7,
+      "battles": 1
+    },
+    {
+      "scenario_id": "redir_followme_basic",
+      "family": "redir",
+      "priority": "P1",
+      "intent_label": "REDIRECTION_RESPONSE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 5,
+      "battles": 1
+    },
+    {
+      "scenario_id": "spread_def_rock_slide",
+      "family": "spread_def",
+      "priority": "P1",
+      "intent_label": "SPREAD_DEFENSE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 11,
+      "battles": 1
+    },
+    {
+      "scenario_id": "spread_def_earthquake",
+      "family": "spread_def",
+      "priority": "P1",
+      "intent_label": "SPREAD_DEFENSE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 6,
+      "battles": 1
+    },
+    {
+      "scenario_id": "weather_rain_basic",
+      "family": "weather",
+      "priority": "P2",
+      "intent_label": "WEATHER_CONTROL",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 8,
+      "battles": 1
+    },
+    {
+      "scenario_id": "beatup_justified_basic",
+      "family": "beatup_justified",
+      "priority": "P2",
+      "intent_label": "COMBO_ENABLE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 14,
+      "battles": 1
+    },
+    {
+      "scenario_id": "terrain_psychic_basic",
+      "family": "terrain",
+      "priority": "P2",
+      "intent_label": "TERRAIN_CONTROL",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 4,
+      "battles": 1
+    },
+    {
+      "scenario_id": "terrain_electric_basic",
+      "family": "terrain",
+      "priority": "P2",
+      "intent_label": "TERRAIN_CONTROL",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 11,
+      "battles": 1
+    },
+    {
+      "scenario_id": "terrain_grassy_basic",
+      "family": "terrain",
+      "priority": "P2",
+      "intent_label": "TERRAIN_CONTROL",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 5,
+      "battles": 1
+    },
+    {
+      "scenario_id": "redir_followme_true_basic",
+      "family": "redir",
+      "priority": "P1",
+      "intent_label": "REDIRECTION_RESPONSE",
+      "status": "ok",
+      "canonical_signal": true,
+      "rows": 12,
+      "battles": 1
+    }
+  ],
+  "totals": {
+    "scenarios_processed": 13,
+    "scenarios_failed": 0,
+    "total_rows": 101,
+    "total_battles": 13,
+    "rows_per_scenario": {
+      "anti_tr_basic": 7,
+      "anti_tw_basic": 6,
+      "anti_stat_boost_basic": 5,
+      "spread_def_heat_wave": 7,
+      "redir_followme_basic": 5,
+      "spread_def_rock_slide": 11,
+      "spread_def_earthquake": 6,
+      "weather_rain_basic": 8,
+      "beatup_justified_basic": 14,
+      "terrain_psychic_basic": 4,
+      "terrain_electric_basic": 11,
+      "terrain_grassy_basic": 5,
+      "redir_followme_true_basic": 12
+    },
+    "rows_per_turn_range": {},
+    "intents": {
+      "ANTI_TRICK_ROOM": 7,
+      "ANTI_TAILWIND": 6,
+      "ANTI_STAT_BOOST": 5,
+      "SPREAD_DEFENSE": 24,
+      "REDIRECTION_RESPONSE": 17,
+      "WEATHER_CONTROL": 8,
+      "COMBO_ENABLE": 14,
+      "TERRAIN_CONTROL": 20
+    },
+    "families": {
+      "anti_tr": 7,
+      "anti_tw": 6,
+      "anti_boost": 5,
+      "spread_def": 24,
+      "redir": 17,
+      "weather": 8,
+      "beatup_justified": 14,
+      "terrain": 20
+    }
+  }
+}
