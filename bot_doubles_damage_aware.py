@@ -471,6 +471,20 @@ class DoublesDamageAwareConfig:
     anti_setup_disruption_require_survival: bool = True
     anti_setup_disruption_min_opp_setup_signal: float = 1.0
 
+    # PLANNER-ANTI-TR: opt-in Anti-Trick Room response.
+    # When opp has TR (active or revealed), boost Taunt/Encore/Disable
+    # to disrupt the TR setter, and boost damaging moves (KO pressure)
+    # to KO before TR expires. TR-specific (not general anti-setup).
+    # Default OFF (opt-in).
+    enable_anti_trick_room_response: bool = False
+    anti_trick_room_response_bonus: float = 200.0  # Taunt/Encore/Disable
+    anti_trick_room_ko_bonus: float = 100.0  # Damaging moves vs TR
+    anti_trick_room_response_max_picks_per_game: int = 2
+    anti_trick_room_response_min_turn_between_picks: int = 3
+    anti_trick_room_ko_max_picks_per_game: int = 3
+    anti_trick_room_ko_min_turn_between_picks: int = 1
+    anti_trick_room_response_require_survival: bool = True
+
     # PLANNER-IMPL-2: opt-in per-turn intent detector.
     # When True, the bot runs IntentDetector.detect() per
     # turn and writes observational audit fields
@@ -4782,6 +4796,225 @@ class DoublesDamageAwarePlayer(Player):
             return False
         return True
 
+    def _anti_trick_room_response_eligible(
+        self, order, active_idx: int, battle
+    ) -> bool:
+        """PLANNER-ANTI-TR: return True if the
+        anti-TR disruption bonus should apply.
+
+        Guards (all must pass):
+        0. ``enable_anti_trick_room_response``
+           is True (master switch).
+        1. ``order`` is Taunt, Encore, or Disable
+           (NOT Quash — Quash is for setup disruption, not TR).
+        2. The IntentDetector fired ANTI_TRICK_ROOM
+           (read from battle._planner_intent_decision).
+        3. Active user survives this turn
+           (HP > 25% or
+           ``anti_trick_room_response_require_survival=False``).
+        4. Target is opp slot 1 or 2.
+        5. Anti-spam: per-game pick count
+           < ``anti_trick_room_response_max_picks_per_game``
+           AND turns since last pick
+           >= ``anti_trick_room_response_min_turn_between_picks``.
+        """
+        # Guard 0: master switch
+        if not getattr(
+            self.config, "enable_anti_trick_room_response", False
+        ):
+            return False
+        # Guard 1: move is Taunt/Encore/Disable
+        if not isinstance(getattr(order, "order", None), Move):
+            return False
+        move_id_raw = getattr(order.order, "id", "")
+        move_id_norm = (
+            str(move_id_raw or "").lower()
+            .replace(" ", "").replace("-", "")
+            .replace("_", "").replace("'", "")
+        )
+        if move_id_norm not in ("taunt", "encore", "disable"):
+            return False
+        # Guard 2: ANTI_TRICK_ROOM intent fired
+        decision = getattr(battle, "_planner_intent_decision", None)
+        if decision is None:
+            return False
+        if getattr(decision, "intent", None) != "ANTI_TRICK_ROOM":
+            return False
+        # Guard 3: active user survives
+        if getattr(
+            self.config,
+            "anti_trick_room_response_require_survival", True
+        ):
+            try:
+                our_active = (
+                    battle.active_pokemon[active_idx]
+                    if active_idx < len(battle.active_pokemon)
+                    else None
+                )
+                if our_active is not None:
+                    hp_frac = getattr(
+                        our_active, "current_hp_fraction", 1.0
+                    )
+                    if hp_frac is not None and hp_frac < 0.25:
+                        return False
+            except Exception:
+                pass
+        # Guard 4: target is opp slot 1 or 2
+        target_str = getattr(order, "move_target", None)
+        if target_str not in (1, 2):
+            return False
+        # Guard 5: anti-spam
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return False
+        if not hasattr(
+            self, "_anti_trick_room_response_picks_per_game"
+        ):
+            self._anti_trick_room_response_picks_per_game = {}
+        if not hasattr(
+            self, "_anti_trick_room_response_last_pick_turn"
+        ):
+            self._anti_trick_room_response_last_pick_turn = {}
+        max_picks = int(getattr(
+            self.config,
+            "anti_trick_room_response_max_picks_per_game", 2
+        ))
+        current_picks = (
+            self._anti_trick_room_response_picks_per_game
+            .get(battle_tag, 0)
+        )
+        if current_picks >= max_picks:
+            return False
+        current_turn = int(getattr(battle, "turn", 0) or 0)
+        last_turn = self._anti_trick_room_response_last_pick_turn.get(
+            battle_tag, -999
+        )
+        min_gap = int(getattr(
+            self.config,
+            "anti_trick_room_response_min_turn_between_picks", 3
+        ))
+        if current_turn - last_turn < min_gap:
+            return False
+        return True
+
+    def _anti_trick_room_ko_pressure_eligible(
+        self, order, active_idx: int, battle
+    ) -> bool:
+        """PLANNER-ANTI-TR: return True if the
+        KO pressure bonus should apply to a damaging move.
+
+        When ANTI_TRICK_ROOM is fired, the bot should favor
+        damaging moves to KO the TR setter before TR expires.
+        The bonus is smaller than the anti-setup bonus
+        (200 vs 100) to avoid over-prioritizing damage.
+
+        Guards (all must pass):
+        0. ``enable_anti_trick_room_response`` is True.
+        1. ``order`` is a damaging move (BP > 0).
+        2. ANTI_TRICK_ROOM intent fired.
+        3. Target is opp slot 1 or 2.
+        4. Anti-spam.
+        """
+        # Guard 0: master switch
+        if not getattr(
+            self.config, "enable_anti_trick_room_response", False
+        ):
+            return False
+        # Guard 1: damaging move
+        if not isinstance(getattr(order, "order", None), Move):
+            return False
+        bp = getattr(order.order, "base_power", 0)
+        if bp is None or bp <= 0:
+            return False
+        # Guard 2: ANTI_TRICK_ROOM intent
+        decision = getattr(battle, "_planner_intent_decision", None)
+        if decision is None:
+            return False
+        if getattr(decision, "intent", None) != "ANTI_TRICK_ROOM":
+            return False
+        # Guard 3: target is opp slot 1 or 2
+        target_str = getattr(order, "move_target", None)
+        if target_str not in (1, 2):
+            return False
+        # Guard 4: anti-spam
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return False
+        if not hasattr(
+            self, "_anti_trick_room_ko_picks_per_game"
+        ):
+            self._anti_trick_room_ko_picks_per_game = {}
+        if not hasattr(
+            self, "_anti_trick_room_ko_last_pick_turn"
+        ):
+            self._anti_trick_room_ko_last_pick_turn = {}
+        max_picks = int(getattr(
+            self.config,
+            "anti_trick_room_ko_max_picks_per_game", 3
+        ))
+        current_picks = (
+            self._anti_trick_room_ko_picks_per_game.get(battle_tag, 0)
+        )
+        if current_picks >= max_picks:
+            return False
+        current_turn = int(getattr(battle, "turn", 0) or 0)
+        last_turn = self._anti_trick_room_ko_last_pick_turn.get(
+            battle_tag, -999
+        )
+        min_gap = int(getattr(
+            self.config,
+            "anti_trick_room_ko_min_turn_between_picks", 1
+        ))
+        if current_turn - last_turn < min_gap:
+            return False
+        return True
+
+    def _record_anti_trick_room_response_pick(
+        self, battle, active_idx: int
+    ) -> None:
+        """PLANNER-ANTI-TR: record a Taunt/Encore/Disable pick."""
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return
+        if not hasattr(
+            self, "_anti_trick_room_response_picks_per_game"
+        ):
+            self._anti_trick_room_response_picks_per_game = {}
+        if not hasattr(
+            self, "_anti_trick_room_response_last_pick_turn"
+        ):
+            self._anti_trick_room_response_last_pick_turn = {}
+        self._anti_trick_room_response_picks_per_game[battle_tag] = (
+            self._anti_trick_room_response_picks_per_game
+            .get(battle_tag, 0) + 1
+        )
+        self._anti_trick_room_response_last_pick_turn[battle_tag] = (
+            int(getattr(battle, "turn", 0) or 0)
+        )
+
+    def _record_anti_trick_room_ko_pick(
+        self, battle, active_idx: int
+    ) -> None:
+        """PLANNER-ANTI-TR: record a KO pressure damaging pick."""
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return
+        if not hasattr(
+            self, "_anti_trick_room_ko_picks_per_game"
+        ):
+            self._anti_trick_room_ko_picks_per_game = {}
+        if not hasattr(
+            self, "_anti_trick_room_ko_last_pick_turn"
+        ):
+            self._anti_trick_room_ko_last_pick_turn = {}
+        self._anti_trick_room_ko_picks_per_game[battle_tag] = (
+            self._anti_trick_room_ko_picks_per_game
+            .get(battle_tag, 0) + 1
+        )
+        self._anti_trick_room_ko_last_pick_turn[battle_tag] = (
+            int(getattr(battle, "turn", 0) or 0)
+        )
+
     def _run_planner_intent_detector(self, battle):
         """PLANNER-IMPL-2: per-turn intent detector runner.
 
@@ -5567,6 +5800,31 @@ class DoublesDamageAwarePlayer(Player):
             ):
                 score = float(score) + float(
                     self.config.anti_setup_disruption_bonus
+                )
+            # PLANNER-ANTI-TR: opt-in TR-specific response.
+            # When opp has TR (active or revealed), boost
+            # Taunt/Encore/Disable to disrupt the TR setter.
+            # Default OFF. TR-specific (not general anti-setup).
+            if self._anti_trick_room_response_eligible(
+                order, active_idx, battle
+            ):
+                score = float(score) + float(
+                    self.config.anti_trick_room_response_bonus
+                )
+                self._record_anti_trick_room_response_pick(
+                    battle, active_idx
+                )
+            # PLANNER-ANTI-TR: KO pressure on damaging moves.
+            # When opp has TR, favor damaging moves to KO before
+            # TR expires. Smaller bonus than anti-setup.
+            if self._anti_trick_room_ko_pressure_eligible(
+                order, active_idx, battle
+            ):
+                score = float(score) + float(
+                    self.config.anti_trick_room_ko_bonus
+                )
+                self._record_anti_trick_room_ko_pick(
+                    battle, active_idx
                 )
             # PLANNER-SPREAD-2: opt-in narrow spread defense
             # scoring. Applies ONLY to Wide Guard candidates,
