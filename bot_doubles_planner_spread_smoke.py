@@ -43,7 +43,14 @@ from bot_vgc2026_phaseV2c import build_team_string, validate_team_for_battle
 # 5 pairs: bot team (with Wide Guard) vs custom opp teams (with spread moves)
 # Our team has Wide Guard on incineroar
 # Opp teams have heatwave/dazzlinggleam/rockslide/earthquake/snarl
-CUSTOM_OUR_TEAM = "data/curated_teams/custom/planner_spread_wg_test_team.json"
+# PLANNER-SPREAD-5: 4 WG team variations × 5 opp teams = 20 pairs
+WG_TEAM_PATHS = [
+    "data/curated_teams/custom/planner_spread_wg_test_team.json",
+    "data/curated_teams/custom/planner_spread_wg_pelipper.json",
+    "data/curated_teams/custom/planner_spread_wg_incineroar.json",
+    "data/curated_teams/custom/planner_spread_wg_whimsicott.json",
+]
+WG_TEAM_TAGS = ["arcanine", "pelipper", "incineroar", "whimsicott"]
 CUSTOM_OPP_TEAMS = [
     ("data/curated_teams/custom/planner_spread_opp_heatwave.json", "heatwave_opp"),
     ("data/curated_teams/custom/planner_spread_opp_rockslide.json", "rockslide_opp"),
@@ -51,13 +58,13 @@ CUSTOM_OPP_TEAMS = [
     ("data/curated_teams/custom/planner_spread_opp_dazzlinggleam.json", "dazzlinggleam_opp"),
     ("data/curated_teams/custom/planner_spread_opp_hypervoice.json", "hypervoice_opp"),
 ]
-PAIRS = [
-    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[0][0], "wg_vs_heatwave"),
-    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[1][0], "wg_vs_rockslide"),
-    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[2][0], "wg_vs_snarl"),
-    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[3][0], "wg_vs_dazzlinggleam"),
-    (CUSTOM_OUR_TEAM, CUSTOM_OPP_TEAMS[4][0], "wg_vs_hypervoice"),
-]
+OPP_TAGS = ["heatwave", "rockslide", "snarl", "dazzlinggleam", "hypervoice"]
+# Build PAIRS: 4 WG × 5 opp = 20 pairs
+PAIRS = []
+for wg_path, wg_tag in zip(WG_TEAM_PATHS, WG_TEAM_TAGS):
+    for opp_path, opp_tag in CUSTOM_OPP_TEAMS:
+        label = f"wg_{wg_tag}_vs_{opp_tag}"
+        PAIRS.append((wg_path, opp_path, label))
 
 # Battle format: VGC 2026 Champions
 BATTLE_FORMAT = "gen9championsvgc2026regma"

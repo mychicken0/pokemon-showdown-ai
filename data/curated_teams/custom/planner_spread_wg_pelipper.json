@@ -1,0 +1,59 @@
+{
+  "id": "planner_spread_wg_pelipper_v1",
+  "team": [
+    {
+      "species": "Garganacl",
+      "ability": "Purifying Salt",
+      "item": "Leftovers",
+      "nature": "Careful",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Salt Cure", "Earthquake", "Wide Guard", "Stealth Rock"]
+    },
+    {
+      "species": "Pelipper",
+      "ability": "Drizzle",
+      "item": "Choice Scarf",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Hurricane", "Hydro Pump", "Surf", "Protect"]
+    },
+    {
+      "species": "Araquanid",
+      "ability": "Water Bubble",
+      "item": "Sitrus Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Liquidation", "Leech Life", "Wide Guard", "Protect"]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Kowtow Cleave", "Sucker Punch", "Iron Head", "Protect"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Lum Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Heat Wave", "Quiver Dance", "Protect", "Bug Buzz"]
+    }
+  ]
+}
