@@ -1,20 +1,20 @@
 {
-  "id": "planner_spread_wg_test_v8",
+  "id": "planner_spread_wg_garganacl_v2",
   "team": [
     {
-      "species": "Corviknight",
-      "ability": "Pressure",
+      "species": "Garganacl",
+      "ability": "Purifying Salt",
       "item": "Leftovers",
-      "nature": "Impish",
+      "nature": "Careful",
       "level": 50,
       "evs": {
         "hp": 4
       },
       "moves": [
+        "Salt Cure",
+        "Earthquake",
         "Wide Guard",
-        "Brave Bird",
-        "Roost",
-        "Protect"
+        "Stealth Rock"
       ]
     },
     {

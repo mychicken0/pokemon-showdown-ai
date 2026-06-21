@@ -1,10 +1,10 @@
 {
-  "id": "planner_spread_opp_snarl_v2",
+  "id": "planner_spread_opp_snarl_v5",
   "team": [
     {
       "species": "Hydreigon",
       "ability": "Levitate",
-      "item": "Choice Specs",
+      "item": "Leftovers",
       "nature": "Modest",
       "level": 50,
       "evs": {
@@ -31,22 +31,6 @@
         "Quiver Dance",
         "Protect",
         "Bug Buzz"
-      ]
-    },
-    {
-      "species": "Iron Moth",
-      "ability": "Quark Drive",
-      "item": "Booster Energy",
-      "nature": "Timid",
-      "level": 50,
-      "evs": {
-        "hp": 4
-      },
-      "moves": [
-        "Heat Wave",
-        "Sludge Wave",
-        "Dazzling Gleam",
-        "Protect"
       ]
     },
     {
@@ -94,6 +78,22 @@
         "Rock Slide",
         "Crunch",
         "Dragon Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Kowtow Cleave",
+        "Sucker Punch",
+        "Iron Head",
         "Protect"
       ]
     }

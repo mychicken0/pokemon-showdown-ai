@@ -1,5 +1,5 @@
 {
-  "id": "planner_spread_opp_rockslide_v2",
+  "id": "planner_spread_opp_rockslide_v5",
   "team": [
     {
       "species": "Garchomp",
@@ -34,22 +34,6 @@
       ]
     },
     {
-      "species": "Landorus",
-      "ability": "Intimidate",
-      "item": "Choice Scarf",
-      "nature": "Jolly",
-      "level": 50,
-      "evs": {
-        "hp": 4
-      },
-      "moves": [
-        "Earthquake",
-        "Rock Slide",
-        "U-turn",
-        "Protect"
-      ]
-    },
-    {
       "species": "Arcanine",
       "ability": "Intimidate",
       "item": "Sitrus Berry",
@@ -66,22 +50,6 @@
       ]
     },
     {
-      "species": "Dragonite",
-      "ability": "Multiscale",
-      "item": "Choice Band",
-      "nature": "Adamant",
-      "level": 50,
-      "evs": {
-        "hp": 4
-      },
-      "moves": [
-        "Extreme Speed",
-        "Outrage",
-        "Ice Punch",
-        "Protect"
-      ]
-    },
-    {
       "species": "Volcarona",
       "ability": "Flame Body",
       "item": "Lum Berry",
@@ -95,6 +63,38 @@
         "Quiver Dance",
         "Protect",
         "Bug Buzz"
+      ]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Kowtow Cleave",
+        "Sucker Punch",
+        "Iron Head",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Hydreigon",
+      "ability": "Levitate",
+      "item": "Leftovers",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dark Pulse",
+        "Fire Blast",
+        "Draco Meteor",
+        "Protect"
       ]
     }
   ]
