@@ -1,0 +1,101 @@
+{
+  "id": "general_opp_tw_v1",
+  "team": [
+    {
+      "species": "Whimsicott",
+      "ability": "Prankster",
+      "item": "Leftovers",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Tailwind",
+        "Moonblast",
+        "Encore",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Sitrus Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Bug Buzz",
+        "Psychic",
+        "Quiver Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Lum Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Flare Blitz",
+        "Extreme Speed",
+        "Crunch",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Shuca Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dragon Claw",
+        "Iron Head",
+        "Scale Shot",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Yache Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Kowtow Cleave",
+        "Sucker Punch",
+        "Iron Head",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Gardevoir",
+      "ability": "Trace",
+      "item": "Choice Scarf",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Moonblast",
+        "Psyshock",
+        "Thunderbolt",
+        "Protect"
+      ]
+    }
+  ]
+}

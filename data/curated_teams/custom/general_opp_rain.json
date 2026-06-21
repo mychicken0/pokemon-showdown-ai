@@ -1,0 +1,101 @@
+{
+  "id": "general_opp_rain_v1",
+  "team": [
+    {
+      "species": "Pelipper",
+      "ability": "Drizzle",
+      "item": "Leftovers",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Hurricane",
+        "Hydro Pump",
+        "Surf",
+        "U-turn"
+      ]
+    },
+    {
+      "species": "Rotom-Wash",
+      "ability": "Levitate",
+      "item": "Sitrus Berry",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Volt Switch",
+        "Hydro Pump",
+        "Will-O-Wisp",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Primarina",
+      "ability": "Torrent",
+      "item": "Lum Berry",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Moonblast",
+        "Psychic",
+        "Ice Beam",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Shuca Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dragon Claw",
+        "Iron Head",
+        "Scale Shot",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Yache Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Bug Buzz",
+        "Psychic",
+        "Quiver Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Choice Scarf",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Flare Blitz",
+        "Extreme Speed",
+        "Crunch",
+        "Protect"
+      ]
+    }
+  ]
+}

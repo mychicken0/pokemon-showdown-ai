@@ -1,0 +1,101 @@
+{
+  "id": "general_opp_tr_v1",
+  "team": [
+    {
+      "species": "Hatterene",
+      "ability": "Magic Bounce",
+      "item": "Leftovers",
+      "nature": "Quiet",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Trick Room",
+        "Mystical Fire",
+        "Psyshock",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Gardevoir",
+      "ability": "Trace",
+      "item": "Sitrus Berry",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Moonblast",
+        "Psyshock",
+        "Thunderbolt",
+        "Trick Room"
+      ]
+    },
+    {
+      "species": "Primarina",
+      "ability": "Torrent",
+      "item": "Lum Berry",
+      "nature": "Quiet",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Moonblast",
+        "Psychic",
+        "Protect",
+        "Whirlpool"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Shuca Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Bug Buzz",
+        "Psychic",
+        "Quiver Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Yache Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Crunch",
+        "Stone Edge",
+        "Ice Punch",
+        "Dragon Dance"
+      ]
+    },
+    {
+      "species": "Hydreigon",
+      "ability": "Levitate",
+      "item": "Choice Scarf",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dark Pulse",
+        "Draco Meteor",
+        "Flamethrower",
+        "Protect"
+      ]
+    }
+  ]
+}

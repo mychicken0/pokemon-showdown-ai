@@ -1,0 +1,101 @@
+{
+  "id": "general_opp_bulky_v1",
+  "team": [
+    {
+      "species": "Incineroar",
+      "ability": "Intimidate",
+      "item": "Leftovers",
+      "nature": "Careful",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Fake Out",
+        "Flare Blitz",
+        "Thunder Punch",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Sitrus Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Bug Buzz",
+        "Psychic",
+        "Quiver Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Lum Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dragon Claw",
+        "Iron Head",
+        "Scale Shot",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Shuca Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Crunch",
+        "Stone Edge",
+        "Ice Punch",
+        "Dragon Dance"
+      ]
+    },
+    {
+      "species": "Clefable",
+      "ability": "Magic Guard",
+      "item": "Yache Berry",
+      "nature": "Calm",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Moonblast",
+        "Thunder Wave",
+        "Moonlight",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Choice Scarf",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Kowtow Cleave",
+        "Sucker Punch",
+        "Iron Head",
+        "Protect"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "id": "general_opp_sun_v1",
+  "team": [
+    {
+      "species": "Torkoal",
+      "ability": "Drought",
+      "item": "Leftovers",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Flamethrower",
+        "Earth Power",
+        "Solar Beam",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Sitrus Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Bug Buzz",
+        "Psychic",
+        "Quiver Dance",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Venusaur",
+      "ability": "Chlorophyll",
+      "item": "Lum Berry",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Solar Beam",
+        "Sludge Bomb",
+        "Earth Power",
+        "Sleep Powder"
+      ]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Shuca Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Flare Blitz",
+        "Extreme Speed",
+        "Crunch",
+        "Protect"
+      ]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Yache Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Crunch",
+        "Stone Edge",
+        "Ice Punch",
+        "Dragon Dance"
+      ]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {
+        "hp": 4
+      },
+      "moves": [
+        "Dragon Claw",
+        "Iron Head",
+        "Scale Shot",
+        "Protect"
+      ]
+    }
+  ]
+}

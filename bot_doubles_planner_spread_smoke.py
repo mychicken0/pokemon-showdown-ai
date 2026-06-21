@@ -59,12 +59,29 @@ CUSTOM_OPP_TEAMS = [
     ("data/curated_teams/custom/planner_spread_opp_hypervoice.json", "hypervoice_opp"),
 ]
 OPP_TAGS = ["heatwave", "rockslide", "snarl", "dazzlinggleam", "hypervoice"]
-# Build PAIRS: 4 WG × 5 opp = 20 pairs
+# PLANNER-SPREAD-9: general pool opp teams (NO spread moves)
+# These are common VGC Champions-legal teams without heatwave/rockslide/etc.
+# Used to verify that WG is NOT over-selected when opp has no spread pressure.
+GENERAL_OPP_TEAMS = [
+    ("data/curated_teams/custom/general_opp_tr.json", "tr_opp"),
+    ("data/curated_teams/custom/general_opp_sun.json", "sun_opp"),
+    ("data/curated_teams/custom/general_opp_rain.json", "rain_opp"),
+    ("data/curated_teams/custom/general_opp_tw.json", "tw_opp"),
+    ("data/curated_teams/custom/general_opp_bulky.json", "bulky_opp"),
+]
+GENERAL_OPP_TAGS = ["tr", "sun", "rain", "tw", "bulky"]
+# Build PAIRS: 4 WG × 5 opp = 20 pairs (targeted)
 PAIRS = []
 for wg_path, wg_tag in zip(WG_TEAM_PATHS, WG_TEAM_TAGS):
     for opp_path, opp_tag in CUSTOM_OPP_TEAMS:
         label = f"wg_{wg_tag}_vs_{opp_tag}"
         PAIRS.append((wg_path, opp_path, label))
+# Build GENERAL_PAIRS: 4 WG × 5 general opp = 20 pairs
+GENERAL_PAIRS = []
+for wg_path, wg_tag in zip(WG_TEAM_PATHS, WG_TEAM_TAGS):
+    for opp_path, opp_tag in GENERAL_OPP_TEAMS:
+        label = f"wg_{wg_tag}_vs_{opp_tag}"
+        GENERAL_PAIRS.append((wg_path, opp_path, label))
 
 # Battle format: VGC 2026 Champions
 BATTLE_FORMAT = "gen9championsvgc2026regma"
