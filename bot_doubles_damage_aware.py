@@ -486,6 +486,25 @@ class DoublesDamageAwareConfig:
     enable_planner_intent_detector: bool = False
     planner_intent_min_confidence: float = 0.5
 
+    # PLANNER-SPREAD-2: opt-in narrow spread defense scoring.
+    # When True, the bot uses the per-turn IntentDetector
+    # (enable_planner_intent_detector) decision to boost
+    # Wide Guard candidates. Default OFF. NO default flip.
+    # Only fires when the intent is SPREAD_DEFENSE with
+    # sufficient confidence.
+    # Requires:
+    #   - enable_planner_intent_detector = True
+    #   - intent = SPREAD_DEFENSE
+    #   - confidence >= planner_spread_defense_min_confidence
+    #   - Wide Guard is the move (per existing normalization)
+    #   - opp pressure detected (reuses _slot_in_opp_pressure)
+    enable_planner_spread_defense_scoring: bool = False
+    planner_spread_defense_wg_bonus: float = 150.0
+    planner_spread_defense_min_confidence: float = 0.5
+    # Anti-spam: max picks per game, min turns between picks.
+    planner_spread_defense_max_picks_per_game: int = 3
+    planner_spread_defense_min_turn_between_picks: int = 2
+
     # Phase ACCURACY-2: opt-in hard-safety block
     # for damaging moves targeting self (target=-1)
     # or ally (target=-2). When True, sets v2l1
@@ -4105,6 +4124,114 @@ class DoublesDamageAwarePlayer(Player):
         del active_idx  # currently unused
         return compute_opp_pressure_state_for_battle(battle)
 
+    def _planner_spread_defense_eligible(
+        self, order, active_idx: int, battle
+    ) -> bool:
+        """PLANNER-SPREAD-2: return True if the
+        Wide Guard boost should apply to this order.
+
+        Guards (all must pass):
+        0. ``enable_planner_spread_defense_scoring`` is True
+           (master switch).
+        1. ``enable_planner_intent_detector`` is True
+           (the detector must be running).
+        2. The current turn's IntentDecision is set and
+           intent == "SPREAD_DEFENSE".
+        3. ``order`` is Wide Guard.
+        4. Confidence >= ``planner_spread_defense_min_confidence``.
+        5. Opp pressure detected (reuse ``_slot_in_opp_pressure``).
+        6. Anti-spam: per-game pick count
+           < ``planner_spread_defense_max_picks_per_game`` AND
+           turns since last pick >=
+           ``planner_spread_defense_min_turn_between_picks``.
+        """
+        # Guard 0: master switch
+        if not getattr(
+            self.config, "enable_planner_spread_defense_scoring", False
+        ):
+            return False
+        # Guard 1: detector must be running
+        if not getattr(
+            self.config, "enable_planner_intent_detector", False
+        ):
+            return False
+        # Guard 2: intent decision exists and is SPREAD_DEFENSE
+        # Read from battle (where choose_move attaches it) or self
+        decision = getattr(battle, "_planner_intent_decision", None)
+        if decision is None:
+            decision = getattr(self, "_planner_intent_decision", None)
+        if decision is None:
+            return False
+        if getattr(decision, "intent", None) != "SPREAD_DEFENSE":
+            return False
+        # Guard 3: move is Wide Guard
+        if not isinstance(getattr(order, "order", None), Move):
+            return False
+        move_id_raw = getattr(order.order, "id", "")
+        move_id_norm = (
+            str(move_id_raw or "").lower()
+            .replace(" ", "").replace("-", "")
+            .replace("_", "").replace("'", "")
+        )
+        if move_id_norm != "wideguard":
+            return False
+        # Guard 4: confidence
+        min_conf = float(getattr(
+            self.config, "planner_spread_defense_min_confidence", 0.5
+        ))
+        if float(getattr(decision, "confidence", 0.0)) < min_conf:
+            return False
+        # Guard 5: opp pressure (reuse existing helper)
+        if not self._slot_in_opp_pressure(active_idx, battle):
+            return False
+        # Guard 6: anti-spam
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return False
+        # Initialize per-game pick counter if needed
+        if not hasattr(self, "_planner_spread_defense_picks_per_game"):
+            self._planner_spread_defense_picks_per_game = {}
+        if not hasattr(self, "_planner_spread_defense_last_pick_turn"):
+            self._planner_spread_defense_last_pick_turn = {}
+        max_picks = int(getattr(
+            self.config,
+            "planner_spread_defense_max_picks_per_game", 3
+        ))
+        current_picks = self._planner_spread_defense_picks_per_game.get(
+            battle_tag, 0
+        )
+        if current_picks >= max_picks:
+            return False
+        min_gap = int(getattr(
+            self.config,
+            "planner_spread_defense_min_turn_between_picks", 2
+        ))
+        current_turn = int(getattr(battle, "turn", 0) or 0)
+        last_pick_turn = self._planner_spread_defense_last_pick_turn.get(
+            battle_tag, -999
+        )
+        if current_turn - last_pick_turn < min_gap:
+            return False
+        return True
+
+    def _planner_spread_defense_record_pick(
+        self, battle, active_idx: int,
+    ) -> None:
+        """PLANNER-SPREAD-2: record a Wide Guard pick for anti-spam."""
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return
+        if not hasattr(self, "_planner_spread_defense_picks_per_game"):
+            self._planner_spread_defense_picks_per_game = {}
+        if not hasattr(self, "_planner_spread_defense_last_pick_turn"):
+            self._planner_spread_defense_last_pick_turn = {}
+        self._planner_spread_defense_picks_per_game[battle_tag] = (
+            self._planner_spread_defense_picks_per_game.get(battle_tag, 0) + 1
+        )
+        self._planner_spread_defense_last_pick_turn[battle_tag] = int(
+            getattr(battle, "turn", 0) or 0
+        )
+
     def _setup_intent_speed_setup_eligible(
         self, order, active_idx: int, battle
     ) -> bool:
@@ -5299,6 +5426,25 @@ class DoublesDamageAwarePlayer(Player):
             ):
                 score = float(score) + float(
                     self.config.anti_setup_disruption_bonus
+                )
+            # PLANNER-SPREAD-2: opt-in narrow spread defense
+            # scoring. Applies ONLY to Wide Guard candidates,
+            # and ONLY when all 6 guards pass. Default OFF.
+            # See logs/phasePLANNER_SPREAD_1_design.md and
+            # logs/phasePLANNER_SPREAD_1B_classifier_fix.md.
+            # This is intentionally narrow: only Wide Guard,
+            # not Protect or Quick Guard, only when the
+            # IntentDetector fired SPREAD_DEFENSE with
+            # sufficient confidence and opp pressure exists.
+            if self._planner_spread_defense_eligible(
+                order, active_idx, battle
+            ):
+                score = float(score) + float(
+                    self.config.planner_spread_defense_wg_bonus
+                )
+                # Record the pick for anti-spam
+                self._planner_spread_defense_record_pick(
+                    battle, active_idx
                 )
             # Phase ACCURACY-2: hard-safety block for
             # damaging moves targeting self (target=-1) or

@@ -255,6 +255,10 @@ class DoublesDecisionAuditLogger:
         (attached by choose_move when the detector is enabled)
         and writes planner_intent_* fields to the snapshot.
         Pure read of self-attached state. Never affects scoring.
+
+        PLANNER-SPREAD-2: also writes planner_spread_defense_bonus_applied
+        (audit of how much bonus was actually applied to Wide Guard candidates
+        this turn). Default 0.0; only non-zero when scoring flag is ON.
         """
         # Default values (when detector is not run / OFF)
         snap["planner_intent_label"] = None
@@ -264,6 +268,9 @@ class DoublesDecisionAuditLogger:
         snap["planner_intent_routed_to_policy"] = None
         snap["planner_intent_bonus_applied"] = 0.0
         snap["planner_intent_changed_selection"] = False
+        # PLANNER-SPREAD-2: spread defense bonus audit
+        snap["planner_spread_defense_bonus_applied"] = 0.0
+        snap["planner_spread_defense_picks_this_game"] = 0
         # Try to read the decision attached to the battle
         try:
             decision = getattr(battle, "_planner_intent_decision", None)
@@ -287,6 +294,18 @@ class DoublesDecisionAuditLogger:
             # existing per-move policies (anti_setup_disruption,
             # spread_defense, setup_intent) are separate and have
             # their own audit fields. PLANNER only LOGS intent.
+            # PLANNER-SPREAD-2: read spread defense picks counter
+            player = getattr(battle, "_player", None) or getattr(
+                battle, "player", None
+            )
+            if player is not None:
+                bt = getattr(battle, "battle_tag", "")
+                picks = getattr(
+                    player, "_planner_spread_defense_picks_per_game", {}
+                ) or {}
+                snap["planner_spread_defense_picks_this_game"] = picks.get(
+                    bt, 0
+                )
         except Exception:
             # Defensive: never break the audit logger
             pass
