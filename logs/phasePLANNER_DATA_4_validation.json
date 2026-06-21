@@ -1,0 +1,48 @@
+{
+  "n_pairs": 20,
+  "n_battles_per_arm": 20,
+  "n_battles_total": 40,
+  "off_arm": {
+    "arm": "off",
+    "n_battles": 20,
+    "n_won": 9,
+    "n_lost": 11,
+    "total_turns": 145,
+    "audit_fields_present": 145,
+    "intent_label_none": 145,
+    "intent_changed_selection_false": 145,
+    "bonus_applied_zero": 145,
+    "all_pass": true
+  },
+  "on_arm": {
+    "arm": "on",
+    "n_battles": 20,
+    "n_won": 10,
+    "n_lost": 10,
+    "total_turns": 149,
+    "audit_fields_present": 149,
+    "intent_label_dist": {
+      "NO_INTENT": 126,
+      "SPREAD_DEFENSE": 23
+    },
+    "intent_changed_selection_false": 149,
+    "bonus_applied_zero": 149,
+    "intent_label_valid": 149,
+    "all_pass": true
+  },
+  "real_positives": {
+    "SPREAD_DEFENSE": 23,
+    "ANTI_TRICK_ROOM": 0,
+    "ANTI_TAILWIND": 0,
+    "ANTI_STAT_BOOST": 0
+  },
+  "verdict": "40/40 battles ok. SPREAD_DEFENSE has 23 real positives (threshold 20 met). Sufficient signal to consider narrow scoring design. Scoring integration NOT approved by user; continue as audit tool.",
+  "pass_criteria": {
+    "40/40 battles ok": true,
+    "audit fields present 100%": true,
+    "bonus_applied = 0 always": true,
+    "changed_selection = False always": true,
+    "intent positives collected": true,
+    "no timeout/error": true
+  }
+}

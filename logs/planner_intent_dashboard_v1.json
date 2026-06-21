@@ -4,8 +4,8 @@
     "scenario_rows": 101,
     "dryrun_rows": 101,
     "mixed_rows": 2155,
-    "runtime_smoke_battles": 10,
-    "runtime_smoke_turns": 66,
+    "runtime_smoke_battles": 40,
+    "runtime_smoke_turns": 294,
     "all_intents_covered": [
       "ANTI_STAT_BOOST",
       "ANTI_TAILWIND",
@@ -103,47 +103,51 @@
       }
     },
     "runtime_smoke": {
-      "glob": "vgc2026_phasePLANNER_IMPL_2b_*_treatment_audit.jsonl",
-      "n_files": 10,
-      "total_battles": 10,
-      "total_turns": 66,
-      "total_turns_on_arm": 37,
+      "glob": "vgc2026_phasePLANNER_DATA_4_*_treatment_audit.jsonl",
+      "n_files": 40,
+      "total_battles": 40,
+      "total_turns": 294,
+      "total_turns_on_arm": 149,
       "parse_errors": [],
       "intent_distribution": {
-        "NO_INTENT": 29,
+        "NO_INTENT": 126,
         "ANTI_TRICK_ROOM": 0,
         "ANTI_TAILWIND": 0,
         "ANTI_STAT_BOOST": 0,
-        "SPREAD_DEFENSE": 8,
-        "MISSING": 29
+        "SPREAD_DEFENSE": 23,
+        "MISSING": 145
       },
-      "no_intent_ratio": 0.8787878787878788,
+      "no_intent_ratio": 0.9217687074829932,
       "confidence_buckets": {
-        "0.0 (NO_INTENT)": 29,
-        "0.5-0.65 (low)": 8
+        "0.0 (NO_INTENT)": 126,
+        "0.5-0.65 (low)": 23
       },
       "evidence_source_distribution": {
-        "MISSING": 29,
-        "revealed_moves": 8
+        "MISSING": 126,
+        "revealed_moves": 19,
+        "opp_pressure": 4
       },
       "matched_moves_top": {
+        "heatwave": 7,
         "waterpulse": 5,
-        "dazzlinggleam": 3
+        "dazzlinggleam": 4,
+        "earthquake": 4,
+        "rockslide": 1
       }
     }
   },
   "recommendation": {
     "top_intent": "SPREAD_DEFENSE",
-    "top_count": 8,
-    "total_real_turns": 2091,
-    "fire_rate": 0.003825920612147298,
+    "top_count": 23,
+    "total_real_turns": 2203,
+    "fire_rate": 0.01044030866999546,
     "all_intents": {
-      "SPREAD_DEFENSE": 8,
+      "SPREAD_DEFENSE": 23,
       "ANTI_TRICK_ROOM": 6,
       "ANTI_TAILWIND": 0,
       "ANTI_STAT_BOOST": 0
     },
-    "verdict": "REPORT_READY: SPREAD_DEFENSE has only 8 real positives (0.4% of 2091 real turns). Keep collecting data; scoring not yet warranted."
+    "verdict": "REPORT_READY: SPREAD_DEFENSE has 23 real positives (1.0% of 2203 real turns). Sufficient signal to consider narrow scoring design."
   },
   "real_positives": {
     "mixed_dataset_real": {
@@ -158,14 +162,14 @@
       "ANTI_TRICK_ROOM": 0,
       "ANTI_TAILWIND": 0,
       "ANTI_STAT_BOOST": 0,
-      "SPREAD_DEFENSE": 8
+      "SPREAD_DEFENSE": 23
     },
     "combined": {
       "NO_INTENT": 0,
       "ANTI_TRICK_ROOM": 6,
       "ANTI_TAILWIND": 0,
       "ANTI_STAT_BOOST": 0,
-      "SPREAD_DEFENSE": 8
+      "SPREAD_DEFENSE": 23
     }
   }
 }

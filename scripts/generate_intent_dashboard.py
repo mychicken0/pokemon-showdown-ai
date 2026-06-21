@@ -12,7 +12,11 @@ DRYRUN_DATASET = "logs/planner_intent_dryrun_v1.jsonl"
 MIXED_DATASET = "logs/planner_mixed_stability_v1.jsonl"
 # Path("logs").glob takes patterns relative to "logs", so the
 # prefix "logs/" must NOT be in the pattern itself.
-RUNTIME_SMOKE_GLOB = "vgc2026_phasePLANNER_IMPL_2b_*_treatment_audit.jsonl"
+# PLANNER_DATA_4 supersedes PLANNER_IMPL_2b (20-pair vs 5-pair).
+# Read both: the dashboard will count the 20-pair data via PLANNER_DATA_4 glob.
+RUNTIME_SMOKE_GLOB = "vgc2026_phasePLANNER_DATA_4_*_treatment_audit.jsonl"
+# Fallback: if no PLANNER_DATA_4 files exist, use PLANNER_IMPL_2b (5-pair)
+LEGACY_SMOKE_GLOB = "vgc2026_phasePLANNER_IMPL_2b_*_treatment_audit.jsonl"
 
 ALL_INTENTS = [
     "NO_INTENT",
@@ -40,9 +44,14 @@ def load_jsonl(path):
 
 
 def load_runtime_smoke():
+    """Load runtime smoke audit files (PLANNER_DATA_4 preferred, fallback IMPL_2b)."""
     records = []
     errors = []
+    # Try PLANNER_DATA_4 first (20-pair)
     files = sorted(Path("logs").glob(RUNTIME_SMOKE_GLOB))
+    if not files:
+        # Fallback to PLANNER_IMPL_2b (5-pair)
+        files = sorted(Path("logs").glob(LEGACY_SMOKE_GLOB))
     for f in files:
         recs, errs = load_jsonl(str(f))
         records.extend(recs)
@@ -199,7 +208,7 @@ def build_dashboard():
             if rec.get("benchmark_arm") == "on":
                 smoke_on_records.append(extracted)
     dashboard["per_source"]["runtime_smoke"] = {
-        "glob": RUNTIME_SMOKE_GLOB,
+        "glob": RUNTIME_SMOKE_GLOB if Path("logs").glob(RUNTIME_SMOKE_GLOB) else LEGACY_SMOKE_GLOB,
         "n_files": n_files,
         "total_battles": len(smoke_records),
         "total_turns": len(smoke_turn_records),

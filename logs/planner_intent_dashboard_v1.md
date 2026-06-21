@@ -7,7 +7,7 @@
 - Scenario dataset rows: **101**
 - Dry-run dataset rows: **101**
 - Mixed stability rows: **2155**
-- Runtime smoke battles: **10** (66 turns)
+- Runtime smoke battles: **40** (294 turns)
 - All intents observed: `['ANTI_STAT_BOOST', 'ANTI_TAILWIND', 'ANTI_TRICK_ROOM', 'COMBO_ENABLE', 'NO_INTENT', 'REDIRECTION_RESPONSE', 'SPREAD_DEFENSE', 'TERRAIN_CONTROL', 'WEATHER_CONTROL']`
 
 ## Per-source distribution
@@ -58,37 +58,41 @@
 
 ### runtime_smoke
 
-- Glob: `vgc2026_phasePLANNER_IMPL_2b_*_treatment_audit.jsonl`
-- Files matched: 10
-- Battles: 10
-- Turns: 66
-- ON arm turns: 37
+- Glob: `vgc2026_phasePLANNER_DATA_4_*_treatment_audit.jsonl`
+- Files matched: 40
+- Battles: 40
+- Turns: 294
+- ON arm turns: 149
 
 | intent | count |
 |---|---|
-| `NO_INTENT` | 29 |
+| `NO_INTENT` | 126 |
 | `ANTI_TRICK_ROOM` | 0 |
 | `ANTI_TAILWIND` | 0 |
 | `ANTI_STAT_BOOST` | 0 |
-| `SPREAD_DEFENSE` | 8 |
-| `MISSING` | 29 |
+| `SPREAD_DEFENSE` | 23 |
+| `MISSING` | 145 |
 
-- NO_INTENT ratio: **87.9%**
+- NO_INTENT ratio: **92.2%**
 
 **Confidence buckets (ON arm)**:
 
-- `0.0 (NO_INTENT)`: 29
-- `0.5-0.65 (low)`: 8
+- `0.0 (NO_INTENT)`: 126
+- `0.5-0.65 (low)`: 23
 
 **Evidence sources (ON arm)**:
 
-- `MISSING`: 29
-- `revealed_moves`: 8
+- `MISSING`: 126
+- `revealed_moves`: 19
+- `opp_pressure`: 4
 
 **Top matched moves (ON arm)**:
 
+- `heatwave`: 7
 - `waterpulse`: 5
-- `dazzlinggleam`: 3
+- `dazzlinggleam`: 4
+- `earthquake`: 4
+- `rockslide`: 1
 
 ## Real-data positives (non-NO_INTENT fires)
 
@@ -97,22 +101,22 @@
 | `ANTI_TRICK_ROOM` | 6 | 0 | **6** |
 | `ANTI_TAILWIND` | 0 | 0 | **0** |
 | `ANTI_STAT_BOOST` | 0 | 0 | **0** |
-| `SPREAD_DEFENSE` | 0 | 8 | **8** |
+| `SPREAD_DEFENSE` | 0 | 23 | **23** |
 
 ## Recommendation
 
-**Top intent**: `SPREAD_DEFENSE` with 8 real positives
-**Total real turns audited**: 2091
-**Fire rate**: 0.38%
+**Top intent**: `SPREAD_DEFENSE` with 23 real positives
+**Total real turns audited**: 2203
+**Fire rate**: 1.04%
 
 **All intents by real positive count**:
 
-- `SPREAD_DEFENSE`: 8
+- `SPREAD_DEFENSE`: 23
 - `ANTI_TRICK_ROOM`: 6
 - `ANTI_TAILWIND`: 0
 - `ANTI_STAT_BOOST`: 0
 
-**Verdict**: REPORT_READY: SPREAD_DEFENSE has only 8 real positives (0.4% of 2091 real turns). Keep collecting data; scoring not yet warranted.
+**Verdict**: REPORT_READY: SPREAD_DEFENSE has 23 real positives (1.0% of 2203 real turns). Sufficient signal to consider narrow scoring design.
 
 ## Decision label
 

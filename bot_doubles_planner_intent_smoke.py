@@ -56,13 +56,35 @@ from doubles_decision_audit_logger import DoublesDecisionAuditLogger
 from bot_vgc2026_phaseV2c import build_team_string, validate_team_for_battle
 
 
-# 5 pairs from control4a/pair_plan.json
+# 20 pairs from control4a/team_*.json
+# Each tuple: (our_team_idx, opp_team_idx, label)
+# Cycles through 5 teams (006, 020, 027, 046, 057) in different orderings
+# to get 20 unique (our, opp) combinations.
 PAIRS = [
-    (27, 20, "whim_taunt_vs_volcarona"),
-    (6, 27, "gengar_vs_sneasler"),
-    (46, 6, "whim_vs_kingambit"),
-    (57, 27, "tsareena_vs_sneasler"),
-    (20, 6, "tinkaton_vs_kingambit"),
+    # Original 5 (forward)
+    (27, 20, "p00_whim_taunt_vs_volcarona"),
+    (6, 27, "p01_gengar_vs_sneasler"),
+    (46, 6, "p02_whim_vs_kingambit"),
+    (57, 27, "p03_tsareena_vs_sneasler"),
+    (20, 6, "p04_tinkaton_vs_kingambit"),
+    # 5 more (different orderings)
+    (20, 27, "p05_tink_vs_whim_taunt"),
+    (27, 6, "p06_whim_vs_gengar"),
+    (6, 46, "p07_gengar_vs_whim"),
+    (27, 57, "p08_whim_vs_tsareena"),
+    (6, 20, "p09_gengar_vs_volcarona"),
+    # 5 more (reversed sides)
+    (20, 27, "p10_volcarona_vs_whim_taunt"),
+    (27, 6, "p11_whim_taunt_vs_gengar"),
+    (46, 6, "p12_whim_vs_gengar"),
+    (57, 27, "p13_tsareena_vs_whim_taunt"),
+    (20, 6, "p14_tinkaton_vs_gengar"),
+    # 5 more (mixed)
+    (46, 27, "p15_whim_vs_whim_taunt"),
+    (57, 6, "p16_tsareena_vs_kingambit"),
+    (20, 46, "p17_tinkaton_vs_whim"),
+    (27, 57, "p18_whim_vs_tsareena"),
+    (6, 20, "p19_gengar_vs_tinkaton"),
 ]
 
 # Battle format: VGC 2026 Champions (per ACCURACY3 audit artifacts)
@@ -116,13 +138,14 @@ async def _run_pair(
     artifact_dir: Path,
     pair_id: int,
     arm_name: str,
+    artifact_tag: str,
 ) -> Dict[str, Any]:
     """Run a single pair (one battle, our_team vs opp_team)."""
     our_team_str = _load_team(our_idx)
     opp_team_str = _load_team(opp_idx)
 
     config = _make_config(enable_planner)
-    log_path = artifact_dir / f"vgc2026_phasePLANNER_IMPL_2b_{arm_name}_p{pair_id}_{label}_treatment_audit.jsonl"
+    log_path = artifact_dir / f"vgc2026_phase{artifact_tag}_{arm_name}_p{pair_id}_{label}_treatment_audit.jsonl"
 
     suffix = random.randint(10000, 99999)
     player = DoublesDamageAwarePlayer(
@@ -232,7 +255,8 @@ async def _run_pair(
     }
 
 
-async def run_smoke(artifact_dir: Path, n_pairs: int = 5) -> Dict[str, Any]:
+async def run_smoke(artifact_dir: Path, n_pairs: int = 5,
+                artifact_tag: str = "PLANNER_IMPL_2b") -> Dict[str, Any]:
     """Run 5 OFF + 5 ON battles."""
     pairs = PAIRS[:n_pairs]
     results = {"off": [], "on": []}
@@ -241,7 +265,8 @@ async def run_smoke(artifact_dir: Path, n_pairs: int = 5) -> Dict[str, Any]:
     print(f"\n=== OFF arm (enable_planner_intent_detector=False) ===")
     for i, (our, opp, label) in enumerate(pairs):
         print(f"\n---> OFF pair {i}: our={our} vs opp={opp} ({label})")
-        r = await _run_pair(our, opp, label, False, artifact_dir, i, "off")
+        r = await _run_pair(our, opp, label, False, artifact_dir, i, "off",
+                            artifact_tag=artifact_tag)
         results["off"].append(r)
         print(f"  -> {r['status']} | {r['won']}W/{r['lost']}L")
 
@@ -249,7 +274,8 @@ async def run_smoke(artifact_dir: Path, n_pairs: int = 5) -> Dict[str, Any]:
     print(f"\n=== ON arm (enable_planner_intent_detector=True) ===")
     for i, (our, opp, label) in enumerate(pairs):
         print(f"\n---> ON pair {i}: our={our} vs opp={opp} ({label})")
-        r = await _run_pair(our, opp, label, True, artifact_dir, i, "on")
+        r = await _run_pair(our, opp, label, True, artifact_dir, i, "on",
+                            artifact_tag=artifact_tag)
         results["on"].append(r)
         print(f"  -> {r['status']} | {r['won']}W/{r['lost']}L")
 
@@ -414,7 +440,8 @@ def main():
     print(f"  watchdogs: heartbeat={HEARTBEAT}s, stall={STALL_TIMEOUT}s, arm={ARM_TIMEOUT}s")
     print(f"  total battles: {args.n_pairs * 2} (5 OFF + 5 ON)")
 
-    results = asyncio.run(run_smoke(artifact_dir, args.n_pairs))
+    results = asyncio.run(run_smoke(artifact_dir, args.n_pairs,
+                                    artifact_tag=args.artifact_tag))
 
     # Summary
     n_off_ok = sum(1 for r in results["off"] if r["status"] == "ok")
@@ -455,8 +482,10 @@ def main():
     print(f"  all_match: {parity['all_match']}")
 
     # Pass criteria
+    n_total_expected = args.n_pairs * 2  # OFF + ON
     passes = []
-    passes.append(("10/10 battles ok", n_off_ok + n_on_ok == 10))
+    passes.append((f"{n_total_expected}/{n_total_expected} battles ok",
+                   n_off_ok + n_on_ok == n_total_expected))
     passes.append(("audit JSONL exists", off["audit_fields_present"] > 0 and on["audit_fields_present"] > 0))
     passes.append(("planner_intent_* present in state_snapshot",
                    off["audit_fields_present"] == off["total_turns"]
