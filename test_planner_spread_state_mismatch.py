@@ -34,13 +34,14 @@ def make_battle():
     return battle
 
 
-def make_decision():
+def make_decision(opp_pressure=True):
     return IntentDecision(
         intent="SPREAD_DEFENSE",
         confidence=0.65,
         evidence_source="revealed_moves",
         matched_moves=("rockslide",),
         routed_to_policy="spread_defense",
+        opp_pressure=opp_pressure,
     )
 
 
@@ -63,23 +64,67 @@ class TestStateMismatch(unittest.TestCase):
         result = player._planner_spread_defense_eligible(order, 1, battle)
         self.assertTrue(result, "eligible should pass when both see opp_press=True")
 
-    def test_state_mismatch_eligible_fails_guard5(self):
-        """Detector saw opp_press=True but eligible sees opp_press=False.
+    def test_state_mismatch_eligible_fails_guard5_legacy(self):
+        """Legacy decision (no opp_pressure field) with live opp_press=False.
         
-        This is the BUG that causes the bonus to not apply in the smoke run.
-        The detector's decision said SPREAD_DEFENSE (with full evidence),
-        but the eligible's Guard 5 re-evaluates the LIVE state, which has
-        changed between the detector call and the eligible call.
+        Pre-PLANNER-SPREAD-3d behavior: eligible fails Guard 5 because
+        the live state at scoring time is False (changed from True at
+        detect time). This is the BUG that the new snapshot field fixes.
         """
-        decision = make_decision()
+        # Build a legacy decision (no opp_pressure) via spec'd mock
+        from unittest.mock import MagicMock
+        legacy_decision = MagicMock(spec=[
+            "intent", "confidence", "evidence_source",
+            "matched_moves", "routed_to_policy",
+        ])
+        legacy_decision.intent = "SPREAD_DEFENSE"
+        legacy_decision.confidence = 0.65
+        legacy_decision.matched_moves = ("rockslide",)
+        legacy_decision.evidence_source = "revealed_moves"
+        legacy_decision.routed_to_policy = "spread_defense"
+        # No opp_pressure attribute (legacy)
+        self.assertFalse(hasattr(legacy_decision, "opp_pressure"))
         battle = make_battle()
-        setattr(battle, "_planner_intent_decision", decision)
+        setattr(battle, "_planner_intent_decision", legacy_decision)
         player = make_player(opp_press_value=False)
         order = make_wg_order()
         result = player._planner_spread_defense_eligible(order, 1, battle)
         self.assertFalse(result,
-            "BUG CONFIRMED: eligible fails Guard 5 even though "
-            "decision.intent=SPREAD_DEFENSE because live opp_press state changed")
+            "BUG CONFIRMED (legacy path): eligible fails Guard 5 when "
+            "live opp_press is False even though intent=SPREAD_DEFENSE")
+
+    def test_snapshot_field_passes_guard5(self):
+        """PLANNER-SPREAD-3d: with opp_pressure=True on decision,
+        eligible should pass Guard 5 even when live state is False.
+        This is the FIX — the detector's snapshot wins.
+        """
+        # Detector saw opp_press=True, stored on decision
+        decision = make_decision(opp_pressure=True)
+        battle = make_battle()
+        setattr(battle, "_planner_intent_decision", decision)
+        # Live state at scoring time is False (state changed)
+        player = make_player(opp_press_value=False)
+        order = make_wg_order()
+        result = player._planner_spread_defense_eligible(order, 1, battle)
+        self.assertTrue(result,
+            "FIX VERIFIED: snapshot opp_pressure=True on decision "
+            "lets eligible pass Guard 5 even when live state is False")
+
+    def test_snapshot_field_false_fails_guard5(self):
+        """PLANNER-SPREAD-3d: with opp_pressure=False on decision,
+        eligible should fail Guard 5. Detector saw no pressure, so
+        the bonus should NOT apply.
+        """
+        decision = make_decision(opp_pressure=False)
+        battle = make_battle()
+        setattr(battle, "_planner_intent_decision", decision)
+        # Even with live state True, snapshot wins
+        player = make_player(opp_press_value=True)
+        order = make_wg_order()
+        result = player._planner_spread_defense_eligible(order, 1, battle)
+        self.assertFalse(result,
+            "FIX VERIFIED: snapshot opp_pressure=False on decision "
+            "blocks Guard 5 even when live state is True")
 
     def test_intent_no_intent_fails(self):
         """When intent is NO_INTENT, eligible should return False."""
@@ -100,3 +145,70 @@ class TestStateMismatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDetectorSnapshot(unittest.TestCase):
+    """PLANNER-SPREAD-3d: verify the detector sets opp_pressure."""
+
+    def test_detector_sets_opp_pressure_true(self):
+        """When ctx has opp_pressure=True, the decision should have it too."""
+        from bot_doubles_intent_classifier import IntentDetector
+        det = IntentDetector(min_confidence=0.5)
+        ctx = {
+            "opp_revealed_moves": ["rockslide"],
+            "fields": [],
+            "side_conditions": [],
+            "opp_used_tr": False,
+            "opp_used_tw": False,
+            "opp_used_stat_boost": False,
+            "opp_pressure": True,
+            "active_user_hp_fraction": 1.0,
+            "expected_to_faint": False,
+            "target_already_taunted": False,
+        }
+        decision = det.detect(ctx)
+        self.assertEqual(decision.intent, "SPREAD_DEFENSE")
+        self.assertTrue(decision.opp_pressure,
+            "PLANNER-SPREAD-3d: detector must set opp_pressure on decision")
+
+    def test_detector_sets_opp_pressure_false(self):
+        """When ctx has opp_pressure=False, the decision should have it too."""
+        from bot_doubles_intent_classifier import IntentDetector
+        det = IntentDetector(min_confidence=0.5)
+        ctx = {
+            "opp_revealed_moves": ["rockslide"],
+            "fields": [],
+            "side_conditions": [],
+            "opp_used_tr": False,
+            "opp_used_tw": False,
+            "opp_used_stat_boost": False,
+            "opp_pressure": False,
+            "active_user_hp_fraction": 1.0,
+            "expected_to_faint": False,
+            "target_already_taunted": False,
+        }
+        decision = det.detect(ctx)
+        self.assertEqual(decision.intent, "SPREAD_DEFENSE")
+        self.assertFalse(decision.opp_pressure,
+            "PLANNER-SPREAD-3d: opp_pressure=False on decision")
+
+    def test_no_intent_decision_has_opp_pressure_false(self):
+        """NO_INTENT decisions should have opp_pressure=False."""
+        from bot_doubles_intent_classifier import IntentDetector
+        det = IntentDetector(min_confidence=0.5)
+        # expected_to_faint=True forces NO_INTENT
+        ctx = {
+            "opp_revealed_moves": [],
+            "fields": [],
+            "side_conditions": [],
+            "opp_used_tr": False,
+            "opp_used_tw": False,
+            "opp_used_stat_boost": False,
+            "opp_pressure": False,
+            "active_user_hp_fraction": 1.0,
+            "expected_to_faint": True,
+            "target_already_taunted": False,
+        }
+        decision = det.detect(ctx)
+        self.assertEqual(decision.intent, "NO_INTENT")
+        self.assertFalse(decision.opp_pressure)

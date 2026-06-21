@@ -4181,9 +4181,29 @@ class DoublesDamageAwarePlayer(Player):
         ))
         if float(getattr(decision, "confidence", 0.0)) < min_conf:
             return False
-        # Guard 5: opp pressure (reuse existing helper)
-        if not self._slot_in_opp_pressure(active_idx, battle):
-            return False
+        # Guard 5: opp pressure (PLANNER-SPREAD-3d: use detector's
+        # snapshot if available). poke-env calls choose_move multiple
+        # times per turn, so the live state at scoring time can
+        # differ from the state at detect time. Prefer the snapshot
+        # stored on the decision; fall back to live state for legacy
+        # decisions (mocks / pre-SPREAD-3d objects) that don't carry it.
+        use_snapshot = False
+        snapshot_val = False
+        try:
+            from bot_doubles_intent_classifier import IntentDecision as _ID
+            if isinstance(decision, _ID):
+                use_snapshot = True
+                snapshot_val = bool(
+                    getattr(decision, "opp_pressure", False)
+                )
+        except Exception:
+            pass
+        if use_snapshot:
+            if not snapshot_val:
+                return False
+        else:
+            if not self._slot_in_opp_pressure(active_idx, battle):
+                return False
         # Guard 6: anti-spam
         battle_tag = getattr(battle, "battle_tag", "")
         if not battle_tag:
@@ -4217,7 +4237,10 @@ class DoublesDamageAwarePlayer(Player):
     def _planner_spread_defense_record_pick(
         self, battle, active_idx: int,
     ) -> None:
-        """PLANNER-SPREAD-2: record a Wide Guard pick for anti-spam."""
+        """PLANNER-SPREAD-2: record a Wide Guard pick for anti-spam.
+        PLANNER-SPREAD-3d: also track the bonus magnitude so the
+        audit can verify the bonus was applied.
+        """
         battle_tag = getattr(battle, "battle_tag", "")
         if not battle_tag:
             return
@@ -4225,11 +4248,24 @@ class DoublesDamageAwarePlayer(Player):
             self._planner_spread_defense_picks_per_game = {}
         if not hasattr(self, "_planner_spread_defense_last_pick_turn"):
             self._planner_spread_defense_last_pick_turn = {}
+        if not hasattr(self, "_planner_spread_defense_bonus_applied_per_game"):
+            self._planner_spread_defense_bonus_applied_per_game = {}
         self._planner_spread_defense_picks_per_game[battle_tag] = (
             self._planner_spread_defense_picks_per_game.get(battle_tag, 0) + 1
         )
         self._planner_spread_defense_last_pick_turn[battle_tag] = int(
             getattr(battle, "turn", 0) or 0
+        )
+        # Track bonus magnitude (cumulative for the battle)
+        bonus = float(
+            getattr(
+                self.config, "planner_spread_defense_wg_bonus", 0.0
+            )
+        )
+        self._planner_spread_defense_bonus_applied_per_game[battle_tag] = (
+            self._planner_spread_defense_bonus_applied_per_game.get(
+                battle_tag, 0.0
+            ) + bonus
         )
 
     def _setup_intent_speed_setup_eligible(
@@ -12686,6 +12722,15 @@ class DoublesDamageAwarePlayer(Player):
                         battle_tag, current_turn
                     )
 
+            # PLANNER-SPREAD-3d: register self with the audit
+            # logger so it can read per-pick counters
+            # (e.g. _planner_spread_defense_picks_per_game)
+            # from the player. poke-env battle object doesn't
+            # carry the player reference, and the audit's
+            # _populate is a @staticmethod without self access,
+            # so we use the class-level dict.
+            DoublesDecisionAuditLogger._battle_player_refs[battle_tag] = self
+
             self.audit_logger.log_turn_decision(
                 battle_tag=battle_tag,
                 turn=current_turn,
@@ -13765,6 +13810,12 @@ class DoublesDamageAwarePlayer(Player):
                 battle_tag=getattr(battle, "battle_tag", "Unknown"),
                 winner=winner,
                 battle=battle,
+            )
+
+            # PLANNER-SPREAD-3d: clean up player ref after
+            # the battle is saved (avoid memory leak).
+            DoublesDecisionAuditLogger._battle_player_refs.pop(
+                getattr(battle, "battle_tag", "Unknown"), None
             )
 
         bt = getattr(battle, "battle_tag", "")

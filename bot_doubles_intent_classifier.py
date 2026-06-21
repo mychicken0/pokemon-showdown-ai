@@ -312,12 +312,19 @@ class IntentDecision:
         evidence_source: one of EVIDENCE_*
         matched_moves: tuple of move-id strings that triggered
         routed_to_policy: one of ROUTE_* (which existing policy is relevant)
+        opp_pressure: PLANNER-SPREAD-3d — opp spread-move pressure at
+            detect time. Stored on the decision so downstream consumers
+            (e.g. _planner_spread_defense_eligible Guard 5) can use the
+            detector's snapshot instead of re-evaluating the live battle
+            state, which may have changed between detect and scoring
+            (multiple choose_move calls per turn).
     """
     intent: str
     confidence: float
     evidence_source: str
     matched_moves: Tuple[str, ...]
     routed_to_policy: str
+    opp_pressure: bool = False
 
     @classmethod
     def no_intent(cls) -> "IntentDecision":
@@ -327,6 +334,7 @@ class IntentDecision:
             evidence_source=EVIDENCE_NONE,
             matched_moves=(),
             routed_to_policy=ROUTE_NONE,
+            opp_pressure=False,
         )
 
 
@@ -417,25 +425,43 @@ class IntentDetector:
         # Check ANTI_TRICK_ROOM (highest priority — TR defines whole match)
         atr = self._detect_anti_trick_room(ctx)
         if atr and atr.confidence >= self.min_confidence:
-            return atr
+            return self._with_opp_pressure(atr, ctx)
 
         # Check ANTI_TAILWIND
         atw = self._detect_anti_tailwind(ctx)
         if atw and atw.confidence >= self.min_confidence:
-            return atw
+            return self._with_opp_pressure(atw, ctx)
 
         # Check ANTI_STAT_BOOST
         asb = self._detect_anti_stat_boost(ctx)
         if asb and asb.confidence >= self.min_confidence:
-            return asb
+            return self._with_opp_pressure(asb, ctx)
 
         # Check SPREAD_DEFENSE
         sd = self._detect_spread_defense(ctx)
         if sd and sd.confidence >= self.min_confidence:
-            return sd
+            return self._with_opp_pressure(sd, ctx)
 
         # No signal
         return IntentDecision.no_intent()
+
+    @staticmethod
+    def _with_opp_pressure(
+        decision: IntentDecision, ctx: Dict[str, Any]
+    ) -> IntentDecision:
+        """PLANNER-SPREAD-3d: attach opp_pressure from ctx to the decision.
+
+        Lets downstream consumers (e.g. Guard 5 of
+        ``_planner_spread_defense_eligible``) use the detector's
+        snapshot instead of re-evaluating the live battle state, which
+        can drift between detect time and scoring time when poke-env
+        calls ``choose_move`` multiple times per turn.
+        """
+        import dataclasses
+        return dataclasses.replace(
+            decision,
+            opp_pressure=bool(ctx.get("opp_pressure", False)),
+        )
 
     def _detect_anti_trick_room(self, ctx):
         revealed = self._norm_list(ctx.get("opp_revealed_moves", []))

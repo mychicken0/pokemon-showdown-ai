@@ -7,6 +7,13 @@ class DoublesDecisionAuditLogger:
     considered alternatives, and resolve actual turn outcomes (damage, KOs, protect status)
     offline and safe from crashing the battle loop.
     """
+    # PLANNER-SPREAD-3d: class-level dict to track the player
+    # for each battle_tag. The bot sets this before each
+    # log_turn_decision call so the audit's _populate (a
+    # @staticmethod without self access) can read picks
+    # counters etc. from the player. Class-level because
+    # the audit functions are staticmethod and have no self.
+    _battle_player_refs = {}
     PRIORITY_MOVES = {
         "extremespeed", "suckerpunch", "machpunch", "vacuumwave", "iceshard",
         "aquajet", "bulletpunch", "shadowsneak", "fakeout", "quickattack",
@@ -295,9 +302,19 @@ class DoublesDecisionAuditLogger:
             # spread_defense, setup_intent) are separate and have
             # their own audit fields. PLANNER only LOGS intent.
             # PLANNER-SPREAD-2: read spread defense picks counter
+            # PLANNER-SPREAD-3d: also check class-level
+            # _battle_player_refs (set by the bot before
+            # log_turn_decision) for the player reference,
+            # since poke-env battle doesn't carry it and
+            # _populate is a staticmethod without self access.
             player = getattr(battle, "_player", None) or getattr(
                 battle, "player", None
             )
+            if player is None:
+                bt = getattr(battle, "battle_tag", "")
+                player = DoublesDecisionAuditLogger._battle_player_refs.get(
+                    bt
+                )
             if player is not None:
                 bt = getattr(battle, "battle_tag", "")
                 picks = getattr(
@@ -305,6 +322,15 @@ class DoublesDecisionAuditLogger:
                 ) or {}
                 snap["planner_spread_defense_picks_this_game"] = picks.get(
                     bt, 0
+                )
+                # PLANNER-SPREAD-3d: read cumulative bonus
+                bonus_applied = getattr(
+                    player,
+                    "_planner_spread_defense_bonus_applied_per_game",
+                    {},
+                ) or {}
+                snap["planner_spread_defense_bonus_applied"] = float(
+                    bonus_applied.get(bt, 0.0)
                 )
         except Exception:
             # Defensive: never break the audit logger
