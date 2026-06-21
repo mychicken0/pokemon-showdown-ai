@@ -11,13 +11,13 @@
 - **Probes**: 1 (SCENARIO-10A, pre-library)
 - **Deferred scenarios**: 4
 - **Banned items in VGC 2026**: 5
-- **Custom teams**: 3 (`data/curated_teams/custom/`)
+- **Custom teams**: 4 (`data/curated_teams/custom/`)
 - **Custom scenario path**: `data/curated_teams/scenarios/SCENARIO_INDEX.md`
   (this file)
 
 ---
 
-## Active scenarios (9)
+## Active scenarios (10)
 
 | # | scenario_id | family | priority | v | opp lead | scripted move | bot response | status | report |
 |---|---|---|---|---|---|---|---|---|---|
@@ -30,6 +30,7 @@
 | 7 | `spread_def_earthquake` | spread_def | P1 | v2 | Garchomp + Charizard | Earthquake | Wide Guard (Torterra, bot-choice) | PASS | [report](logs/phaseSCENARIO19_spread_def_earthquake_report.md) |
 | 8 | `weather_rain_basic` | weather | P2 | v2 | Politoed + Arcanine | Rain Dance | state_snapshot.weather = ['raindance'] | PASS | [report](logs/phaseSCENARIO16_weather_rain_basic_report.md) |
 | 9 | `beatup_justified_basic` | beatup_justified | P2 | v2 | Houndoom + Gallade | Beat Up | (Justified ally ready) | PASS | [report](logs/phaseSCENARIO17_beatup_justified_basic_report.md) |
+| 10 | `terrain_psychic_basic` | terrain | P2 | v2 | Espathra + Arcanine | Psychic Terrain | state_snapshot.fields = ['psychic_terrain'] | PASS | [report](logs/phaseTERRAIN1_terrain_psychic_basic_report.md) |
 
 ### Detailed scenario descriptions
 
@@ -120,7 +121,7 @@ reproducibility.
 |---|---|---|---|
 | wp | `wp_super_effective_basic` | Weakness Policy is banned in VGC 2026 Champions format (`isNonstandard: "Past"`). Showdown team validator rejects it. | **format-banned** |
 | redir | `redir_followme` (true Follow Me variant) | Rage Powder covers basic redirection. Follow Me is +0 priority, may be outsped. Different script from Rage Powder. | not started |
-| terrain | `terrain_electric_basic` / `terrain_grassy_basic` | No terrain-setter mons in curated teams (no Indeedee, Rillaboom, etc. with terrain-setter ability). No custom team built yet. | needs custom team |
+| terrain_electric_basic` / `terrain_grassy_basic` | Psychic Terrain variant done (TERRAIN-1). Electric/Grassy variants can use custom team with the corresponding setter. | not started |
 | — | Earthquake framework-level changes (grounded / Levitate / Flying detection) | Not needed for basic EQ scenario (SCENARIO-19). Only required for "is the move effective" checks. | deferred |
 
 ---
@@ -185,6 +186,15 @@ All custom teams are in
 - **Kingambit** (Defiant, Leftovers)
 - **Garchomp** (Rough Skin, Yache Berry)
 - **Tyranitar** (Sand Stream, Choice Scarf)
+
+### `terrain_demo_v1.json` (used by TERRAIN-1)
+
+- **Espathra** (Opportunist, Leftovers, Modest, Psychic Terrain / Psychic / Roost / Protect) — the Psychic Terrain setter
+- **Arcanine** (Intimidate, Sitrus Berry, Jolly, Protect / Extreme Speed / Flare Blitz / Crunch) — the Protect partner
+- **Kingambit** (Defiant, Shuca Berry, Adamant, Kowtow Cleave / Sucker Punch / Iron Head / Protect)
+- **Garchomp** (Rough Skin, Yache Berry, Jolly, Earthquake / Rock Slide / Protect / Scale Shot)
+- **Tyranitar** (Sand Stream, Choice Scarf, Adamant, Rock Slide / Crunch / Dragon Dance / Protect)
+- **Volcarona** (Flame Body, Lum Berry, Timid, Heat Wave / Quiver Dance / Protect / Bug Buzz)
 
 ### `wp_demo_v1.json` (used by SCENARIO-18, DEFERRED)
 

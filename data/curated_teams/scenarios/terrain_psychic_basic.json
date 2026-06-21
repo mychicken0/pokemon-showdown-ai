@@ -1,0 +1,35 @@
+{
+  "scenario_id": "terrain_psychic_basic",
+  "description": "Terrain family (Psychic Terrain variant): opp scripts Psychic Terrain on turn 1; terrain should be set in the audit state",
+  "version": 2,
+  "our_team_file": "data/curated_teams/control4a/team_020.json",
+  "opp_team_file": "data/curated_teams/custom/terrain_demo_v1.json",
+  "lead": {
+    "opp_slot_0": "Indeedee",
+    "opp_slot_1": "Arcanine"
+  },
+  "script": {
+    "turn_1": {
+      "opp_slot_0": {
+        "move": "psychicterrain"
+      },
+      "opp_slot_1": {
+        "move": "protect"
+      }
+    }
+  },
+  "validators": [
+    {
+      "name": "psychic_terrain_set",
+      "type": "expected_audit_signal",
+      "expected": [
+        "psychic_terrain"
+      ],
+      "field": "fields"
+    },
+    {
+      "name": "no_script_failures",
+      "type": "no_script_failures"
+    }
+  ]
+}
