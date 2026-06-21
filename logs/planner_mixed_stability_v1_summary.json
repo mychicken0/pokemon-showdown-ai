@@ -1,0 +1,42 @@
+{
+  "totals": {
+    "total_rows": 2155,
+    "scenario_rows": 101,
+    "real_rows": 2054
+  },
+  "scenario": {
+    "total": 101,
+    "with_signal": 15,
+    "without_signal": 86,
+    "signal_correct": 15,
+    "signal_accuracy": 1.0,
+    "no_signal_correct": 24,
+    "no_signal_accuracy": 0.27906976744186046
+  },
+  "real": {
+    "total": 2054,
+    "fires": 436,
+    "no_intent": 1618,
+    "fire_rate": 0.21226874391431352,
+    "no_intent_rate": 0.7877312560856865,
+    "fires_with_trigger": 436,
+    "fires_no_trigger": 0,
+    "fpr_no_trigger": 0.0,
+    "fires_with_trigger_rate": 1.0
+  },
+  "distribution": {
+    "real_intent_dist": {
+      "WEATHER_CONTROL": 430,
+      "ANTI_TRICK_ROOM": 6
+    },
+    "real_intent_dominance": 0.9862385321100917
+  },
+  "collisions": {
+    "rows_with_multiple_intents": 25,
+    "collision_rate": 0.01160092807424594
+  },
+  "unknown": {
+    "rows_no_trigger_with_intent": 0,
+    "unknown_rate": 0.0
+  }
+}
