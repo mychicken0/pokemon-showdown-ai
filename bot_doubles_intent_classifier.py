@@ -361,16 +361,19 @@ class IntentDetector:
         "minimize", "shiftgear", "tailglow", "bellydrum",
         "clangoroussoul", "victorydance", "takeheart", "torchsong",
     })
+    # SPREAD_MOVES: target = "allAdjacent" / "allAdjacentFoes" / "all" in showdown.
+    # Validated against data/moves.ts. See test_planner_spread_moves_fix.py.
+    # PLANNER-SPREAD-1B: removed 14 false positives (waterpulse, alluringvoice,
+    # drainingkiss, heatcrash, infernalparade, luminacrash, mudshot, mudslap,
+    # mysticalfire, powergem, ruination, syrupbomb, temperflare, thundercage,
+    # torchsong) that have target="any" or "normal" in showdown, not spread.
     SPREAD_MOVES = frozenset({
+        # Common (validated)
         "heatwave", "rockslide", "earthquake", "dazzlinggleam",
-        "surf", "mudslap", "eruption", "discharge", "waterpulse",
-        "sludgewave", "boomburst", "makeitrain", "torchsong",
-        "drainingkiss", "mysticalfire", "snarl", "thundercage",
-        "mudshot", "glaciate", "muddywater", "heatcrash",
-        "powergem", "temperflare", "luminacrash", "ruination",
-        "alluringvoice", "bleakwindstorm", "sandsearstorm",
-        "wildboltstorm", "springtidestorm", "infernalparade",
-        "matchagotcha", "syrupbomb",
+        "surf", "eruption", "discharge", "sludgewave", "boomburst",
+        "makeitrain", "snarl", "glaciate", "muddywater",
+        "bleakwindstorm", "sandsearstorm", "wildboltstorm",
+        "springtidestorm", "matchagotcha",
     })
 
     # Field/side-condition names (both raw and normalized forms)
