@@ -4987,3 +4987,54 @@ explicit user authorization to deviate from species-inference ban.
 
 See `logs/phaseCONTROL_PRIORITY_2F_regression_investigation.md`
 for full investigation.
+
+### WEATHER-TERRAIN-1 — Weather/Terrain Response Audit (added 2026-06-22)
+
+**Decision:** `SWITCH_SCORING_GAP`.
+
+Read-only audit. 0 code changes.
+
+**Q1**: Audit state_snapshot persists weather (e.g., `['raindance']`)
+and terrain (e.g., `['psychic_terrain']`) correctly. ✓
+
+**Q2**: Bot detects weather/terrain state via state_snapshot. ✓
+
+**Q3**: When opponent sets Rain/Terrain, bot's response:
+- Damage moves (no weather-specific bonus)
+- Protect/stall
+- Switch to weather/terrain-resist mon (e.g., Pelipper w/ Drizzle)
+- Type-matching moves (Hurricane in rain, Psychic in Psychic Terrain)
+
+**Q4**: Legal counterplay types:
+- weather move: NOT in legal options (no setter on active)
+- terrain move: NOT in legal options (no setter on active)
+- switch to better resist: YES (Pelipper, etc.)
+- Protect/stall: YES
+- KO setter: YES
+
+**Q5**: Bot NEVER chooses weather/terrain control moves naturally.
+0 weather/terrain setters selected in all checked audits.
+
+**Q6**: Raw scores NOT captured (`v4a_raw_scores` is None).
+Cannot directly verify if weather/terrain moves score 0/negative.
+
+**Q7**: Missing piece is **switch scoring**:
+- Audit is sufficient
+- Switch logic exists
+- Missing: switch bonus for weather/terrain-resist mons
+- Secondary: move scoring for type boosts
+
+**Q8**: Responses NOT blocked by lack of audit fields.
+Audit has weather, terrain, legal actions, opponent state.
+
+**Decision**: `SWITCH_SCORING_GAP`
+- Primary: switch scoring for weather/terrain-resist mons
+- Secondary: move scoring for type boosts (Rain→Water 1.5x)
+- Tertiary: move scoring for setters (Rain Dance, Sunny Day, etc.)
+
+**Path forward** (deferred, would need new phases):
+- Phase WT-2: switch scoring for weather/terrain
+- Phase WT-3: move scoring for type boosts
+- Phase WT-4: move scoring for setters
+
+See `logs/phaseWEATHERTERRAIN1_response_audit.md` for full report.
