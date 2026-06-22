@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""Phase RL-DATA-3b-small — Small real local battle audit smoke.
+
+Runs a small (5-50 battle) audit on the already-running
+local Pokemon Showdown server and writes the audit JSONL
+using the real ``DoublesDecisionAuditLogger`` with the
+v1.1 audit logger emission enabled (RL-DATA-3a / 3a.1 /
+3a.2). Then builds a v1.1 dataset, runs the analyzer
+gates, and reports metadata quality metrics.
+
+This is a small local-only smoke, not a benchmark. The
+default is 5 battles. Win rate is not the main success
+metric; dataset quality and logger stability are.
+
+Hard guards:
+
+* Only connects to ``localhost:8000``. Refuses any
+  non-local server URL.
+* Uses the existing ``DoublesDamageAwarePlayer`` so
+  the audit logger is the same one used in production.
+* Does not train, does not flip opt-in flags, does not
+  change defaults.
+* Watchdog timeouts prevent runaway battles.
+
+The bot's ``choose_move`` path calls
+``_v1_1_live_move_metadata_for_audit`` to populate the
+``move_metadata_map_override`` kwarg. The audit logger's
+v1.1 emission then records per-candidate classification
+with ``metadata_source = "order"`` (from live
+``DoubleBattleOrder.order`` poke-env ``Move`` objects),
+``metadata_source = "pokemon"`` (from the active mon's
+``pokemon.moves``), or ``metadata_source = "fallback"``
+(from the static fallback table in
+``doubles_engine.move_metadata``).
+"""
+
+import argparse
+import asyncio
+import atexit
+import json
+import os
+import sys
+import time
+import urllib.request
+from typing import Any, Dict, List, Optional
+
+# Make the showdown_ai/ and doubles_engine/ packages importable.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, SCRIPT_DIR)
+
+# Unregister poke-env's broken atexit hook.
+import poke_env.concurrency
+_clear_loop = getattr(poke_env.concurrency, "__clear_loop", None)
+if _clear_loop is not None:
+    try:
+        atexit.unregister(_clear_loop)
+    except Exception:
+        pass
+
+import poke_env_test_cleanup  # noqa: F401
+
+from poke_env import AccountConfiguration
+from poke_env.player.baselines import RandomPlayer
+
+from bot_doubles_damage_aware import DoublesDamageAwarePlayer
+from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+
+# ---- Hard guards ----
+# Only local server. Never default to official.
+LOCAL_BASE = "RLData3b"
+HEALTH_URL = "http://localhost:8000"
+HEALTH_TIMEOUT = 5.0
+DEFAULT_BATTLES = 5
+# Phase RL-DATA-3c: raised from 50 to 600 to support
+# the 5,000+ row dataset build. The script is still
+# local-only and small (5 battles is the default
+# smoke). The hard cap is just a safety guard; it
+# is not a benchmark / qualification limit.
+MAX_BATTLES = 600
+
+# Watchdog timeouts. A real doubles battle typically
+# takes 30-90s. We use conservative bounds for the
+# 5-battle smoke.
+HEARTBEAT_INTERVAL = 20
+STALL_TIMEOUT = 180
+ARM_TIMEOUT = 300
+
+# Our team: a small set of random-doubles-style
+# Pokemon. We use the curated WT-2 audit team because
+# it has setter MOVE coverage (Politoed has Rain Dance
+# without Drizzle) and a normal mixed attacker (Incineroar
+# has Fake Out / Flare Blitz). This gives the v1.1
+# audit a healthy mix of setter, support, and damaging
+# moves.
+OUR_TEAM_JSON = "data/curated_teams/custom/wt2_audit_team_v1.json"
+
+# Opp team: a generic bulky team with no setters.
+OPP_TEAM = """Incineroar @ Sitrus Berry
+Ability: Intimidate
+EVs: 252 HP / 252 Atk
+Adamant Nature
+- Fake Out
+- Flare Blitz
+- Knock Off
+- U-turn
+
+Tornadus @ Heavy-Duty Boots
+Ability: Prankster
+EVs: 252 HP / 252 SpA
+Modest Nature
+- Tailwind
+- Hurricane
+- Rain Dance
+- Protect
+
+Clefable @ Leftovers
+Ability: Magic Guard
+EVs: 252 HP / 252 Def
+Bold Nature
+- Moonblast
+- Wish
+- Protect
+- Thunder Wave
+
+Garchomp @ Choice Scarf
+Ability: Rough Skin
+EVs: 252 Atk / 252 Spe
+Jolly Nature
+- Earthquake
+- Rock Slide
+- Outrage
+- Dragon Claw
+
+Tyranitar @ Smooth Rock
+Ability: Sand Stream
+EVs: 252 HP / 252 Atk
+Adamant Nature
+- Rock Slide
+- Crunch
+- Stone Edge
+- Protect
+
+Volcarona @ Leftovers
+Ability: Flame Body
+EVs: 252 SpA / 252 Spe
+Timid Nature
+- Heat Wave
+- Bug Buzz
+- Quiver Dance
+- Protect"""
+
+
+def check_localhost_healthy(timeout: float = HEALTH_TIMEOUT) -> bool:
+    """Verify the local Showdown server is healthy.
+
+    Hard guard: refuses to run if the local server is
+    not healthy. The probe never falls back to the
+    official Showdown.
+    """
+    try:
+        with urllib.request.urlopen(HEALTH_URL, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def json_to_showdown(team_dict: Dict[str, Any]) -> str:
+    """Convert a JSON team dict to Showdown text format."""
+    lines = []
+    for p in team_dict.get("team", []):
+        species = p["species"]
+        if p.get("item"):
+            lines.append(f"{species} @ {p['item']}")
+        else:
+            lines.append(species)
+        lines.append(f"Ability: {p['ability']}")
+        evs = p.get("evs", {})
+        if evs:
+            ev_parts = [f"{v} {k.upper()}" for k, v in evs.items() if v > 0]
+            if ev_parts:
+                lines.append("EVs: " + " / ".join(ev_parts))
+        if p.get("nature"):
+            lines.append(f"{p['nature']} Nature")
+        if p.get("level") and p["level"] != 100:
+            lines.append(f"Level: {p['level']}")
+        for move in p.get("moves", []):
+            lines.append(f"- {move}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+async def run_single_battle(
+    idx: int,
+    total: int,
+    audit_logger: DoublesDecisionAuditLogger,
+    our_team_showdown: str,
+) -> Dict[str, Any]:
+    """Run a single battle with the bot vs a random opp.
+
+    Returns a dict with battle_id, elapsed time, and
+    bot / opp names.
+    """
+    suffix = str(idx) + str(int(time.time() * 1000) % 100000)[-5:]
+    bot_name = f"{LOCAL_BASE}Bot_{suffix}"[:18]
+    opp_name = f"{LOCAL_BASE}Opp_{suffix}"[:18]
+
+    bot = DoublesDamageAwarePlayer(
+        account_configuration=AccountConfiguration(bot_name, None),
+        audit_logger=audit_logger,
+        max_concurrent_battles=1,
+        log_level=30,
+        battle_format="gen9doublescustomgame",
+        team=our_team_showdown,
+    )
+    opp = RandomPlayer(
+        account_configuration=AccountConfiguration(opp_name, None),
+        max_concurrent_battles=1,
+        log_level=30,
+        battle_format="gen9doublescustomgame",
+        team=OPP_TEAM,
+    )
+
+    start = time.time()
+
+    async def heartbeat():
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            elapsed = time.time() - start
+            print(
+                f"  [{idx}/{total}] {elapsed:.0f}s | "
+                f"bot_finished={bot.n_finished_battles}",
+                flush=True,
+            )
+
+    battle_task = asyncio.create_task(bot.battle_against(opp, n_battles=1))
+    hb_task = asyncio.create_task(heartbeat())
+    try:
+        await asyncio.wait_for(
+            asyncio.wait({battle_task}, return_when=asyncio.FIRST_COMPLETED),
+            timeout=ARM_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        print(f"  [{idx}] TIMEOUT", flush=True)
+    finally:
+        hb_task.cancel()
+        try:
+            await bot.ps_client._stop_listening()
+            await opp.ps_client._stop_listening()
+        except Exception:
+            pass
+
+    elapsed = time.time() - start
+    return {
+        "battle_idx": idx,
+        "bot_name": bot_name,
+        "opp_name": opp_name,
+        "elapsed_s": elapsed,
+        "bot_finished": bot.n_finished_battles,
+    }
+
+
+async def run_smoke(
+    battles: int,
+    output_path: str,
+) -> Dict[str, Any]:
+    """Run the small audit smoke.
+
+    Returns a dict with battle results, audit path,
+    and a one-line summary.
+    """
+    if not check_localhost_healthy():
+        return {
+            "error": (
+                f"localhost:8000 not healthy; "
+                f"refusing to run."
+            ),
+        }
+    if battles > MAX_BATTLES:
+        return {
+            "error": (
+                f"refusing to run > {MAX_BATTLES} battles "
+                f"(got {battles})"
+            ),
+        }
+
+    with open(OUR_TEAM_JSON) as f:
+        our_team_data = json.load(f)
+    our_team_showdown = json_to_showdown(our_team_data)
+
+    # The audit logger writes to ``output_path`` (one
+    # line per battle record). The bot's choose_move
+    # path triggers ``log_turn_decision`` which fills
+    # in the v1.1 fields including
+    # ``move_metadata_map``.
+    audit_logger = DoublesDecisionAuditLogger(
+        filepath=output_path, reset=True, detail_level="top5"
+    )
+    # Set battle-arm metadata so save_battle can
+    # populate the persisted row's metadata. This is
+    # the same call the production runner does.
+    audit_logger.set_current_battle_meta(
+        benchmark_arm="rl_data_3b_small",
+        enable_mega_evolution=False,
+        enable_decision_timing_diagnostics=False,
+        treatment_side="p1",
+        player_side="p1",
+        player_name=f"{LOCAL_BASE}Bot",
+    )
+
+    print(
+        f"Running {battles} battles (RL-DATA-3b-small "
+        f"local audit smoke)...",
+        flush=True,
+    )
+    battle_results: List[Dict[str, Any]] = []
+    for idx in range(1, battles + 1):
+        try:
+            r = await run_single_battle(
+                idx, battles, audit_logger, our_team_showdown
+            )
+            battle_results.append(r)
+            print(
+                f"  [{idx}/{battles}] Done {r['elapsed_s']:.1f}s",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"  Battle {idx} failed: {e}", flush=True)
+            battle_results.append(
+                {
+                    "battle_idx": idx,
+                    "error": str(e),
+                }
+            )
+
+    return {
+        "battles_attempted": battles,
+        "battle_results": battle_results,
+        "audit_path": output_path,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--n-battles",
+        type=int,
+        default=DEFAULT_BATTLES,
+        help=(
+            f"Number of battles to run "
+            f"(default: {DEFAULT_BATTLES}, max: {MAX_BATTLES})"
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        default="logs/rl_data_3b_small_audit.jsonl",
+        help="Output audit JSONL path",
+    )
+    args = parser.parse_args()
+
+    if args.n_battles < 1:
+        print("ERROR: --n-battles must be >= 1")
+        sys.exit(1)
+    if args.n_battles > MAX_BATTLES:
+        print(
+            f"ERROR: --n-battles must be <= {MAX_BATTLES} "
+            f"(got {args.n_battles})"
+        )
+        sys.exit(1)
+
+    # Hard guard: refuse to write to a non-logs path.
+    output_path = os.path.abspath(args.output)
+    if not output_path.startswith(
+        os.path.join(REPO_ROOT, "logs")
+    ):
+        print(
+            f"ERROR: --output must be under logs/ "
+            f"(got {output_path})"
+        )
+        sys.exit(1)
+
+    result = asyncio.run(
+        run_smoke(args.n_battles, output_path)
+    )
+    if result.get("error"):
+        print(f"ERROR: {result['error']}")
+        sys.exit(1)
+    print()
+    print("=" * 60)
+    print("RL-DATA-3b-small smoke summary")
+    print("=" * 60)
+    print(f"  audit path: {result['audit_path']}")
+    print(f"  battles attempted: {result['battles_attempted']}")
+    succeeded = sum(
+        1
+        for r in result["battle_results"]
+        if "error" not in r and r.get("bot_finished", 0) > 0
+    )
+    print(f"  battles finished: {succeeded}")
+    failed = sum(
+        1
+        for r in result["battle_results"]
+        if "error" in r
+    )
+    print(f"  battles failed: {failed}")
+    print()
+    print("Next: build v1.1 dataset and run analyzer gates.")
+
+
+if __name__ == "__main__":
+    main()

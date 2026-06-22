@@ -720,6 +720,7 @@ GROUP_SPEED_TURN_CONTROL = "speed_turn_control"
 GROUP_WEATHER_TERRAIN = "weather_terrain"
 GROUP_HEALING_BUFF_ALLY_SUPPORT = "healing_buff_ally_support"
 GROUP_FIELD_SIDE_CONTROL = "field_side_control"
+GROUP_SETUP_STAT_BOOST = "setup_stat_boost"
 GROUP_UNKNOWN_NEEDS_PROBE = "unknown_needs_probe"
 
 ALL_SUPPORT_GROUPS = (
@@ -731,6 +732,7 @@ ALL_SUPPORT_GROUPS = (
     GROUP_WEATHER_TERRAIN,
     GROUP_HEALING_BUFF_ALLY_SUPPORT,
     GROUP_FIELD_SIDE_CONTROL,
+    GROUP_SETUP_STAT_BOOST,
     GROUP_UNKNOWN_NEEDS_PROBE,
 )
 
@@ -831,6 +833,46 @@ _KNOWN_SUPPORT_MOVE_INVENTORY: Dict[str, Tuple[str, str]] = {
     "toxicspikes": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
     "haze": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
     "clearsmog": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    # Setup / stat-boost moves (Phase RL-DATA-3c). These
+    # are real support moves that boost the user's
+    # stats. The bot's scoring has not adopted a positive
+    # strategy for these yet (the SUPPORT-AUDIT-1
+    # inventory does not include them in the original
+    # 52-move list). The classification is
+    # ``no_positive_strategy``: the move is recognized
+    # as a support move, but the bot does not yet
+    # score it positively. ``unknown_support_move_detected``
+    # is ``False`` so Gate 17 does not warn.
+    "quiverdance": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "swordsdance": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "nastyplot": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "dragondance": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "calmmind": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "bulkup": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "irondefense": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "amnesia": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "agility": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "shellsmash": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "bellydrum": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "growth": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "workup": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "curse": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "cosmicpower": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "coil": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "honeclaws": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "autotomize": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "rockpolish": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "shiftgear": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "tailglow": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "geomancy": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "victorydance": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "clangeroussoul": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    "tidyup": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
+    # Substitute is a pseudo-setup move (it gives the
+    # user a free-switch / damage blocker). The
+    # original SUPPORT-AUDIT-1 did not include it;
+    # the bot can safely attempt it as a setup move.
+    "substitute": (GROUP_SETUP_STAT_BOOST, STATUS_NO_POSITIVE_STRATEGY),
 }
 
 # Damaging moves that LOOK like support (e.g., damage with status

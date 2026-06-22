@@ -448,8 +448,33 @@ def _extract_v1_1_support_classification(
     ``hurricane`` are then correctly classified as
     damage-like (``is_support_move=False``) instead
     of being falsely tagged as ``unknown_needs_probe``.
+
+    Phase RL-DATA-3b-followup: filter non-move
+    actions before support classification. V4a
+    legal-action keys mix move actions, switch
+    actions, and pass actions. Switch actions
+    carry a species name as the "move id" (e.g.,
+    ``["switch", "volcarona", 0, ""]``); pass actions
+    carry ``"/choose pass"``. Sending these to the
+    support classifier inflates Gate 17 with false
+    ``unknown_needs_probe`` tags. The helper now
+    detects the action kind via
+    ``doubles_engine.v4a_action_kind`` and only
+    calls the support classifier on real move
+    actions. Switch / pass / unknown actions get
+    a pre-built ``NON_MOVE_CLASSIFICATION`` dict
+    with ``is_support_move=False`` and
+    ``unknown_support_move_detected=False``.
     """
     classify, aggregate = _support_targets_classify()
+    # Lazy import to keep the helper import-light
+    # and to avoid a hard dependency cycle.
+    from doubles_engine.v4a_action_kind import (
+        resolve_candidate_action_kind,
+        split_candidate_id_from_v4a_key,
+        build_non_move_classification,
+        ACTION_KIND_MOVE,
+    )
     legal0 = turn_data.get("v4a_legal_action_keys_slot0") or []
     legal1 = turn_data.get("v4a_legal_action_keys_slot1") or []
     # Try to extract live move metadata from the
@@ -471,17 +496,33 @@ def _extract_v1_1_support_classification(
         for k in keys:
             if not isinstance(k, (list, tuple)) or len(k) < 2:
                 continue
-            mid = _normalize_v1_1_move_id(k[1])
-            if not mid:
+            # Phase RL-DATA-3b-followup: detect the
+            # action kind before classifying. Only
+            # ``move`` actions go through the support
+            # classifier. Switch / pass / unknown
+            # actions get the pre-built
+            # ``NON_MOVE_CLASSIFICATION`` dict.
+            action_kind = resolve_candidate_action_kind(k)
+            kind, candidate_id = split_candidate_id_from_v4a_key(k)
+            if not candidate_id:
                 continue
-            # Look up metadata for this move. The
-            # audit logger populates ``move_metadata_map``
-            # via the resolver. The resolver tries
-            # live poke-env objects first, then the
-            # static fallback. If neither has the
-            # move, we get ``metadata_source="unknown"``
-            # and base_power/category are ``None``
-            # (the conservative default).
+            if action_kind != ACTION_KIND_MOVE:
+                # Non-move action: skip the support
+                # classifier. The pre-built dict
+                # explicitly sets
+                # ``unknown_support_move_detected=False``
+                # so the audit JSONL does not falsely
+                # inflate Gate 17.
+                cls_with_meta = build_non_move_classification(
+                    action_kind=action_kind,
+                    metadata_source="n/a",
+                )
+                classifications.append(cls_with_meta)
+                per_candidate[candidate_id] = cls_with_meta
+                continue
+            # Move action: resolve metadata, then
+            # call the support classifier.
+            mid = candidate_id
             meta = move_metadata_map.get(mid) or {}
             base_power = meta.get("base_power")
             category = meta.get("category")
@@ -497,6 +538,10 @@ def _extract_v1_1_support_classification(
             # a real poke-env object, the active
             # mon's moves, or the static fallback.
             cls_with_meta = dict(cls)
+            cls_with_meta["action_kind"] = action_kind
+            cls_with_meta["is_move_action"] = True
+            cls_with_meta["is_switch_action"] = False
+            cls_with_meta["is_pass_action"] = False
             cls_with_meta["metadata_source"] = meta.get(
                 "metadata_source"
             ) or "unknown"

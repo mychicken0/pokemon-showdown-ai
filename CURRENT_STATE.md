@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed.
+Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed. RL-DATA-3b-small small real local battle audit smoke completed (5 battles, 64 v1.1 rows, 0 hard blocks, 66% live order metadata source). RL-DATA-3b-followup switch/pass action filter completed (Gate 17 unknown count 58 → 27, unknown_rate 34% → 5.4%). RL-DATA-3c consolidated v1.1 dataset build + quality gates + baselines completed (407 battles, 5923 v1.1 rows, READY, 0 hard blocks, 0 warnings, 0% unknown rate, training NOT approved). RL-DATA-3d action distribution + baseline audit completed (metric bug confirmed: real double_attack=50.6%, not 100%; policy biased: 0% setup / 0% weather setter selected; score-based baseline 64.0%).
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -221,6 +221,105 @@ over the static fallback. An unusual damaging move
 classified as damage-like via the override. 22 new
 override tests pass. 220 total RL tests pass. No
 training. No data collection.
+
+The v1.1 audit logger path is now exercised end-to-end
+on a real local battle audit via **RL-DATA-3b-small**
+(see `logs/rl_data_3b_small_local_audit_smoke.md`). A
+new script `showdown_ai/rl_data_3b_small_local_audit.py`
+runs 5 local battles on `localhost:8000` against a
+`RandomPlayer` and writes a real audit JSONL. The
+audit produces 64 v1.1 rows (0 skipped, 0 hard blocks,
+0 logger crash). The live override path is dominant:
+**66% of classifications are sourced from live
+`order` objects** (poke-env `Move`), 0% from fallback.
+The analyzer reports `readiness_impact: WARN` with
+1 soft warning (Gate 17: 58 rows have
+`unknown_support_move_detected=True`); the cause is
+a known limitation where the V4a legal-action keys
+mix moves and switches, and the support classifier
+receives species names as if they were move ids. All
+hard safety fields are clean
+(`used_species_ability_inference=False`,
+`impossible_target_detected=False`,
+`blocked_action_resurrected_by_joint=False`,
+`local_only_provenance=True`). Dry-run loads the v1.1
+dataset (`DRYRUN_PIPELINE_WORKS`). 220 total RL tests
+pass. No training. No data collection. No commit. No
+push.
+
+The switch / pass action filter is now active via
+**RL-DATA-3b-followup** (see
+`logs/rl_data_3b_followup_switch_action_filter.md`). A
+new module `doubles_engine/v4a_action_kind.py`
+detects the action kind from the first element of the
+V4a key (move / switch / pass / unknown). The audit
+logger's `_extract_v1_1_support_classification` and
+the builder's `_extract_v1_1_support_classification`
+now skip non-move actions. Switch actions get a
+pre-built `NON_MOVE_CLASSIFICATION` dict with
+`is_support_move=False` and
+`unknown_support_move_detected=False`. The Gate 17
+unknown count dropped from 58 to 27 (53% reduction);
+the `unknown_rate` dropped from 34% to 5.4% (84%
+reduction); the `unknown_needs_probe` count dropped
+from 266 to 54 (80% reduction). The remaining 27
+unknown moves are all `quiverdance` (a real stat-boost
+setup move not in the SUPPORT-AUDIT-1 inventory).
+23 new action-kind tests pass. 243 total RL tests
+pass. No training. No data collection. No commit. No
+push.
+
+A consolidated 5,000+ row v1.1 dataset has been built
+via **RL-DATA-3c** (see
+`logs/rl_data_3c_consolidated_dataset_build.md`). The
+SUPPORT-AUDIT-1 inventory was extended with the
+`GROUP_SETUP_STAT_BOOST` group and 26 setup / stat-
+boost moves (including `quiverdance`). The 5-battle
+smoke now reports `readiness_impact: READY` with 0
+warnings. 407 local battles produced 5923 v1.1 rows
+(0 skipped, 0 hard blocks, 0 warnings). All 18 gates
+pass with 100% field coverage. `fallback_rate` /
+`unknown_rate` / `unknown_support_rate` are all 0%.
+The live `order` metadata source dominates (67.5%).
+Dry-run loads the 5k+ v1.1 dataset
+(`DRYRUN_PIPELINE_WORKS`). Baselines: majority joint
+2.6%, heuristic 100% (by definition), per-slot
+majority 16-17%. **Action distribution is collapsed
+toward attacks** in selected joints (100% double
+attacks, 0 setup, 0 weather setter) — the bot's
+policy is attack-biased. 19 new setup-stat-boost
+tests pass. 262 total RL tests pass. **RL training is
+NOT approved** — the 13-item checklist still has
+incomplete items (action distribution collapse, user
+authorization, AGENTS.md sign-off). No training. No
+commit. No push.
+
+The action distribution and baseline audit has been
+completed via **RL-DATA-3d** (see
+`logs/rl_data_3d_action_distribution_baseline_audit.md`).
+A new analysis script
+`scripts/analyze/analyze_rl_data_3d_action_distribution.py`
+computes BOTH a mutually exclusive primary distribution
+AND overlapping boolean tags. The previous
+`double_attack=100%` from RL-DATA-3c was confirmed as
+a **metric bug** (the categories were overlapping,
+not mutually exclusive). The corrected primary
+distribution: `double_attack=50.6%`,
+`attack_plus_switch=19.1%`, `single_move_plus_pass=14.6%`,
+`attack_plus_protect=9.4%`, `double_switch=4.2%`,
+`move_plus_switch=1.0%`, `double_protect=1.0%`. Setup
+and weather setter are **NEVER selected** (0% each)
+even though they are legal in 1449 and 2343 rows
+respectively. Baselines: majority joint 50.6%,
+per-slot majority ~16-17% (pass), action-kind
+baseline 91.6%, per-slot max-score baseline 64.0%.
+**Policy collapse decision: `DATASET_WARN_POLICY_BIASED`**.
+The dataset is honest about the bias but the bot's
+policy never considers setup or weather/terrain as
+primary actions. 35 new analysis tests pass. 297
+total RL tests pass. **RL training remains NOT
+approved** — the policy bias is a known limitation.
+No training. No commit. No push.
 
 The audit recommends four follow-on phases
 (`SUPPORT-3` follow-me / rage-powder, `SUPPORT-4` anti-stat-setup,

@@ -181,6 +181,37 @@ _FALLBACK_MOVE_METADATA: Dict[str, Tuple[int, str]] = {
     "gunkshot": (120, "physical"),
     "boltstrike": (130, "physical"),
     "waterfall": (80, "physical"),
+    # Phase RL-DATA-3c: setup / stat-boost moves.
+    # All are 0 power, status. The classifier
+    # uses these to correctly identify setup
+    # moves as damage-like (not support) for
+    # the purpose of Gate 17.
+    "quiverdance": (0, "status"),
+    "swordsdance": (0, "status"),
+    "nastyplot": (0, "status"),
+    "dragondance": (0, "status"),
+    "calmmind": (0, "status"),
+    "bulkup": (0, "status"),
+    "irondefense": (0, "status"),
+    "amnesia": (0, "status"),
+    "agility": (0, "status"),
+    "shellsmash": (0, "status"),
+    "bellydrum": (0, "status"),
+    "growth": (0, "status"),
+    "workup": (0, "status"),
+    "curse": (0, "status"),
+    "cosmicpower": (0, "status"),
+    "coil": (0, "status"),
+    "honeclaws": (0, "status"),
+    "autotomize": (0, "status"),
+    "rockpolish": (0, "status"),
+    "shiftgear": (0, "status"),
+    "tailglow": (0, "status"),
+    "geomancy": (0, "status"),
+    "victorydance": (0, "status"),
+    "clangeroussoul": (0, "status"),
+    "tidyup": (0, "status"),
+    "substitute": (0, "status"),
 }
 
 
