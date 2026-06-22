@@ -37,7 +37,9 @@ import poke_env_test_cleanup  # noqa: F401
 REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))
 )
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))
+)
 sys.path.insert(0, PROJECT_ROOT)
 
 # Re-import the analyzer's helpers so we test the
@@ -2182,15 +2184,17 @@ class TestPairMerge(unittest.TestCase):
 class TestCLI(unittest.TestCase):
     QUALIFIER = os.path.join(
         PROJECT_ROOT,
+        "showdown_ai",
         "bot_doubles_support_move_target_safety_paired_qualification.py",
     )
 
     def test_cli_missing_artifact_tag_fails(self):
         """The qualifier requires ``--artifact-tag``."""
+        env = {**os.environ, "PYTHONPATH": PROJECT_ROOT}
         result = subprocess.run(
             [sys.executable, self.QUALIFIER],
             capture_output=True, text=True,
-            cwd=PROJECT_ROOT, timeout=20,
+            cwd=PROJECT_ROOT, env=env, timeout=20,
         )
         self.assertNotEqual(result.returncode, 0)
         # argparse writes the usage error to stderr.
@@ -2215,6 +2219,7 @@ class TestCLI(unittest.TestCase):
             # Create the artifact first
             with open(csv_path, "w") as f:
                 f.write("header\n")
+            env = {**os.environ, "PYTHONPATH": PROJECT_ROOT}
             try:
                 result = subprocess.run(
                     [
@@ -2223,7 +2228,7 @@ class TestCLI(unittest.TestCase):
                         "--artifact-tag", tag,
                     ],
                     capture_output=True, text=True,
-                    cwd=PROJECT_ROOT, timeout=20,
+                    cwd=PROJECT_ROOT, env=env, timeout=20,
                 )
                 self.assertNotEqual(result.returncode, 0)
                 # The script prints "ERROR: ... --overwrite ..."
@@ -2284,16 +2289,21 @@ class TestNaturalProcessExit(unittest.TestCase):
         import subprocess
         # Use a single test target (not dotted paths
         # that may be split by some unittest
-        # runners).
+        # runners). Path updated for tests/ subfolder
+        # layout (Phase 6.3.9 hygiene).
+        env = {
+            **os.environ,
+            "PYTHONPATH": PROJECT_ROOT,
+        }
         result = subprocess.run(
             [
                 sys.executable,
                 "-W", "error::ResourceWarning",
-                "test_doubles_support_move_target_safety_paired.py",
+                "tests/test_doubles_support_move_target_safety_paired.py",
                 "TestHelpers.test_wilson_ci_zero",
             ],
             capture_output=True, text=True,
-            cwd=PROJECT_ROOT, timeout=60,
+            cwd=PROJECT_ROOT, env=env, timeout=60,
         )
         if result.returncode != 0:
             self.assertIn(
