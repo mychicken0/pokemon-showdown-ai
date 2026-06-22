@@ -490,6 +490,24 @@ class DoublesDamageAwareConfig:
     anti_trick_room_ko_min_turn_between_picks: int = 1
     anti_trick_room_response_require_survival: bool = True
 
+    # Phase CONTROL-PRIORITY-2A: Status-move ability safety.
+    # When True, status moves (Taunt, Encore, Disable, etc.)
+    # into a target with a known status-blocking ability are
+    # blocked (set score to 0 if damage alternative, else -100).
+    # This is a NARROW exception to "no full ability awareness":
+    # only specific known abilities (Magic Bounce, Good as Gold,
+    # Aroma Veil) are tracked, only for status moves, only when
+    # revealed. Attacker with Mold Breaker / Teravolt / Turboblaze
+    # correctly bypasses (the existing helper bug is fixed).
+    #
+    # Sub-flags control which abilities are tracked.
+    # Default OFF preserves pre-2A behavior (no production change).
+    enable_status_move_ability_safety: bool = False
+    status_ability_safety_track_magic_bounce: bool = True
+    status_ability_safety_track_good_as_gold: bool = True
+    status_ability_safety_track_aroma_veil: bool = True
+    status_ability_safety_track_aroma_veil_ally: bool = True
+
     # PLANNER-IMPL-2: opt-in per-turn intent detector.
     # When True, the bot runs IntentDetector.detect() per
     # turn and writes observational audit fields
@@ -6457,10 +6475,80 @@ class DoublesDamageAwarePlayer(Player):
                     if priority_res["blocked"]:
                         return float(self.config.ability_hard_safety_block_score)
 
+                # Phase CONTROL-PRIORITY-2A: Status-move ability safety
+                # (narrow). When True, status moves into a target
+                # with a known status-blocking ability are blocked.
+                # Independent of enable_ability_awareness. Covers
+                # Magic Bounce, Good as Gold, Aroma Veil (target +
+                # ally). Attacker with Mold Breaker family correctly
+                # bypasses via the helper.
+                if (
+                    self.config.enable_status_move_ability_safety
+                    and target_pos in (1, 2)
+                    and target_mon
+                ):
+                    # Track which sub-flag matched (so we can
+                    # filter by user's choice).
+                    avoid, reason = (
+                        ability_rules.should_avoid_status_into_ability(
+                            target_mon, move, attacker=active_mon
+                        )
+                    )
+                    track_target = False
+                    if avoid:
+                        if (
+                            self.config.status_ability_safety_track_magic_bounce
+                            and "Magic Bounce" in reason
+                        ):
+                            track_target = True
+                        if (
+                            self.config.status_ability_safety_track_good_as_gold
+                            and "Good as Gold" in reason
+                        ):
+                            track_target = True
+                        if (
+                            self.config.status_ability_safety_track_aroma_veil
+                            and "Aroma Veil" in reason
+                        ):
+                            track_target = True
+
+                    # Check ally-side Aroma Veil (only for the
+                    # specific moves Aroma Veil blocks).
+                    track_ally = False
+                    if (
+                        not track_target
+                        and self.config.status_ability_safety_track_aroma_veil_ally
+                        and ability_rules.ally_has_aroma_veil(
+                            target_mon, battle
+                        )
+                    ):
+                        move_id = (
+                            getattr(move, "id", "") or ""
+                        ).lower().replace(" ", "").replace("-", "").replace("_", "").replace("'", "")
+                        if move_id in ("taunt", "encore", "disable"):
+                            reason = f"Ally Aroma Veil blocks {move_id} vs {target_mon.species}"
+                            track_ally = True
+
+                    if track_target or track_ally:
+                        if self.verbose:
+                            print(
+                                f"[Status Ability Block] {reason} | Attacker: {ability_rules.get_known_ability(active_mon)}, Target: {ability_rules.get_known_ability(target_mon)}"
+                            )
+                        self.increment_metric(
+                            self.ability_blocks_avoided_by_battle, battle.battle_tag
+                        )
+                        has_damaging_move = any(
+                            getattr(m, "base_power", 0) > 0
+                            for m in battle.available_moves[active_idx]
+                        )
+                        if has_damaging_move:
+                            return 0.0
+                        return -100.0
+
                 if self.config.enable_ability_awareness:
                     if target_mon and target_pos in (1, 2):
                         avoid, reason = ability_rules.should_avoid_status_into_ability(
-                            target_mon, move
+                            target_mon, move, attacker=active_mon
                         )
                         if avoid:
                             if self.verbose:
@@ -6482,7 +6570,7 @@ class DoublesDamageAwarePlayer(Player):
                             if opp:
                                 avoid, reason = (
                                     ability_rules.should_avoid_status_into_ability(
-                                        opp, move
+                                        opp, move, attacker=active_mon
                                     )
                                 )
                                 if avoid:

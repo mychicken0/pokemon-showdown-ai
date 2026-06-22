@@ -4552,3 +4552,89 @@ when Hatterene is in target + full HP.
 
 See `logs/phaseCONTROL_PRIORITY_1_anti_tr_response_priority_audit.md`
 for full audit.
+
+### CONTROL-PRIORITY-2A — Status-Move Ability Safety IMPLEMENTATION (added 2026-06-22)
+
+**Decision:** `IMPLEMENTED` (opt-in, default OFF, no default flip).
+
+**Scope** (REV3 fully refined):
+- ✓ Magic Bounce (target) — Hatterene
+- ✓ Good as Gold (target) — Gholdengo (banned, future-proof)
+- ✓ Aroma Veil (target) — Aromatisse
+- ✓ Aroma Veil (target's ally) — ally protection
+- ✓ Mold Breaker / Teravolt / Turboblaze (attacker) — bypass
+
+**Excluded** (documented):
+- Soundproof/Overcoat (not relevant for Taunt)
+- Bulletproof (not status)
+- Own Aroma Veil (not relevant for our Taunt)
+- Prankster priority, type immunity (different mechanics)
+
+**Files modified**:
+- `ability_rules.py`:
+  - `should_avoid_status_into_ability(target, move, attacker=None)`:
+    added attacker param + Aroma Veil case + Mold Breaker bypass
+    (also fixes existing helper bug)
+  - New `ally_has_aroma_veil(target, battle)` helper
+- `bot_doubles_damage_aware.py`:
+  - 5 new config fields (1 master + 4 sub-flags)
+  - Modified `score_action` to use new flag (independent of
+    `enable_ability_awareness`)
+  - Updated existing call site to pass attacker param
+
+**Files added**:
+- `test_status_move_ability_safety.py`: 21 fixture tests
+  - 13 tests for `should_avoid_status_into_ability` (each ability,
+    Mold Breaker bypass, backward compat)
+  - 5 tests for `ally_has_aroma_veil` (true, false, fainted, none,
+    target-itself)
+  - 3 tests for config flags (default-off, sub-flag defaults, modifiable)
+
+**Test results**:
+- 21 new tests: ALL PASS
+- 176 tests across related files: ALL PASS
+- 0 regressions
+- `test_51` not touched
+
+**Default behavior**:
+- `enable_status_move_ability_safety = False` (opt-in)
+- No production behavior change
+
+**Adoption status**:
+- Feature: IMPLEMENTED, opt-in
+- Adoption: NOT YET (gates 3-9 pending verification)
+
+**Path to adoption** (deferred to 2A-IMPL-VERIFICATION):
+- Targeted probe: 3 battles (Hatterene, Aromatisse, Haxorus)
+- 5-10 pair smoke
+- 20-30 pair preview
+- 100 pair full qualification (only if gates 1-4 pass)
+
+See `logs/phaseCONTROL_PRIORITY_2A_status_move_ability_safety_impl.md`
+for full implementation report.
+
+### CONTROL-PRIORITY-2A — Verification Report (added 2026-06-22)
+
+**Decision:** `VERIFICATION_INCONCLUSIVE_AT_RUNTIME`.
+
+**Fixture tests**: 21/21 PASS (logic verified)
+
+**5-pair smoke**:
+- ON: 4/5 wins (80%)
+- OFF: 4/5 wins (80%)
+- Delta: 0pp (no regression)
+- 0 crashes, 0 errors
+
+**Magic Bounce reveal**: 0/5 trials revealed (structural
+issue — Hatterene dies before using a status move)
+
+**Adoption recommendation**:
+- Keep opt-in (no default flip)
+- Logic verified via fixtures
+- Runtime scenario doesn't naturally trigger
+- 0 production behavior change
+- For full adoption: need tanky Hatterene scenario or actual
+  usage data
+
+See `logs/phaseCONTROL_PRIORITY_2A_verification_report.md`
+for full verification analysis.

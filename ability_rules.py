@@ -364,11 +364,31 @@ def attacker_ability_damage_multiplier(attacker, move, target=None) -> tuple[flo
     return multiplier, ""
 
 
-def should_avoid_status_into_ability(target, move) -> tuple[bool, str]:
-    """Checks if a status move should be avoided due to the target's ability blocking or reflecting it."""
+def should_avoid_status_into_ability(target, move, attacker=None) -> tuple[bool, str]:
+    """Checks if a status move should be avoided due to the
+    target's ability blocking or reflecting it.
+
+    When attacker is provided, attacker-side bypass abilities
+    (Mold Breaker, Teravolt, Turboblaze) disable the block.
+
+    Phase CONTROL-PRIORITY-2A: added attacker parameter and
+    Aroma Veil case. The Aroma Veil case only blocks the
+    move if it's Taunt/Encore/Disable (the specific moves
+    Aroma Veil blocks, per Showdown mechanics).
+    """
     if not target or not move:
         return False, ""
     try:
+        # Phase CONTROL-PRIORITY-2A: attacker-side bypass.
+        # Mold Breaker, Teravolt, Turboblaze disable the
+        # target's ability during the move's execution.
+        if attacker:
+            attacker_ability = get_known_ability(attacker)
+            if attacker_ability in ("moldbreaker", "teravolt", "turboblaze"):
+                return False, (
+                    f"target's ability bypassed by attacker's {attacker_ability}"
+                )
+
         category = getattr(move, "category", None)
         cat_str = str(category.name).lower() if hasattr(category, "name") else str(category).lower()
         if cat_str != "status":
@@ -384,6 +404,17 @@ def should_avoid_status_into_ability(target, move) -> tuple[bool, str]:
         if target_ability == "magicbounce":
             return True, f"Magic Bounce reflects status moves vs {target.species}"
 
+        # Phase CONTROL-PRIORITY-2A: Aroma Veil blocks
+        # Taunt/Encore/Disable specifically (and a few others
+        # like Heal Block, Torment — but for anti-TR we only
+        # care about Taunt/Encore/Disable).
+        if target_ability == "aromaveil":
+            move_id = (
+                getattr(move, "id", "") or ""
+            ).lower().replace(" ", "").replace("-", "").replace("_", "").replace("'", "")
+            if move_id in ("taunt", "encore", "disable"):
+                return True, f"Aroma Veil blocks {move_id} vs {target.species}"
+
         flags = getattr(move, "flags", set())
 
         if target_ability == "soundproof" and "sound" in flags:
@@ -394,3 +425,26 @@ def should_avoid_status_into_ability(target, move) -> tuple[bool, str]:
     except Exception as e:
         logger.error(f"Error in should_avoid_status_into_ability: {e}")
     return False, ""
+
+
+def ally_has_aroma_veil(target, battle) -> bool:
+    """Returns True if target's active partner has Aroma Veil
+    (revealed). Phase CONTROL-PRIORITY-2A.
+
+    Aroma Veil protects the user AND its ally from Taunt,
+    Encore, Disable, etc. If the target's partner has Aroma
+    Veil, our status move on the target would be blocked by
+    the partner's protection.
+    """
+    if not target or not battle:
+        return False
+    try:
+        opps = getattr(battle, "opponent_active_pokemon", []) or []
+        for opp in opps:
+            if opp and opp != target and not getattr(opp, "fainted", False):
+                ab = get_known_ability(opp)
+                if ab == "aromaveil":
+                    return True
+    except Exception:
+        pass
+    return False
