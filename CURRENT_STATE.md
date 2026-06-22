@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed.
+Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added (read-only).
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -141,6 +141,18 @@ existing PLANNER-ANTI-TR / CONTROL-PRIORITY-2* / 6.3.8* work is opt-in only
 and remains so; do not flip defaults from a pre-reveal Magic Bounce
 deduction or from a setter-move scoring calibration. Any new adoption gate
 must include the evidence-ladder items in `AGENTS.md`.
+
+If the goal is to scope RL-data collection or to add a positive
+support-move strategy, run **SUPPORT-AUDIT-1** first
+(see `logs/support_audit_1_support_move_inventory.md`). The audit
+maps every currently relevant support-move system to a status class
+and identifies the safest next steps. The audit confirms the
+mechanics / safety path is well-covered and the strategy / positive
+scoring path is sparse. The audit recommends four follow-on phases
+(`SUPPORT-3` follow-me / rage-powder, `SUPPORT-4` anti-stat-setup,
+`SUPPORT-5` positive-strategy for Heal Pulse / Decorate, and the
+existing `WT-3` / `WT-4` deferred Weather/Terrain work). None of
+those are auto-started.
 
 Other future-work candidates, none promoted:
 
