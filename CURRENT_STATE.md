@@ -4491,3 +4491,64 @@ t3-4 due to HP loss from taking damage while bot does damage.
 - Decision deferred to next phase
 
 See `logs/phaseCONTROL_PIECE_1.md` for full audit.
+
+### CONTROL-PRIORITY-1 — Anti-TR Control Response Priority Audit (added 2026-06-22)
+
+**Decision:** `MECHANICS_BLOCK_TAUNT`.
+
+Read-only audit. 0 code changes. 0 scoring changes. 0
+magnitude tuning. 0 default flips. Used existing EVAL-1/EVAL-2
+artifacts only.
+
+**Critical finding**: Hatterene has Magic Bounce in the
+test team (`general_opp_tr.json`). Magic Bounce reflects
+Taunt back to the user. The bot's "incorrect" preference
+for Fake Out/damage over Taunt is actually **correct** vs
+the Magic Bounce threat.
+
+**Per-turn analysis** (12 ANTI_TR turns with Incineroar
+active in EVAL-2 ON):
+- 11/12 correct calls (92%)
+- Only borderline case: trial 4 t1 (Taunt vs Magic Bounce
+  Hatterene 1.0 HP was an open question; bot chose Fake
+  Out which is the safer play)
+
+**Q1**: Top 5 alternatives — Taunt is in top 5 in 7/12
+turns but wins only 2/12 (when Hatterene is in target slot
+and at full HP).
+
+**Q2**: Magic Bounce present in 2/28 Hatterene sightings
+(revealed). 26/28 not yet revealed. Bot has no way to
+know Magic Bounce in advance.
+
+**Q3**: Fake Out prevented TR in 3/5 trials where
+Hatterene was opp slot 0 at t1 (60%). Not 100% because
+Hatterene can use TR on t2.
+
+**Q4**: Hatterene in KO range when bot chose damage: 0/6
+cases (Hatterene was not in active when bot chose damage,
+except trial 5 t3 which was 1.0 HP not in KO range).
+
+**Q5**: Bot made correct call in 11/12 ANTI_TR turns with
+Incineroar active. Bot's strategy is sound.
+
+**Q6**: Score gap (top damage vs Taunt): -31 to -134
+points when Hatterene not in target. Taunt wins only
+when Hatterene is in target + full HP.
+
+**Q7-Q8**:
+- Safe conditions for Taunt: Hatterene in target slot, HP
+  > 0.7, Magic Bounce not revealed, Incineroar HP > 0.5
+- KO must win: Hatterene HP < 0.7, Hatterene not in
+  target, Magic Bounce revealed, Incineroar HP < 0.25
+
+**Implications for adoption**:
+- The current scoring is **correct** (anti-Fake Out/damage
+  preference is actually right vs Magic Bounce)
+- Anti-TR feature stays opt-in
+- Adoption requires **mechanics improvements**
+  (Magic Bounce tracking, target-aware scoring), not
+  magnitude tuning
+
+See `logs/phaseCONTROL_PRIORITY_1_anti_tr_response_priority_audit.md`
+for full audit.
