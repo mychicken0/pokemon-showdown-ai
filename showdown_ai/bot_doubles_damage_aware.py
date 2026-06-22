@@ -6772,6 +6772,27 @@ class DoublesDamageAwarePlayer(Player):
                         )
                         return float(self.config.support_move_wrong_side_block_score)
 
+                # Phase 6.3.8a: Narrow Ally-Heal Wrong-Side Hard Safety
+                # Production-grade replacement that only blocks Heal Pulse,
+                # Floral Healing, and Decorate aimed at an opponent.
+                # Independent of the broad flag — fires whether the broad
+                # flag is on or off. The broad flag (above) handles the
+                # wider wrong-side set first; this is a strict narrow subset.
+                if self.config.enable_ally_heal_wrong_side_hard_safety:
+                    blocked_narrow, reason_narrow = narrow_ally_heal_wrong_side_block(
+                        order, active_idx, battle, config=self.config
+                    )
+                    if blocked_narrow:
+                        if self.verbose:
+                            print(f"[Narrow Ally Heal Block] {reason_narrow}")
+                        self._support_target_wrong_side_blocked[battle_tag][
+                            active_idx
+                        ] = True
+                        self._support_target_block_reason[battle_tag][active_idx] = (
+                            reason_narrow
+                        )
+                        return float(self.config.ally_heal_wrong_side_block_score)
+
                 has_damaging_move = any(
                     getattr(m, "base_power", 0) > 0
                     for m in battle.available_moves[active_idx]
