@@ -4449,3 +4449,45 @@ bot's switch logic, not the anti-TR feature.
 See `logs/phasePLANNER_ANTI_TR_EVAL_1.md` (EVAL-2 section) for
 full design and analysis. Eval harness in
 `bot_doubles_anti_tr_eval.py`.
+
+### CONTROL-PIECE-1 — Preserve Control Piece Audit (added 2026-06-22)
+
+**Decision:** `EVIDENCE_CLEAR_BUT_NOT_AS_HYPOTHESIZED`.
+
+Read-only audit. No scoring change. No default flip. No battle
+run (uses existing EVAL-2 artifacts).
+
+**Hypothesis**: "Bot removes control piece before utility
+opportunity."
+
+**Finding**: Hypothesis is **wrong**. The data shows:
+- ✓ Control pieces (Incineroar Taunt, Garganacl Wide Guard) are
+  in the lead (20/20 trials with forced lead)
+- ✓ Control pieces are in active slot during utility opportunity
+  (t1-t2, Hatterene at 1.0 HP)
+- ✗ Bot does NOT remove them prematurely
+- ✓ When given the opportunity, bot selects the right move:
+  - 2/12 Taunt at full-HP Hatterene
+  - 10/12 KO pressure at low-HP Hatterene
+  - 0 wrong Taunt over KO
+- ✗ Bot's chosen moves (Fake Out, Flare Blitz) at t1-t2 cause
+  HP loss that removes Incineroar by t3-4
+
+**Root cause**: Bot uses the control piece (Incineroar) for
+damage moves, not for utility moves. The scoring doesn't value
+Taunt enough to overcome priority/damage moves at t1-t2.
+
+**Incineroar first-leave turn distribution** (EVAL-2 ON, 20 trials):
+- t2: 3x, t3: 12x, t4: 4x, t5: 1x (19/20 by t4)
+
+**Pattern**: Hatterene in by t1-t2, Incineroar in by t1 (forced
+lead), both in during opportunity window. Incineroar leaves by
+t3-4 due to HP loss from taking damage while bot does damage.
+
+**Implications for adoption**:
+- Adoption cannot be achieved by magnitude tuning alone
+- 3 alternative paths: Control Piece Preservation Policy,
+  Switch-in Priority, or accept opt-in only
+- Decision deferred to next phase
+
+See `logs/phaseCONTROL_PIECE_1.md` for full audit.
