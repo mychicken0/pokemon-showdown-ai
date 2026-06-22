@@ -1,0 +1,60 @@
+{
+  "id": "wt2_audit_team_v1",
+  "description": "WT-2 audit team: setter MONs use setter MOVES (not abilities), so the bot's choice is observable. Politoed has Rain Dance without Drizzle. Rillaboom has Grassy Terrain without Grassy Surge.",
+  "team": [
+    {
+      "species": "Politoed",
+      "ability": "Water Absorb",
+      "item": "Leftovers",
+      "nature": "Modest",
+      "level": 50,
+      "evs": {"hp": 252, "spa": 252},
+      "moves": ["Rain Dance", "Hydro Pump", "Ice Beam", "Protect"]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Sitrus Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"atk": 252, "spe": 252},
+      "moves": ["Protect", "Extreme Speed", "Flare Blitz", "Crunch"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"atk": 252, "spe": 252},
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Lum Berry",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"spa": 252, "spe": 252},
+      "moves": ["Heat Wave", "Bug Buzz", "Protect", "Quiver Dance"]
+    },
+    {
+      "species": "Rillaboom",
+      "ability": "Overgrow",
+      "item": "Leftovers",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"atk": 252, "spe": 252},
+      "moves": ["Grassy Terrain", "Wood Hammer", "U-turn", "Protect"]
+    },
+    {
+      "species": "Tapu Lele",
+      "ability": "Psychic Surge",
+      "item": "Choice Scarf",
+      "nature": "Timid",
+      "level": 50,
+      "evs": {"spa": 252, "spe": 252},
+      "moves": ["Psychic", "Moonblast", "Psyshock", "Protect"]
+    }
+  ]
+}
