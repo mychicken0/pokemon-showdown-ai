@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 # Load detailed teams (already parsed)
-detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json")
+detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json")
 with open(detailed_path) as f:
     detailed_teams = json.load(f)
 
@@ -128,7 +128,7 @@ def to_showdown_text(team: dict) -> str:
 
 def main():
     # Load detailed teams
-    detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json")
+    detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json")
     with open(detailed_path) as f:
         detailed_teams = json.load(f)
 

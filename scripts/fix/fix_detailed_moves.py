@@ -159,7 +159,7 @@ def reconstruct_moves(raw_moves: list) -> list:
     return result[:4]
 
 def main():
-    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json') as f:
+    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json') as f:
         detailed = json.load(f)
 
     fixed = 0
@@ -186,7 +186,7 @@ def main():
                     corrected.append(m.capitalize())
             p["moves"] = corrected[:4]
 
-    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json', 'w') as f:
+    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json', 'w') as f:
         json.dump(detailed, f, indent=2)
 
     print(f"Fixed {fixed} teams' moves")

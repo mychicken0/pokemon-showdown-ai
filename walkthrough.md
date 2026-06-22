@@ -4,7 +4,7 @@ Last updated: 2026-06-19 (Asia/Bangkok) — PROTECT-1 roadmap added for RL-orien
 
 This file is the chronological project log. It intentionally contains old
 phase reports, superseded results, and failed attempts. For the current truth,
-read `CURRENT_STATE.md` first.
+read `docs/CURRENT_STATE.md` first.
 
 Current status in one screen:
 
@@ -1518,7 +1518,7 @@ existing tests never exercised the failure mode.
 
 - `doubles_decision_audit_logger.py` only.
 - `test_doubles_dynamic_move_type_safety.py` — 6 new tests.
-- `CURRENT_STATE.md` and `walkthrough.md` — corrected the
+- `docs/CURRENT_STATE.md` and `walkthrough.md` — corrected the
   test-count delta narrative.
 
 ### Slot-1 Guard Strategy
@@ -3122,7 +3122,7 @@ Phase 6.3.8c.2 modified files (this phase):
   (added inventory helpers and audit CLI)
 - `test_doubles_support_move_target_safety_paired.py`
   (added 20 audit tests)
-- `CURRENT_STATE.md` (this section)
+- `docs/CURRENT_STATE.md` (this section)
 - `walkthrough.md` (this section)
 
 Untracked new files (Phase 6.3.8c lineage):
@@ -3236,7 +3236,7 @@ filesystem total.
     flags
 - `test_doubles_support_move_target_safety_paired.py`
   — added 20 tests in `TestArtifactAudit638c2`
-- `CURRENT_STATE.md` and `walkthrough.md`
+- `docs/CURRENT_STATE.md` and `walkthrough.md`
   (this section)
 
 ### Generated audit artifacts (Phase 6.3.8c.2)
@@ -3315,7 +3315,7 @@ total) are the real artifacts.
 | 7. 6.3.8c paired lineage (qualifier + analyzer + test) | 3 files | 92 tests | Group 4 |
 | 8. V2k.x regression tests | 5 files | 5 modules | Groups 1, 2, 3 |
 | 9. V2l.1 VGC parity tests | 3 files | 54 parity tests | Groups 1, 2, 3, 4 |
-| 10. Documentation: `CURRENT_STATE.md` + `walkthrough.md` (FINAL) | 2 files | n/a | Groups 1-9 |
+| 10. Documentation: `docs/CURRENT_STATE.md` + `walkthrough.md` (FINAL) | 2 files | n/a | Groups 1-9 |
 
 ### Clean-base simulation
 
@@ -3400,7 +3400,7 @@ boundary is:
 4. Documentation and boundary reports.
 
 The exact file lists are recorded in
-`commit_boundary_audit_phase638c4.json`.
+`docs/commit_boundaries/commit_boundary_audit_phase638c4.json`.
 
 Verification on a clean `git archive HEAD` checkout:
 
@@ -4166,7 +4166,7 @@ not a fix for a real bug.
   (new causal action audit)
 - ``test_doubles_narrow_ally_heal_paired_repair.py``
   (new tests, 66 cases)
-- ``CURRENT_STATE.md`` and ``walkthrough.md``
+- ``docs/CURRENT_STATE.md`` and ``walkthrough.md``
   (this section)
 
 ### Artifacts (uniquely named, never overwrite)
@@ -5485,7 +5485,7 @@ side-collapse Wilson CI.
   (asyncio fix, CLI flags)
 - New: `test_vgc2026_phaseV3c2_asyncio_fix.py` (14 tests)
 - New artifacts: 2 files in `logs/`
-- Modified docs: `CURRENT_STATE.md`, `walkthrough.md`
+- Modified docs: `docs/CURRENT_STATE.md`, `walkthrough.md`
 
 ### Tests
 
@@ -5545,7 +5545,7 @@ fields directly.
   - `format_report()` updated for new fields
 - `test_vgc2026_phaseV3c2a_analyzer_fix.py` (new)
   — 17 tests
-- Docs: `CURRENT_STATE.md`, `walkthrough.md`
+- Docs: `docs/CURRENT_STATE.md`, `walkthrough.md`
 
 ### V3c.2 exact-match regression
 

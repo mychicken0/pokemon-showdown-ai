@@ -50,7 +50,7 @@ RK9_FIXES = {
 }
 
 def main():
-    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json') as f:
+    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json') as f:
         detailed = json.load(f)
 
     fixed = 0
@@ -67,7 +67,7 @@ def main():
                         print(f"Fixed Rank {rank} {species}: {old} -> {fixes[species]}")
                         fixed += 1
 
-    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json', 'w') as f:
+    with open('/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json', 'w') as f:
         json.dump(detailed, f, indent=2)
 
     print(f"Fixed {fixed} pokemon moves")

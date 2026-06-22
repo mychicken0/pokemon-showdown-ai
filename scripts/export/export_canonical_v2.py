@@ -11,7 +11,7 @@ from datetime import datetime
 from collections import Counter
 
 # Load detailed teams (already parsed)
-detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json")
+detailed_path = Path("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json")
 with open(detailed_path) as f:
     detailed_teams = json.load(f)
 
@@ -135,7 +135,7 @@ def main():
         source_index = json.load(f)
 
     # Load detailed teams
-    with open("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/vgc2026_teams_detailed.json") as f:
+    with open("/home/phurin/Program/Showdown_AI/pokemon-showdown-ai/data/vgc2026_teams_detailed.json") as f:
         detailed_teams = json.load(f)
 
     detailed_map = {t["rank"]: t for t in detailed_teams}
