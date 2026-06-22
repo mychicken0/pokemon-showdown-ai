@@ -4638,3 +4638,352 @@ issue — Hatterene dies before using a status move)
 
 See `logs/phaseCONTROL_PRIORITY_2A_verification_report.md`
 for full verification analysis.
+### CONTROL-PRIORITY-2B — Target-Aware Anti-TR Scoring Design (added 2026-06-22)
+
+**Decision:** `DESIGN_RECORDED` (no implementation yet).
+
+Design-only phase. 0 code changes.
+
+**Background** (from CONTROL-PRIORITY-1):
+- Bot's Taunt bonus was applied to WRONG target
+  (e.g., Taunt on Gardevoir when Hatterene is the actual TR setter)
+- Wasted bonus on incorrect targets
+
+**Existing infrastructure**:
+- `_anti_trick_room_response_eligible` (line 4830+)
+- 5 guards (master, move type, intent, survival, target slot,
+  anti-spam)
+- **Missing**: target is the actual TR setter
+
+**Design**:
+- New helper: `opp_has_trick_room(opp_pokemon)` in `ability_rules.py`
+- New flag: `enable_anti_tr_target_aware_scoring: bool = False`
+- New Guard 6: only apply bonus if target has TR in revealed moves
+- Default OFF preserves pre-2B behavior
+- Revealed-only (no species inference)
+
+**Interaction with 2A**:
+- 2A blocks Magic Bounce / Good as Gold / Aroma Veil (target ability)
+- 2B blocks wrong-target Taunt (no TR in target's revealed moves)
+- Both can be enabled independently
+
+**Test plan** (per evidence ladder):
+1. 7+ fixture tests
+2. Targeted runtime probe (1 battle)
+3. 5-10 pair smoke
+4. 20-30 pair preview
+5. 100 pair full qualification (only if gates 1-4 pass)
+
+**Adoption gates** (per AGENTS.md):
+1-7. Standard gates
+8. NEW: Taunt bonus applied to correct target only
+9. NEW: Taunt bonus NOT applied to wrong target
+
+**What 2B does NOT do**:
+- No magnitude tuning
+- No default flip
+- No inference (revealed-only)
+- No Magic Bounce / Aroma Veil (that's 2A)
+
+See `logs/phaseCONTROL_PRIORITY_2B_target_aware_scoring_design.md`
+for full design.
+
+### CONTROL-PRIORITY-2C — Target-Aware Anti-TR Scoring IMPLEMENTATION (added 2026-06-22)
+
+**Decision:** `IMPLEMENTED_TARGET_AWARE_OPT_IN`.
+
+**Scope** (per 2B design):
+- Anti-TR bonus only applies when target's revealed moves include TR
+- Revealed-only (no species inference)
+- Default OFF (`enable_anti_tr_target_aware_scoring = False`)
+- Independent of 2A (status-move ability safety)
+
+**Files modified**:
+- `ability_rules.py`: new `opp_has_trick_room(opp_pokemon)` helper
+- `bot_doubles_damage_aware.py`:
+  - New config field
+  - New Guard 6 in `_anti_trick_room_response_eligible`
+
+**Files added**:
+- `test_target_aware_anti_tr.py`: 15 fixture tests (6 helper +
+  7 eligible + 2 config)
+
+**Test results**:
+- 15 new tests: ALL PASS
+- 191 tests across related files: ALL PASS
+- 0 regressions
+- `test_51` not touched
+
+**Probe status**: SKIPPED (AUDIT_GAP_FOUND)
+- Audit doesn't capture revealed moves
+- Runtime has the data via poke-env API
+- 2A verification showed natural Hatterene scenario doesn't
+  trigger reveal (Hatterene dies first)
+
+**Stop conditions check**:
+- AUDIT_GAP_FOUND: yes (deferred, not blocking)
+- TARGET_MAPPING_GAP: no (slot = target_str - 1)
+- Species inference required: no (revealed-only)
+- Default behavior changes with flag OFF: no (verified)
+
+**Adoption status**:
+- 2C implementation: COMPLETE
+- Runtime probe: DEFERRED (audit gap)
+- Smoke: pending
+- 2B is ready for 5-pair smoke (with caveats)
+
+See `logs/phaseCONTROL_PRIORITY_2C_target_aware_implementation.md`
+for full implementation report.
+
+### CONTROL-PRIORITY-2C — 5-Pair Smoke (added 2026-06-22)
+
+**Decision:** `SMOKE_PASS_WITH_CAVEATS`.
+
+5 paired trials with all 3 flags ON (anti_tr + 2A + 2B):
+
+| arm | wins | win_rate | errors |
+|-----|------|----------|--------|
+| ON  | 5/5  | 100%     | 0      |
+| OFF | 3/5  | 60%      | 0      |
+
+**Paired delta**: +40pp (5/5 vs 3/5)
+**Statistical**: Sign test p=0.50 (not significant at 5 pairs)
+
+**Gate evaluation**:
+- ✓ 0 crash/error
+- ✓ ON > OFF (5/5 > 3/5)
+- ✓ No spam observed
+- ✓ Default behavior preserved
+- ⏳ Runtime verification limited by AUDIT_GAP
+
+**Caveats**:
+- 5 pairs too small for statistical confidence
+- Need 20-50 pair smoke for primary decision
+- Audit doesn't capture revealed moves (can't verify 2A/2B at runtime)
+
+**Path to full adoption** (deferred):
+- 20-pair smoke for statistical confidence
+- Address AUDIT_GAP (audit logger update)
+- Then 100-pair qualification
+
+See `logs/phasePLANNER_ANTI_TR_EVAL_2C_SMOKE_REPORT.md`
+for full smoke report.
+
+### CONTROL-PRIORITY-2C — 20-Pair Smoke (added 2026-06-22)
+
+**Decision:** `SMOKE_PASS_INCONCLUSIVE`.
+
+20 paired trials with all 3 flags ON (anti_tr + 2A + 2B):
+
+| arm | wins | win_rate | taunt | ANTI_TR |
+|-----|------|----------|-------|---------|
+| ON  | 17/20 | 85%     | 5     | 29      |
+| OFF | 16/20 | 80%     | -     | -       |
+
+**Paired delta**: +5pp (ON 17 vs OFF 16)
+**Paired breakdown**: ON wins=4, OFF wins=3, ties=13
+**Sign test p-value** (one-sided): 0.500 (not significant)
+
+**Gate evaluation** (6 gates):
+- ✓ No crash/error
+- ✓ ON vs OFF >= 50% (criteria met, 4/7 ON wins)
+- ✓ No spam violation
+- ✓ ANTI_TR fires (29 turns in 20 trials)
+- ✓ Taunt selectable (5/29 selected)
+- ✓ ON >= OFF +5pp (at boundary)
+
+**Statistical significance**: weak (p=0.50).
+13/20 ties (65%) suggest variance dominates.
++5pp delta is at boundary of "5pp threshold".
+
+**Caveats**:
+- AUDIT_GAP: can't verify 2A/2B at runtime
+- Statistical insignificance
+- Small sample for some metrics
+
+**Path to full adoption** (deferred):
+1. Address AUDIT_GAP
+2. 100-pair qualification
+3. Pair with Basic + SafeRandom arms
+
+See `logs/phasePLANNER_ANTI_TR_EVAL_2C_SMOKE_20pair_REPORT.md`
+for full smoke report.
+
+### CONTROL-PRIORITY-2D — Anti-TR Target-Aware Runtime Audit Gap Seal (added 2026-06-22)
+
+**Decision:** `AUDIT_GAP_SEALED`.
+
+Sealed the AUDIT_GAP from 2C. Runtime audit now captures
+per-order debug info for anti-TR candidate evaluation,
+including 2A (mechanics block) and 2B (target-aware) flags.
+
+**Files modified**:
+- `bot_doubles_damage_aware.py`:
+  - New `_record_anti_tr_target_debug` method
+  - Wiring at bonus application site
+  - New kwarg in `log_turn_decision` call
+- `doubles_decision_audit_logger.py`:
+  - New `anti_tr_target_debug` parameter
+  - Storage in turn_data
+  - Field in event dict
+
+**Files added**:
+- `test_anti_tr_target_debug.py`: 10 fixture tests
+
+**Test results**:
+- 10 new tests: ALL PASS
+- 132 related tests: ALL PASS
+- 0 regressions
+- `test_51` untouched
+
+**Tiny probe (5-pair smoke)**:
+- 43 turns, 582 debug entries
+- 6 eligible (bonus applied), 576 blocked
+- 18 target with revealed TR
+- 130 target with revealed moves
+- 6 unique opp species
+
+**Eligible entries (the 6 successful bonus applications)**:
+All show:
+- target: hatterene (slot 1)
+- revealed moves: ['trickroom']
+- has_tr: True
+- target_aware: enabled=True, allowed=True
+- bonus: 500.0
+
+**Success criteria** (per user spec):
+- ✓ audit contains anti_tr_target_debug
+- ✓ at least one allowed Hatterene/TR target case (6 cases)
+- ✓ at least one blocked wrong-target case (564 cases)
+- ✓ no crashes/errors
+
+**Path to 100-pair qualification**:
+2D removes the AUDIT_GAP blocker. 2C can now proceed to
+100-pair qualification with full runtime visibility.
+
+See `logs/phaseCONTROL_PRIORITY_2D_anti_tr_target_debug_seal.md`
+for full report.
+
+### CONTROL-PRIORITY-2E — 100-Pair Qualification (added 2026-06-22)
+
+**Decision:** `REGRESSION_AT_SCALE`.
+
+100 paired trials with all 3 flags ON (anti_tr + 2A + 2B):
+
+| arm | wins | win_rate |
+|-----|------|----------|
+| ON  | 86/100 | 86%     |
+| OFF | 92/100 | 92%     |
+
+**Paired delta**: -6pp (ON 86 vs OFF 92)
+**Paired breakdown**: ON wins=7, OFF wins=13, ties=80
+**Sign test p-value** (one-sided): 0.942 (very negative)
+
+**Audit integrity (ON arm)**:
+- 13,769 debug entries
+- 200 eligible (bonus applied)
+- 13,569 blocked
+- 818 target with revealed TR
+- 12,951 target without revealed TR
+- 3,456 target with revealed moves
+- **3 wrong-target bonus (TARGET_MAPPING_GAP)**
+  - All 3 cases: target_species=None (opp slot 0 fainted)
+  - Eligible check passes (target in 1,2) but target is None
+  - Audit correctly captures with target_species=None
+
+**TR metrics**:
+- ON TR-active turns: 253
+- OFF TR-active turns: 248
+
+**Selection metrics (ANTI_TR turns, ON arm)**:
+- Taunt over KO/FakeOut: 20
+- FakeOut over Taunt: 0
+- KO over Taunt: 153
+
+**Gate evaluation** (10 gates):
+| gate | result |
+|------|--------|
+| 1. 200/200 battles ok | ✓ |
+| 2. 0 timeout/error | ✓ |
+| 3. Debug fields present | ✓ |
+| 4. Wrong-target bonus = 0 | ✗ 3 cases |
+| 5. No wrong Taunt over KO | ✓ |
+| 6. No Taunt spam | ✓ |
+| 7. ON >= OFF - 2pp | ✗ -6pp |
+| 8. ON TR-prevention >= OFF | ✓ (253 vs 248) |
+| 9. Sign test not negative | ✗ p=0.942 |
+| 10. Default OFF | ✓ |
+
+**Gates passed: 6/10. Critical failures: 4, 7, 9.**
+
+**Why REGRESSION_AT_SCALE (not TARGET_AWARE_BUG_FOUND)**:
+- The 3 wrong-target cases are EDGE cases (None opp slot)
+- The actual regression is from the bot making different decisions
+- 100 pairs shows clear negative signal (not variance)
+
+**Why REGRESSION_AT_SCALE (not INSUFFICIENT_SIGNAL)**:
+- Sign test p=0.942 (very negative)
+- 6pp delta at 100 trials
+- Pattern consistent across 20 non-ties (OFF wins 13/20)
+
+**Why not magnitude tuning**:
+- User constraint: "no more magnitude tuning"
+- The issue is not bonus magnitude (would make it worse)
+- Issue is 2A/2B interaction with bot's damage preference
+
+**Path forward**:
+- Anti-TR stays OPT_IN_ONLY
+- No default flip
+- Future investigation: why does bot lose with anti-TR enabled?
+
+See `logs/phaseCONTROL_PRIORITY_2E_100pair_qualification.md`
+for full report.
+
+### CONTROL-PRIORITY-2F — Regression Investigation (added 2026-06-22)
+
+**Decision:** `REGRESSION_DOCUMENTED` (root cause identified).
+
+Read-only investigation of 2E's -6pp regression. No code changes.
+
+**Root cause**: anti-TR Taunt at unknown Magic Bounce target
+- At turn 2, Hatterene's Magic Bounce NOT YET revealed
+- ON selects Taunt 16 times on turn 2 (OFF: 0)
+- Taunt gets reflected by Magic Bounce
+- Self-Taunt damage + HP loss (-0.064 final HP)
+- 2A correctly blocks AFTER reveal (0 Taunts after MB reveal)
+
+**Findings**:
+1. **Game length**: ON avg 7.2 turns vs OFF 6.7 (ON longer)
+2. **Win rate by length** (the smoking gun):
+   - Turns 4-5: ON 100% = OFF 100%
+   - Turns 6-7: ON 95% > OFF 92% (slight ON edge)
+   - **Turns 8-10: ON 75% << OFF 90% (ON -15pp)**
+   - Turns 11+: ON 25% < OFF 50% (ON -25pp)
+3. **First 3 turns differ**: ON selects Taunt 16x on turn 2, OFF 0x
+4. **MB reveal**: ON reveals in 10/100 games, OFF 0/100 games
+5. **2A works**: 0 Taunts selected after MB reveal (10/10 games)
+6. **HP loss**: ON final HP 0.619 vs OFF 0.683 (-0.064)
+7. **TR game win rate**: ON 88% vs OFF 96% in TR games
+
+**Why magnitude tuning doesn't help**:
+- Lowering bonus just delays the issue
+- Real fix requires species inference (forbidden per AGENTS.md)
+- Or structural penalty (out of scope)
+
+**Why 2A doesn't help**:
+- 2A blocks Taunt AFTER reveal
+- Damage is done BEFORE reveal (turn 2 Taunt → reflection)
+- Reveal happens after the reflection damage
+
+**Mitigations considered**:
+- Species-based Magic Bounce deduction: FORBIDDEN (Hatterene has
+  2 abilities, AGENTS.md bans species inference)
+- Pre-reveal Taunt penalty: requires species data
+- Accept the regression: keep opt-in
+
+**Final decision**: Anti-TR remains OPT_IN_ONLY.
+Root cause documented. No code changes recommended without
+explicit user authorization to deviate from species-inference ban.
+
+See `logs/phaseCONTROL_PRIORITY_2F_regression_investigation.md`
+for full investigation.

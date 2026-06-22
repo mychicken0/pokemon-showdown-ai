@@ -508,6 +508,17 @@ class DoublesDamageAwareConfig:
     status_ability_safety_track_aroma_veil: bool = True
     status_ability_safety_track_aroma_veil_ally: bool = True
 
+    # Phase CONTROL-PRIORITY-2B: Target-aware anti-TR scoring.
+    # When True, the anti-TR response bonus is only applied
+    # when the target opp's revealed moves include Trick Room.
+    # This avoids wasting the bonus on wrong-target Taunts
+    # (e.g., bot's Taunt on Gardevoir when Hatterene is the
+    # actual TR setter). Revealed-only (no species inference).
+    # Default OFF preserves pre-2B behavior.
+    # Independent of CONTROL-PRIORITY-2A (status-move ability
+    # safety). Both can be enabled independently.
+    enable_anti_tr_target_aware_scoring: bool = False
+
     # PLANNER-IMPL-2: opt-in per-turn intent detector.
     # When True, the bot runs IntentDetector.detect() per
     # turn and writes observational audit fields
@@ -4886,6 +4897,27 @@ class DoublesDamageAwarePlayer(Player):
         target_str = getattr(order, "move_target", None)
         if target_str not in (1, 2):
             return False
+        # Guard 6 (Phase CONTROL-PRIORITY-2B): target is the
+        # actual TR setter. When enable_anti_tr_target_aware_scoring
+        # is True, the bonus is only applied when the target's
+        # revealed moves include Trick Room. Revealed-only (no
+        # species inference). Independent of CONTROL-PRIORITY-2A.
+        if getattr(
+            self.config,
+            "enable_anti_tr_target_aware_scoring", False
+        ):
+            try:
+                opps = getattr(battle, "opponent_active_pokemon", []) or []
+                target_slot = int(target_str) - 1
+                if 0 <= target_slot < len(opps):
+                    target_opp = opps[target_slot]
+                    if target_opp and not ability_rules.opp_has_trick_room(target_opp):
+                        return False
+            except Exception:
+                # Be safe: if we can't determine the target's
+                # revealed moves, default to the existing
+                # behavior (allow bonus) to avoid breaking.
+                pass
         # Guard 5: anti-spam
         battle_tag = getattr(battle, "battle_tag", "")
         if not battle_tag:
@@ -5037,6 +5069,104 @@ class DoublesDamageAwarePlayer(Player):
         self._anti_trick_room_ko_last_pick_turn[battle_tag] = (
             int(getattr(battle, "turn", 0) or 0)
         )
+
+    def _record_anti_tr_target_debug(
+        self,
+        order,
+        active_idx: int,
+        battle,
+        eligible: bool,
+        block_reason: str = "",
+        bonus_applied: float = 0.0,
+        mechanics_block_enabled: bool = False,
+        blocked_by_magic_bounce: bool = False,
+        blocked_by_good_as_gold: bool = False,
+        blocked_by_aroma_veil: bool = False,
+        blocked_by_aroma_veil_ally: bool = False,
+    ) -> None:
+        """Phase CONTROL-PRIORITY-2D: record anti-TR candidate
+        debug info for runtime audit visibility.
+
+        Stores a JSON-safe dict on self._anti_tr_target_debug_per_battle
+        (per battle tag). The audit logger reads this list and
+        writes it to the snapshot as ``anti_tr_target_debug``.
+
+        Pure observation. No scoring change. No defaults change.
+        """
+        battle_tag = getattr(battle, "battle_tag", "")
+        if not battle_tag:
+            return
+        if not hasattr(self, "_anti_tr_target_debug_per_battle"):
+            self._anti_tr_target_debug_per_battle = {}
+        # Target info
+        target_slot = getattr(order, "move_target", None)
+        target_species = None
+        target_revealed_moves = []
+        target_has_revealed_trickroom = False
+        try:
+            opps = getattr(battle, "opponent_active_pokemon", []) or []
+            if isinstance(target_slot, int) and 0 <= target_slot - 1 < len(opps):
+                target_opp = opps[target_slot - 1]
+                if target_opp is not None:
+                    target_species = getattr(target_opp, "species", None)
+                    try:
+                        moves = getattr(target_opp, "moves", None)
+                        if moves:
+                            if hasattr(moves, "keys"):
+                                target_revealed_moves = list(moves.keys())
+                            else:
+                                target_revealed_moves = list(moves)
+                    except Exception:
+                        target_revealed_moves = []
+                    target_has_revealed_trickroom = (
+                        ability_rules.opp_has_trick_room(target_opp)
+                    )
+        except Exception:
+            pass
+        # Move info
+        move_id = None
+        try:
+            inner_move = getattr(order, "order", None)
+            if inner_move is not None:
+                move_id = getattr(inner_move, "id", None)
+        except Exception:
+            move_id = None
+        # 2B target-aware info
+        target_aware_enabled = bool(
+            getattr(self.config, "enable_anti_tr_target_aware_scoring", False)
+        )
+        target_aware_allowed = True
+        if target_aware_enabled:
+            try:
+                opps = getattr(battle, "opponent_active_pokemon", []) or []
+                if isinstance(target_slot, int) and 0 <= target_slot - 1 < len(opps):
+                    target_opp = opps[target_slot - 1]
+                    if target_opp and not ability_rules.opp_has_trick_room(target_opp):
+                        target_aware_allowed = False
+            except Exception:
+                target_aware_allowed = True
+        # Build debug dict
+        debug = {
+            "move": move_id,
+            "slot": active_idx,
+            "target_slot": target_slot,
+            "target_species": target_species,
+            "target_revealed_moves": target_revealed_moves,
+            "target_has_revealed_trickroom": bool(target_has_revealed_trickroom),
+            "target_aware_enabled": target_aware_enabled,
+            "target_aware_allowed": target_aware_allowed,
+            "mechanics_block_enabled": bool(mechanics_block_enabled),
+            "blocked_by_magic_bounce": bool(blocked_by_magic_bounce),
+            "blocked_by_good_as_gold": bool(blocked_by_good_as_gold),
+            "blocked_by_aroma_veil": bool(blocked_by_aroma_veil),
+            "blocked_by_aroma_veil_ally": bool(blocked_by_aroma_veil_ally),
+            "eligible": bool(eligible),
+            "block_reason": block_reason,
+            "bonus_applied": float(bonus_applied),
+        }
+        self._anti_tr_target_debug_per_battle.setdefault(
+            battle_tag, []
+        ).append(debug)
 
     def _run_planner_intent_detector(self, battle):
         """PLANNER-IMPL-2: per-turn intent detector runner.
@@ -5828,15 +5958,51 @@ class DoublesDamageAwarePlayer(Player):
             # When opp has TR (active or revealed), boost
             # Taunt/Encore/Disable to disrupt the TR setter.
             # Default OFF. TR-specific (not general anti-setup).
-            if self._anti_trick_room_response_eligible(
+            anti_tr_eligible = self._anti_trick_room_response_eligible(
                 order, active_idx, battle
-            ):
+            )
+            if anti_tr_eligible:
                 score = float(score) + float(
                     self.config.anti_trick_room_response_bonus
                 )
                 self._record_anti_trick_room_response_pick(
                     battle, active_idx
                 )
+            # CONTROL-PRIORITY-2D: record debug for audit visibility.
+            # Only record if this order is Taunt/Encore/Disable
+            # (the anti-TR moves). Use the eligible check to know
+            # the block reason for non-eligible cases.
+            try:
+                inner_move = getattr(order, "order", None)
+                if inner_move is not None:
+                    inner_move_id = (
+                        getattr(inner_move, "id", "") or ""
+                    ).lower().replace(" ", "").replace("-", "").replace("_", "").replace("'", "")
+                    if inner_move_id in ("taunt", "encore", "disable", "quash"):
+                        # Determine block reason for non-eligible cases
+                        block_reason = ""
+                        if not anti_tr_eligible:
+                            block_reason = "anti_tr_eligible_returned_false"
+                        self._record_anti_tr_target_debug(
+                            order=order,
+                            active_idx=active_idx,
+                            battle=battle,
+                            eligible=anti_tr_eligible,
+                            block_reason=block_reason,
+                            bonus_applied=(
+                                float(self.config.anti_trick_room_response_bonus)
+                                if anti_tr_eligible else 0.0
+                            ),
+                            mechanics_block_enabled=bool(
+                                getattr(
+                                    self.config,
+                                    "enable_status_move_ability_safety",
+                                    False,
+                                )
+                            ),
+                        )
+            except Exception:
+                pass
             # PLANNER-ANTI-TR: KO pressure on damaging moves.
             # When opp has TR, favor damaging moves to KO before
             # TR expires. Smaller bonus than anti-setup.
@@ -13921,6 +14087,7 @@ class DoublesDamageAwarePlayer(Player):
                 stale_target_fallback_target=stale_target_fallback_target,
                 stale_target_reason=stale_target_reason,
                 support_target_candidates=_support_target_candidates,
+                anti_tr_target_debug=self._anti_tr_target_debug_per_battle.get(battle_tag, []) if hasattr(self, "_anti_tr_target_debug_per_battle") else [],
                 support_target_candidate_blocked_slot0=_sup_blocked[0],
                 support_target_candidate_blocked_slot1=_sup_blocked[1],
                 support_target_selected_slot0=_sup_selected[0],

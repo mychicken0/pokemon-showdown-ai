@@ -646,6 +646,10 @@ class DoublesDecisionAuditLogger:
             "state_snapshot": turn_data.get("state_snapshot") or {},
             "slot_0": self._compact_slot(turn_data.get("slot_0"), self._LIVE_SLOT_KEYS),
             "slot_1": self._compact_slot(turn_data.get("slot_1"), self._LIVE_SLOT_KEYS),
+            # Phase CONTROL-PRIORITY-2D: anti-TR target debug
+            # (target-aware + mechanics block audit). JSON-safe
+            # list of dicts, or empty list if no candidates.
+            "anti_tr_target_debug": turn_data.get("anti_tr_target_debug") or [],
         }
 
     def _build_live_outcome_event(self, battle_tag, turn_data):
@@ -1142,6 +1146,7 @@ class DoublesDecisionAuditLogger:
         # inspector and analyzer can read them
         # without iterating the candidate list.
         support_target_candidates=None,
+        anti_tr_target_debug=None,
         support_target_candidate_blocked_slot0=None,
         support_target_candidate_blocked_slot1=None,
         support_target_selected_slot0=None,
@@ -2333,6 +2338,9 @@ class DoublesDecisionAuditLogger:
         # them without list iteration.
         turn_data["support_target_candidates"] = (
             support_target_candidates or []
+        )
+        turn_data["anti_tr_target_debug"] = (
+            list(anti_tr_target_debug) if anti_tr_target_debug else []
         )
         turn_data["support_target_candidate_blocked"] = (
             bool(support_target_candidate_blocked_slot0)

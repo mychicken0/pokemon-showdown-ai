@@ -448,3 +448,43 @@ def ally_has_aroma_veil(target, battle) -> bool:
     except Exception:
         pass
     return False
+
+
+def opp_has_trick_room(opp_pokemon) -> bool:
+    """Returns True if opp_pokemon has Trick Room in its
+    revealed moves. Phase CONTROL-PRIORITY-2B.
+
+    Used for target-aware anti-TR scoring: only apply the
+    anti-TR response bonus when the target is the actual TR
+    setter (has TR in revealed moves).
+
+    Revealed-only: uses poke-env's revealed moves. No species
+    inference, no team file lookup, no usage inference.
+    """
+    if not opp_pokemon:
+        return False
+    try:
+        moves = getattr(opp_pokemon, "moves", None)
+        if not moves:
+            return False
+        # MoveSet can be iterated or accessed by id.
+        # Try iterating first (poke-env supports this).
+        try:
+            move_ids = list(moves)
+        except TypeError:
+            # If not iterable, try .keys()
+            try:
+                move_ids = list(moves.keys())
+            except Exception:
+                return False
+        for move_id in move_ids:
+            norm_id = (
+                str(move_id).lower()
+                .replace(" ", "").replace("-", "")
+                .replace("_", "").replace("'", "")
+            )
+            if norm_id in ("trickroom", "trick_room"):
+                return True
+    except Exception:
+        pass
+    return False
