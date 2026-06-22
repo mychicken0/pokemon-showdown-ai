@@ -2,6 +2,35 @@
 
 This project sets up a local Pokémon Showdown server and runs simple AI bots that challenge each other or listen for battles using the `poke-env` library.
 
+## Navigation
+
+- `ROOT_INDEX.md` — Categorized index of the 123 `.py` files at project root
+  (core bot/runtime, analyzers, inspectors, VGC helpers, etc.). Start here
+  to find a specific file.
+- `SCRIPTS_ORGANIZATION.md` — Migration history and rationale for
+  `tests/`, `scripts/`, and `archive/`. Why some files stayed at root.
+- `scripts/README.md` — What's in `scripts/<sub>/` (analyze, inspect, eval,
+  dryrun, check, diagnose, fix, build, export).
+- `archive/README.md` — Old `bot_*.py` experiment files kept for reference.
+- `walkthrough.md` — Development history (CONTROL-PRIORITY, PLANNER-ANTI-TR,
+  WEATHER-TERRAIN, V2k qualification, etc.).
+
+## Test runner
+
+```bash
+# Run a specific test
+python run_tests.py test_anti_tr_target_debug
+
+# Run tests with a keyword filter
+python run_tests.py -k Magic
+
+# List all test modules
+python run_tests.py --list
+
+# Run all tests
+python run_tests.py
+```
+
 ---
 
 ## 1. Setup and Run Local Pokémon Showdown Server
