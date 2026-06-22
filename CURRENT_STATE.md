@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-19 (Asia/Bangkok) — PROTECT-1 roadmap added for RL-oriented behavior work
+Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed.
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -66,16 +66,34 @@ V2j fingerprint remains:
 - Broad support-target hard safety is **BLOCKED**.
   - Correct behavior, but paired performance gates failed.
   - Default stays `enable_support_move_target_hard_safety = False`.
-- Narrow ally-heal wrong-side safety is **BLOCKED**.
+  - Now also wired in production via Phase 6.3.8a (committed `c8fcfb0`).
+  - Narrow sibling flag `enable_ally_heal_wrong_side_hard_safety` was
+    *not* previously called in the scoring loop; Phase 6.3.8a wired it
+    in as a strict narrow subset of the broad safety, with no behavior
+    change to the broad path.
+- Narrow ally-heal wrong-side safety is **BLOCKED** (adoption), but
+  **WIRED** (integration) as of Phase 6.3.8a (`c8fcfb0`).
   - It blocks Heal Pulse / Floral Healing / Decorate into opponent.
   - Repair audit found zero actual final OFF wrong-side selections, so there
     is no proven runtime bug to adopt against.
   - Default stays `enable_ally_heal_wrong_side_hard_safety = False`.
+  - 323 targeted tests passed at integration time. No benchmark run.
+  - Joint selection cannot resurrect a blocked narrow action.
 - Voluntary-switch quality scoring is **BLOCKED**.
   - Audit wiring is fixed and opportunities are now visible.
   - 6.4.10d had 2542 ON eligible turns but 0 selected voluntary switches.
   - The scoring rule is empirically a no-op in random doubles.
   - Default stays `enable_voluntary_switch_quality_scoring = False`.
+- Weather/Terrain setter audit is **CLOSED** as of Phase WT-2
+  (commit `010ace4`). Status: `SWITCH_SCORING_GAP_CONFIRMED`.
+  - Setter audit (custom team with Politoed + Rain Dance and Rillaboom
+    + Grassy Terrain) ran 3 battles, 71 turns.
+  - Setter moves were legal 31/71 turns; the bot selected a setter
+    move 0/31.
+  - No Weather/Terrain scoring change was made.
+  - No default flip.
+  - Weather/Terrain scoring calibration remains future work (WT-2,
+    WT-3, WT-4 in the deferred plan).
 
 ### VGC 2026
 
@@ -118,6 +136,21 @@ If the goal is Random Doubles instead, do not keep requalifying blocked safety
 flags. The useful next line is a small scoring-calibration task where selected
 actions actually change.
 
+If the goal is Anti-Trick-Room or other opt-in support policy work, the
+existing PLANNER-ANTI-TR / CONTROL-PRIORITY-2* / 6.3.8* work is opt-in only
+and remains so; do not flip defaults from a pre-reveal Magic Bounce
+deduction or from a setter-move scoring calibration. Any new adoption gate
+must include the evidence-ladder items in `AGENTS.md`.
+
+Other future-work candidates, none promoted:
+
+- WT-3: type-boost scoring calibration (Hurricane in rain, Psychic in
+  Psychic Terrain, etc.).
+- WT-4: setter-move scoring calibration.
+- Phase 6.3.8 broader adoption: requires the paired gates to pass
+  before any default flip.
+- A new scenario-targeting phase in the SCENARIO-ROADMAP family.
+
 ## Working Tree
 
 The worktree is expected to be dirty. Recent uncommitted lines include:
@@ -129,6 +162,19 @@ The worktree is expected to be dirty. Recent uncommitted lines include:
 - Documentation edits in `AGENTS.md`, `README.md`, `CURRENT_STATE.md`, and
   `walkthrough.md`.
 
+As of Phase 6.4.0 (handoff sync), the most recent pushed commits are:
+
+```
+1dffc59 test: fix paired safety test paths after root declutter
+c8fcfb0 Phase 6.3.8a: wire narrow ally-heal target safety
+010ace4 WT-2: setter audit confirms SWITCH_SCORING_GAP (no setter selection)
+6e7478f chore: complete root declutter to 4 .md files (0 .py at root)
+```
+
+The four-line root (`AGENTS.md`, `CURRENT_STATE.md`, `README.md`,
+`walkthrough.md`) is the current handoff surface. Phase 6.3.9 paired-test
+path failures are resolved; 337 tests pass in the targeted suite.
+
 Do not commit or push without explicit user authorization.
 
 ## Do Not Do
@@ -138,6 +184,18 @@ Do not commit or push without explicit user authorization.
 - Do not treat `walkthrough.md` historical claims as current truth without
   checking this file and source code.
 - Do not stage generated files under `logs/` unless explicitly requested.
+- Do not add species-based Magic Bounce deduction or any other
+  pre-reveal ability inference. The CONTROL-PRIORITY-2F regression
+  root cause is anti-TR Taunt at an unknown Magic Bounce target.
+  The user has decided to leave this opt-in and accept the documented
+  regression; do not magnitude-tune or species-deduce.
+- Do not adopt `learned_preview_v3a1` or any V3* preview model as
+  default. The V3a.3 paired qualification side-collapsed 0.14 > 0.10
+  (gate failed). It remains opt-in only.
+- Do not start Phase 7 (VGC RL training) without explicit user
+  authorization. RL-8 closed the offline-pipeline work but did not
+  approve training. The "next step" for VGC is to rerun Phase V3a.3
+  before any RL continuation.
 
 ## Phase V3a.3 — 100-Pair Paired Qualification (2026-06-16)
 
@@ -5038,3 +5096,182 @@ Audit has weather, terrain, legal actions, opponent state.
 - Phase WT-4: move scoring for setters
 
 See `logs/phaseWEATHERTERRAIN1_response_audit.md` for full report.
+
+---
+
+## Phase WT-2 — Setter Team Audit (2026-06-22) — CLOSED
+
+**Status**: `SWITCH_SCORING_GAP_CONFIRMED`
+**Commit**: `010ace4`
+**Scope**: read-only audit (no code changes).
+
+### Goal
+
+Test whether the bot ever selects a setter MOVE (raindance, sunnyday,
+grassyterrain, etc.) when the bot team has the setter as a legal
+action. WT-1 had found that none of the existing test teams had an
+explicit setter, so the bot's switch/Protect response was the only
+option observed.
+
+### Method
+
+Custom bot team with explicit setter MOVES (no setter abilities):
+- Politoed with Rain Dance (no Drizzle ability)
+- Rillaboom with Grassy Terrain (no Grassy Surge ability)
+- Tapu Lele with Psychic Surge ability (auto-setter, for comparison)
+
+3 battles via `bot.battle_against(opp, n_battles=1)` in
+`gen9doublescustomgame` format. Custom probe script
+`showdown_ai/bot_wt2_setter_audit_probe.py`. Watchdogs
+heartbeat 30s, stall 180s, total 300s.
+
+### Result
+
+- 71 total turns across 3 battles
+- 31 setter-legal turns (44%)
+- **0 setter selections (0%)**
+
+The bot preferred damage moves (woodhammer, hydropump, icebeam)
+and Protect over the setter move every time.
+
+### Decision
+
+`SWITCH_SCORING_GAP_CONFIRMED`:
+- Bot detects weather/terrain correctly (WT-1).
+- Setter is in `legal_orders` when available (this audit).
+- Bot never picks setter over damage/Protect.
+- Likely by design (damage > delayed benefit).
+- No scoring change made. No default flip.
+- Weather/Terrain scoring calibration (WT-3 type boosts, WT-4
+  setter moves) remains future work.
+
+See `logs/phaseWT2_setter_audit.md` for the full report.
+
+---
+
+## Phase 6.3.8a — Narrow Ally-Heal Wrong-Side Hard Safety (2026-06-22) — CLOSED
+
+**Status**: `NARROW_FLAG_INTEGRATED_OPT_IN_ONLY`
+**Commit**: `c8fcfb0`
+**Scope**: production-code integration of an existing-but-unwired flag.
+
+### Goal
+
+The `enable_ally_heal_wrong_side_hard_safety` flag was defined in
+`DoublesDamageAwareConfig` and the helper `narrow_ally_heal_wrong_side_block`
+existed in `doubles_engine.support_targets`, but the narrow flag was
+**not** called in the scoring loop. This phase wires it in, in the
+smallest safe way.
+
+### Behavior (with narrow flag ON)
+
+- Heal Pulse / Floral Healing / Decorate aimed at an opponent →
+  blocked (score = `ally_heal_wrong_side_block_score`).
+- Heal Pulse at ally → not blocked.
+- Taunt / Encore / Pollen Puff → not blocked (not in narrow allowlist).
+- Skill Swap → not blocked (ambiguous side).
+- Weather/Terrain setters → not blocked.
+
+### What did NOT change
+
+- Broad `enable_support_move_target_hard_safety` behavior — unchanged.
+- Broad fires first when both flags are ON (narrow path never reached).
+- `enable_anti_trick_room_response` and other Phase 6 work — unchanged.
+- No flag default flipped.
+- 323 targeted tests passed; no benchmark run.
+
+See `logs/phase6_3_8_support_move_target_hard_safety.md` for the
+full report.
+
+---
+
+## Phase 6.3.9 — Paired-Test Path Hygiene (2026-06-22) — CLOSED
+
+**Status**: `PATH_HYGIENE_FIXED`
+**Commit**: `1dffc59`
+**Scope**: tests-only hygiene.
+
+### Goal
+
+`tests/test_doubles_support_move_target_safety_paired.py` had 3
+pre-existing failures from the root → `showdown_ai/` migration. This
+phase fixes the path expectations only, with no production behavior
+change.
+
+### Root causes (3 combined)
+
+1. `PROJECT_ROOT` was the parent of the test file (`tests/`) instead of
+   the project root (parent of `tests/`).
+2. `QUALIFIER` constant pointed to the old root path
+   (`bot_doubles_support_move_target_safety_paired_qualification.py`)
+   instead of the new path
+   (`showdown_ai/bot_doubles_support_move_target_safety_paired_qualification.py`).
+3. Subprocess invocations lacked `PYTHONPATH`, so the subprocess
+   could not import `doubles_engine` from the project root.
+
+### Fix
+
+- `PROJECT_ROOT` now uses `os.path.dirname(os.path.dirname(...))` (go up
+  two levels from `__file__`, matching the existing `REPO_ROOT`).
+- `QUALIFIER` now joins `showdown_ai/`.
+- All 3 subprocess invocations now pass
+  `env={**os.environ, "PYTHONPATH": PROJECT_ROOT}`.
+- The test-3 script path was updated to
+  `tests/test_doubles_support_move_target_safety_paired.py`.
+
+### Result
+
+| Test file | Before | After |
+|-----------|-------:|------:|
+| `test_doubles_support_move_target_safety_paired.py` | 90 pass, 3 fail | **93 pass** |
+| Targeted suite (paired + support safety + engine + ability) | 334 pass, 3 fail | **337 pass** |
+
+See `logs/phase6_3_9_paired_test_path_hygiene.md` for the
+full report.
+
+---
+
+## Phase 6.4.0 — Handoff / State Sync (2026-06-22) — CLOSED
+
+**Status**: `DOCS_SYNCED`
+**Commit**: pending (this file change)
+**Scope**: docs-only handoff sync.
+
+### What this phase does
+
+Updates `CURRENT_STATE.md`, `walkthrough.md`, and `walkthrough.md` to
+reflect the most recent closed work and current next-step status.
+
+No code changes, no test changes, no scoring/default changes, no
+benchmarks, no default flips. This is purely documentation.
+
+### Recent closed work to record
+
+- WT-2 (commit `010ace4`) — setter audit closed as
+  `SWITCH_SCORING_GAP_CONFIRMED`. No scoring change.
+- Phase 6.3.8a (commit `c8fcfb0`) — narrow ally-heal wrong-side flag
+  wired into scoring. No default flip.
+- Phase 6.3.9 (commit `1dffc59`) — paired-test path hygiene. 93/93 pass.
+- Phase 6.4.0 (this phase) — docs sync.
+
+### What is still opt-in / not adopted
+
+- `enable_anti_trick_room_response` (PLANNER-ANTI-TR) — opt-in only;
+  documented -6pp regression at unknown Magic Bounce target.
+- `enable_support_move_target_hard_safety` — broad safety, opt-in only,
+  paired gates failed.
+- `enable_ally_heal_wrong_side_hard_safety` — narrow safety, opt-in only,
+  no proven runtime bug to adopt against.
+- `learned_preview_v3a1` — VGC preview, opt-in only, V3a.3 side-collapsed.
+- WT-2/3/4 (weather/terrain scoring calibration) — future work, not
+  approved, not started.
+
+### Recommended next phases (no default flip, no auto-start)
+
+- Phase V3a.3 (rerun) if the VGC preview signal is the next goal.
+- WT-3 (type-boost scoring calibration) if Weather/Terrain is the next
+  goal — would need a fresh evidence chain.
+- A new scenario-targeting phase (SCENARIO-ROADMAP successor) if
+  scenario tooling is the next goal.
+- Phase 7 (VGC RL training) is **not approved** per the existing
+  RL-8 closeout.

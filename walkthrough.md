@@ -7553,3 +7553,78 @@ Non-goals:
 - No large debug benchmarks.
 - No hidden-information leakage.
 - No `test_51`.
+
+---
+
+## WT-2 — Setter Team Audit Closeout
+
+**Date**: 2026-06-22
+**Status**: `SWITCH_SCORING_GAP_CONFIRMED`
+**Commit**: `010ace4`
+
+The setter-audit probe ran 3 battles on a custom bot team with
+explicit setter MOVES (Politoed with Rain Dance but no Drizzle;
+Rillaboom with Grassy Terrain but no Grassy Surge; Tapu Lele with
+Psychic Surge for ability-based comparison). The bot had setter
+moves in `legal_orders` for 31 of 71 turns and **selected a setter
+move 0 times**. The bot preferred damage moves (woodhammer,
+hydropump, icebeam) and Protect over the setter.
+
+This confirms the WT-1 audit: the bot's only weather/terrain response
+is switch-based, not move-based. No scoring change was made. WT-3
+(type-boost scoring) and WT-4 (setter-move scoring calibration)
+remain future work, not approved.
+
+See `logs/phaseWT2_setter_audit.md`.
+
+## Phase 6.3.8a — Narrow Ally-Heal Wrong-Side Hard Safety
+
+**Date**: 2026-06-22
+**Status**: `NARROW_FLAG_INTEGRATED_OPT_IN_ONLY`
+**Commit**: `c8fcfb0`
+
+The `enable_ally_heal_wrong_side_hard_safety` flag was defined and
+the helper `narrow_ally_heal_wrong_side_block` existed, but the flag
+was not called in the scoring loop. This phase wires the narrow
+flag into `score_action` directly after the existing broad
+support-target check. With the narrow flag ON, Heal Pulse /
+Floral Healing / Decorate aimed at an opponent is hard-blocked;
+the broad flag behavior is unchanged; default values for both flags
+remain `False`. 323 targeted tests passed.
+
+See `logs/phase6_3_8_support_move_target_hard_safety.md`.
+
+## Phase 6.3.9 — Paired-Test Path Hygiene
+
+**Date**: 2026-06-22
+**Status**: `PATH_HYGIENE_FIXED`
+**Commit**: `1dffc59`
+
+`tests/test_doubles_support_move_target_safety_paired.py` had 3
+pre-existing failures caused by the root → `showdown_ai/` migration.
+The fix was tests-only: `PROJECT_ROOT` was corrected to point to the
+actual project root, the `QUALIFIER` constant was updated to include
+the `showdown_ai/` subfolder, and the 3 subprocess invocations now
+pass `PYTHONPATH` so the subprocess can import `doubles_engine`.
+Production behavior unchanged. The 3 failing tests now pass; 93/93
+in the paired test file, 337/337 in the targeted suite.
+
+See `logs/phase6_3_9_paired_test_path_hygiene.md`.
+
+## Phase 6.4.0 — Handoff / State Sync
+
+**Date**: 2026-06-22
+**Status**: `DOCS_SYNCED`
+**Commit**: pending (this file change)
+
+Docs-only handoff sync. Updates `CURRENT_STATE.md` and
+`walkthrough.md` to reflect the most recent closed work:
+
+- WT-2 closed as `SWITCH_SCORING_GAP_CONFIRMED`.
+- Phase 6.3.8a narrow flag wired (opt-in only, no default flip).
+- Phase 6.3.9 paired-test path hygiene (93/93 in paired tests).
+
+No code, no tests, no scoring, no default flips. Recommended next
+phases (none auto-started): V3a.3 rerun (VGC preview), WT-3
+(type-boost scoring calibration), new SCENARIO-ROADMAP successor.
+Phase 7 (VGC RL training) is not approved.
