@@ -30,6 +30,8 @@ The other dependencies (``Move``) come from poke_env and
 are stable top-level imports.
 """
 
+from typing import Any, Dict, List, Optional, Tuple
+
 from poke_env.battle.move import Move
 
 
@@ -699,3 +701,317 @@ def narrow_ally_heal_wrong_side_block(
         f"Narrow ally-heal block: {move_id} aimed at "
         f"opponent ({target_species}): {reason}",
     )
+
+
+# ============================================================
+# Phase RL-DATA-2: Support-move dataset classification helpers
+# ============================================================
+# Per RL-DATA-1 schema plan, every candidate move in the dataset
+# must be classified by SUPPORT-AUDIT-1 categories. This is a
+# dataset-instrumentation helper; it does not change scoring,
+# behavior, or selected actions.
+
+# 9 support groups (per SUPPORT-AUDIT-1 + RL-DATA-1):
+GROUP_TARGET_SIDE_SAFETY = "target_side_safety"
+GROUP_ABILITY_MECHANICS_SAFETY = "ability_mechanics_safety"
+GROUP_ANTI_SETUP_DISRUPTION = "anti_setup_disruption"
+GROUP_PROTECTION_DEFENSIVE_SUPPORT = "protection_defensive_support"
+GROUP_SPEED_TURN_CONTROL = "speed_turn_control"
+GROUP_WEATHER_TERRAIN = "weather_terrain"
+GROUP_HEALING_BUFF_ALLY_SUPPORT = "healing_buff_ally_support"
+GROUP_FIELD_SIDE_CONTROL = "field_side_control"
+GROUP_UNKNOWN_NEEDS_PROBE = "unknown_needs_probe"
+
+ALL_SUPPORT_GROUPS = (
+    GROUP_TARGET_SIDE_SAFETY,
+    GROUP_ABILITY_MECHANICS_SAFETY,
+    GROUP_ANTI_SETUP_DISRUPTION,
+    GROUP_PROTECTION_DEFENSIVE_SUPPORT,
+    GROUP_SPEED_TURN_CONTROL,
+    GROUP_WEATHER_TERRAIN,
+    GROUP_HEALING_BUFF_ALLY_SUPPORT,
+    GROUP_FIELD_SIDE_CONTROL,
+    GROUP_UNKNOWN_NEEDS_PROBE,
+)
+
+# 10 statuses (per SUPPORT-AUDIT-1 + RL-DATA-1):
+STATUS_HANDLED_DEFAULT = "handled_default"
+STATUS_HANDLED_OPT_IN = "handled_opt_in"
+STATUS_WIRED_DEFAULT_OFF = "wired_default_off"
+STATUS_BLOCKED_NOT_PROMOTED = "blocked_not_promoted"
+STATUS_AUDIT_ONLY = "audit_only"
+STATUS_SCORING_GAP_CONFIRMED = "scoring_gap_confirmed"
+STATUS_NO_POSITIVE_STRATEGY = "no_positive_strategy"
+STATUS_MECHANICS_SAFETY_ONLY = "mechanics_safety_only"
+STATUS_FUTURE_WORK = "future_work"
+STATUS_UNKNOWN_NEEDS_PROBE = "unknown_needs_probe"
+
+ALL_SUPPORT_STATUSES = (
+    STATUS_HANDLED_DEFAULT,
+    STATUS_HANDLED_OPT_IN,
+    STATUS_WIRED_DEFAULT_OFF,
+    STATUS_BLOCKED_NOT_PROMOTED,
+    STATUS_AUDIT_ONLY,
+    STATUS_SCORING_GAP_CONFIRMED,
+    STATUS_NO_POSITIVE_STRATEGY,
+    STATUS_MECHANICS_SAFETY_ONLY,
+    STATUS_FUTURE_WORK,
+    STATUS_UNKNOWN_NEEDS_PROBE,
+)
+
+# Known support-move inventory (per SUPPORT-AUDIT-1).
+# Maps move_id (lowercased, no spaces/dashes/underscores) to
+# (group, status). The classification function uses this
+# to assign group/status. Moves not in this inventory are
+# tagged as unknown_needs_probe.
+
+_KNOWN_SUPPORT_MOVE_INVENTORY: Dict[str, Tuple[str, str]] = {
+    # Target-side safety
+    "healpulse": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "floralhealing": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "decorate": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "helpinghand": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "coaching": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "howl": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "lifedew": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "aromatherapy": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "healbell": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "pollenpuff": (GROUP_HEALING_BUFF_ALLY_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    # Anti-setup / disruption
+    "taunt": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_WIRED_DEFAULT_OFF),
+    "encore": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_WIRED_DEFAULT_OFF),
+    "disable": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_WIRED_DEFAULT_OFF),
+    "quash": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_WIRED_DEFAULT_OFF),
+    "torment": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "thunderwave": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "willowisp": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "toxic": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "spore": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "sleeppowder": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "charm": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "scaryface": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "screech": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "faketears": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "metalsound": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "gastroacid": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "skillswap": (GROUP_FIELD_SIDE_CONTROL, STATUS_MECHANICS_SAFETY_ONLY),
+    # Protection / defensive support
+    "protect": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_HANDLED_DEFAULT),
+    "detect": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_HANDLED_DEFAULT),
+    "spikyshield": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_HANDLED_DEFAULT),
+    "kingsshield": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_HANDLED_DEFAULT),
+    "banefulbunker": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_HANDLED_DEFAULT),
+    "wideguard": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_WIRED_DEFAULT_OFF),
+    "quickguard": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "craftyshield": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_MECHANICS_SAFETY_ONLY),
+    "followme": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_UNKNOWN_NEEDS_PROBE),
+    "ragepowder": (GROUP_PROTECTION_DEFENSIVE_SUPPORT, STATUS_UNKNOWN_NEEDS_PROBE),
+    "lightscreen": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "reflect": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    # Speed / turn control
+    "tailwind": (GROUP_SPEED_TURN_CONTROL, STATUS_WIRED_DEFAULT_OFF),
+    "trickroom": (GROUP_SPEED_TURN_CONTROL, STATUS_WIRED_DEFAULT_OFF),
+    "icywind": (GROUP_SPEED_TURN_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "electroweb": (GROUP_SPEED_TURN_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    # Weather / Terrain (setter moves)
+    "raindance": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "sunnyday": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "sandstorm": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "hail": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "snowscape": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "electricterrain": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "grassyterrain": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "mistyterrain": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    "psychicterrain": (GROUP_WEATHER_TERRAIN, STATUS_SCORING_GAP_CONFIRMED),
+    # Field / side control
+    "mist": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "safeguard": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "stealthrock": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "spikes": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "toxicspikes": (GROUP_FIELD_SIDE_CONTROL, STATUS_UNKNOWN_NEEDS_PROBE),
+    "haze": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+    "clearsmog": (GROUP_ANTI_SETUP_DISRUPTION, STATUS_MECHANICS_SAFETY_ONLY),
+}
+
+# Damaging moves that LOOK like support (e.g., damage with status
+# side-effect). These are NOT classified as support; the function
+# returns is_support_move=False for them.
+_DAMAGE_LIKE_NOT_SUPPORT = frozenset({
+    "hurricane", "thunderbolt", "thunder", "icebeam", "psychic",
+    "psyshock", "focusblast", "hydropump", "fireblast", "shadowball",
+    "energyball", "darkpulse", "stoneedge", "earthpower", "flashcannon",
+    "ironhead", "knockoff", "uturn", "voltswitch", "rapidspin",
+    "heatwave", "makeitrain", "dracometeor", "sludgewave", "leafstorm",
+    "moonblast", "dracometeor", "earthquake", "rockslide", "bugbuzz",
+    "fakeout", "icepunch", "thunderpunch", "firepunch", "crunch",
+    "drainpunch", "zenheadbutt", "woodhammer", "leafblade", "powerwhip",
+    "stoneaxe", "poltergeist", "nightslash", "drillrun", "ironhead",
+    "meteormash", "extremespeed", "uturn",
+})
+
+# Per-status opt-in flag (if any). None = no flag (always-on safety
+# or audit-only).
+_OPT_IN_FLAGS_BY_STATUS: Dict[str, Optional[str]] = {
+    STATUS_HANDLED_DEFAULT: None,
+    STATUS_HANDLED_OPT_IN: "opt_in_required",
+    STATUS_WIRED_DEFAULT_OFF: "wired_default_off",
+    STATUS_BLOCKED_NOT_PROMOTED: "blocked_not_promoted",
+    STATUS_AUDIT_ONLY: None,
+    STATUS_SCORING_GAP_CONFIRMED: "scoring_gap",
+    STATUS_NO_POSITIVE_STRATEGY: None,
+    STATUS_MECHANICS_SAFETY_ONLY: None,
+    STATUS_FUTURE_WORK: "future_work",
+    STATUS_UNKNOWN_NEEDS_PROBE: None,
+}
+
+# Per-status default_enabled flag. None = unknown / not applicable.
+_DEFAULT_ENABLED_BY_STATUS: Dict[str, Optional[bool]] = {
+    STATUS_HANDLED_DEFAULT: True,
+    STATUS_HANDLED_OPT_IN: False,
+    STATUS_WIRED_DEFAULT_OFF: False,
+    STATUS_BLOCKED_NOT_PROMOTED: False,
+    STATUS_AUDIT_ONLY: True,
+    STATUS_SCORING_GAP_CONFIRMED: True,
+    STATUS_NO_POSITIVE_STRATEGY: True,
+    STATUS_MECHANICS_SAFETY_ONLY: True,
+    STATUS_FUTURE_WORK: False,
+    STATUS_UNKNOWN_NEEDS_PROBE: None,
+}
+
+# Per-status safety_only and positive_strategy_known.
+# safety_only: the bot can block bad use but cannot choose good use.
+# positive_strategy_known: the bot has a positive scoring bonus for
+# this category.
+_SAFETY_ONLY_BY_STATUS: Dict[str, bool] = {
+    STATUS_HANDLED_DEFAULT: False,
+    STATUS_HANDLED_OPT_IN: False,
+    STATUS_WIRED_DEFAULT_OFF: False,
+    STATUS_BLOCKED_NOT_PROMOTED: False,
+    STATUS_AUDIT_ONLY: False,
+    STATUS_SCORING_GAP_CONFIRMED: True,
+    STATUS_NO_POSITIVE_STRATEGY: True,
+    STATUS_MECHANICS_SAFETY_ONLY: True,
+    STATUS_FUTURE_WORK: True,
+    STATUS_UNKNOWN_NEEDS_PROBE: True,
+}
+_POSITIVE_STRATEGY_BY_STATUS: Dict[str, bool] = {
+    STATUS_HANDLED_DEFAULT: True,
+    STATUS_HANDLED_OPT_IN: True,
+    STATUS_WIRED_DEFAULT_OFF: True,
+    STATUS_BLOCKED_NOT_PROMOTED: True,
+    STATUS_AUDIT_ONLY: False,
+    STATUS_SCORING_GAP_CONFIRMED: False,
+    STATUS_NO_POSITIVE_STRATEGY: False,
+    STATUS_MECHANICS_SAFETY_ONLY: False,
+    STATUS_FUTURE_WORK: False,
+    STATUS_UNKNOWN_NEEDS_PROBE: False,
+}
+
+
+def _normalize_move_id(move_id: Any) -> str:
+    """Normalize a move id to a lowercased, no-space string."""
+    if move_id is None:
+        return ""
+    s = str(move_id)
+    s = s.lower().replace(" ", "").replace("-", "").replace("_", "")
+    s = s.replace("'", "")
+    return s
+
+
+def classify_support_move_for_dataset(
+    move_id: Any,
+    base_power: Optional[int] = None,
+    category: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Classify a move for the RL-DATA-1 v1.1 schema.
+
+    Returns a dict with the v1.1 per-candidate support-move fields:
+        - support_group: str
+        - support_status_from_audit: str
+        - is_support_move: bool
+        - safety_only: bool
+        - positive_strategy_known: bool
+        - opt_in_flag_required: str | None
+        - default_enabled: bool | None
+        - unknown_support_move_detected: bool
+
+    The function is for dataset-instrumentation only; it does not
+    change scoring, behavior, or selected actions.
+
+    Logic:
+        1. Normalize the move id.
+        2. If the move is in the known support-move inventory,
+           return the (group, status) from the inventory plus
+           opt_in_flag_required / default_enabled / safety_only /
+           positive_strategy_known derived from the status.
+        3. If the move is a damaging move (base_power > 0 or
+           category == "physical" / "special"), it is not a support
+           move. is_support_move = False, group = None, etc.
+        4. Otherwise, tag it as unknown_needs_probe. The detector
+           returns unknown_support_move_detected = True. The bot's
+           selected action is NOT changed by this tag.
+    """
+    norm = _normalize_move_id(move_id)
+
+    # Damaging moves: not support.
+    if (
+        (base_power is not None and base_power > 0)
+        or (category is not None and str(category).lower() in ("physical", "special"))
+    ):
+        return {
+            "support_group": None,
+            "support_status_from_audit": None,
+            "is_support_move": False,
+            "safety_only": False,
+            "positive_strategy_known": False,
+            "opt_in_flag_required": None,
+            "default_enabled": None,
+            "unknown_support_move_detected": False,
+        }
+
+    # Known support-move inventory.
+    if norm in _KNOWN_SUPPORT_MOVE_INVENTORY:
+        group, status = _KNOWN_SUPPORT_MOVE_INVENTORY[norm]
+        return {
+            "support_group": group,
+            "support_status_from_audit": status,
+            "is_support_move": True,
+            "safety_only": _SAFETY_ONLY_BY_STATUS[status],
+            "positive_strategy_known": _POSITIVE_STRATEGY_BY_STATUS[status],
+            "opt_in_flag_required": _OPT_IN_FLAGS_BY_STATUS[status],
+            "default_enabled": _DEFAULT_ENABLED_BY_STATUS[status],
+            "unknown_support_move_detected": False,
+        }
+
+    # Unknown: tag as unknown_needs_probe.
+    # This is a non-damaging move that is not in the known support
+    # inventory. Examples: a Gen X new support move, a custom move,
+    # a future DLC move.
+    return {
+        "support_group": GROUP_UNKNOWN_NEEDS_PROBE,
+        "support_status_from_audit": STATUS_UNKNOWN_NEEDS_PROBE,
+        "is_support_move": True,
+        "safety_only": _SAFETY_ONLY_BY_STATUS[STATUS_UNKNOWN_NEEDS_PROBE],
+        "positive_strategy_known": _POSITIVE_STRATEGY_BY_STATUS[STATUS_UNKNOWN_NEEDS_PROBE],
+        "opt_in_flag_required": _OPT_IN_FLAGS_BY_STATUS[STATUS_UNKNOWN_NEEDS_PROBE],
+        "default_enabled": _DEFAULT_ENABLED_BY_STATUS[STATUS_UNKNOWN_NEEDS_PROBE],
+        "unknown_support_move_detected": True,
+    }
+
+
+def aggregate_support_distribution(
+    classifications: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    """Aggregate support-group counts from a list of v1.1
+    per-candidate classifications.
+
+    Returns a dict mapping support_group -> count. The dict
+    always includes all 9 groups (zero counts for missing
+    groups) so the action-distribution gate can verify coverage.
+    """
+    out = {g: 0 for g in ALL_SUPPORT_GROUPS}
+    for c in classifications:
+        g = c.get("support_group")
+        if g in out:
+            out[g] += 1
+    return out

@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added (read-only).
+Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed.
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -148,7 +148,81 @@ support-move strategy, run **SUPPORT-AUDIT-1** first
 maps every currently relevant support-move system to a status class
 and identifies the safest next steps. The audit confirms the
 mechanics / safety path is well-covered and the strategy / positive
-scoring path is sparse. The audit recommends four follow-on phases
+scoring path is sparse.
+
+If the goal is to plan the prerequisites for a future RL training
+phase, run **RL-DATA-1** first (see
+`logs/rl_data_1_turn_level_schema_plan.md`). The plan defines the
+`turn_rl_v1.1` schema (extending v1.0 with SUPPORT-AUDIT-1 support-move
+fields, weather/terrain fields, safety assertions, and an
+unknown-support-move detector), 18 data-quality gates, 3
+RL-readiness prerequisites, and the 13-item RL-Readiness
+Checklist. RL training remains **not approved** per RL-8 closeout
+and per AGENTS.md ("The current development line is Phase 6. Do not
+start Phase 7 unless the user explicitly authorizes it.").
+
+RL-DATA-1 has been implemented by **RL-DATA-2** (see
+`logs/rl_data_2_turn_level_v1_1_instrumentation.md`). The
+`turn_rl_v1.1` instrumentation is wired into the builder,
+analyzer, and dry-run with v1.0 backward compat preserved
+(127 existing tests pass; 23 new v1.1 tests pass). No production
+behavior change. No training. No data collection.
+
+The 8 new v1.1 data-quality gates (gates 11-18) are
+implemented by **RL-DATA-2b** (see
+`logs/rl_data_2b_v1_1_smoke_and_gates.md`). The analyzer now
+reports a `v11_gates` section with schema coverage, field
+coverage, hard blocks, warnings, and a `READY` / `WARN` /
+`BLOCKED` readiness impact. 20 new gate tests pass. 147
+total RL tests pass. No training. No data collection.
+
+The audit logger now emits the v1.1 fields directly via
+**RL-DATA-3a** (see
+`logs/rl_data_3a_v1_1_audit_logger_smoke.md`). A new helper
+module `doubles_engine/audit_v1_1_metadata.py` populates 25
+v1.1 fields on every `log_turn_decision` call, and a
+try/except wrap keeps the v1.0 hot path safe. The audit
+JSONL now carries v1.1 fields by default; the builder's
+audit-fast path reads them and the v1.0 state-snapshot
+fallback handles a pre-existing `_enum_keys` character-list
+quirk. 24 new audit-emission tests pass. Tiny local smoke
+emits a real audit row, builds a v1.1 dataset, runs the
+analyzer (no hard blocks; 1 Gate 17 soft warning from
+`fakeout`/`hurricane` flagged as `unknown_needs_probe` due
+to missing `base_power`), and the dry-run remains
+compatible. 171 total RL tests pass. No training. No data
+collection.
+
+The audit logger's v1.1 emission now correctly resolves
+`base_power` and `category` for known damaging moves via
+**RL-DATA-3a.1** (see
+`logs/rl_data_3a_1_move_metadata_enrichment.md`). A new
+resolver `doubles_engine/move_metadata.py` populates
+`move_metadata_map` for every V4a legal-action key,
+falling back to a small static table of 90 known moves
+(smoke + SUPPORT-AUDIT-1 + common damaging moves). The
+clean smoke now produces `readiness_impact: READY` (0 Gate
+17 warnings, 0 hard blocks). `fakeout` / `hurricane` /
+`surf` are correctly identified as damage-like, not
+`unknown_needs_probe`. A separate fixture with a true
+unknown non-damaging support move still produces `WARN`
+(Gate 17 soft warning, no hard block). The detector is
+preserved. 27 new metadata tests pass. 198 total RL tests
+pass. No training. No data collection.
+
+The audit logger's v1.1 emission now consumes a live
+`move_metadata_map_override` kwarg via **RL-DATA-3a.2**
+(see `logs/rl_data_3a_2_live_move_metadata_override.md`).
+The bot's `choose_move` call site walks live
+`valid_orders` and `pokemon.moves` and passes the result
+as the override. The v1.1 emission prefers the override
+over the static fallback. An unusual damaging move
+(`boltstrike`, not in the static fallback) is correctly
+classified as damage-like via the override. 22 new
+override tests pass. 220 total RL tests pass. No
+training. No data collection.
+
+The audit recommends four follow-on phases
 (`SUPPORT-3` follow-me / rage-powder, `SUPPORT-4` anti-stat-setup,
 `SUPPORT-5` positive-strategy for Heal Pulse / Decorate, and the
 existing `WT-3` / `WT-4` deferred Weather/Terrain work). None of

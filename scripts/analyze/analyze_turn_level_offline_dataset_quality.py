@@ -29,8 +29,73 @@ import sys
 from collections import Counter, defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
-# Expected schema version this analyzer accepts.
-EXPECTED_SCHEMA = "turn_rl_v1.0"
+# Expected schema versions this analyzer accepts.
+# Phase RL-DATA-2 (RL-5 2026): v1.0 emitted by the original builder.
+# Phase RL-DATA-2 (2026): v1.1 emitted by the updated builder
+# (adds support-move instrumentation, weather/terrain setter
+# fields, safety assertions). v1.1 is a strict superset of
+# v1.0 — every v1.0 row is a valid v1.1 row. The analyzer
+# accepts both versions and does NOT reject v1.0 rows.
+ACCEPTED_SCHEMAS = ("turn_rl_v1.0", "turn_rl_v1.1")
+EXPECTED_SCHEMA = "turn_rl_v1.0"  # kept for backward compat
+
+# Phase RL-DATA-2b: v1.1 instrumentation gates. Each gate
+# checks for the presence of a v1.1 field in a row. Missing
+# fields are warnings, not failures (existing analyzer style).
+# "block" gates are hard failures: a v1.1 row that violates
+# a block gate must be rejected.
+V1_1_GATE_FIELDS = {
+    # Gate 12 — support instrumentation. Note: support_group,
+    # support_status_from_audit, and is_support_move are nested
+    # inside per_candidate_support_classification (a dict
+    # mapping move_id -> classification). They are NOT at the
+    # top level. The top-level instrumentation fields are
+    # unknown_support_move_detected, the classification dict,
+    # and the distribution dict.
+    "unknown_support_move_detected": "Gate 12",
+    "per_candidate_support_classification": "Gate 12",
+    "support_move_distribution": "Gate 12",
+    # Gate 13 — safety / mechanics
+    "used_species_ability_inference": "Gate 13",
+    "impossible_target_detected": "Gate 13",
+    "blocked_action_resurrected_by_joint": "Gate 13",
+    # Gate 14 — Weather / Terrain
+    "weather_current": "Gate 14",
+    "terrain_current": "Gate 14",
+    "setter_move_legal": "Gate 14",
+    "setter_move_selected": "Gate 14",
+    "type_boost_move_legal": "Gate 14",
+    "type_boost_move_selected": "Gate 14",
+    "wt2_relevance_flag": "Gate 14",
+    "wt3_relevance_flag": "Gate 14",
+    "wt4_relevance_flag": "Gate 14",
+    # Gate 15 — reward placeholders
+    "terminal_win_loss": "Gate 15",
+    "turn_delta_hp": "Gate 15",
+    "faint_caused": "Gate 15",
+    "faint_suffered": "Gate 15",
+    "sparse_reward_warning": "Gate 15",
+    "reward_provenance": "Gate 15",
+    "reward_confidence": "Gate 15",
+    # Gate 16 — score trace placeholders
+    # (these keys are added when source data is available;
+    # v1.1 does not require their presence as a hard gate
+    # because they are explicitly None when source is missing.
+    # We check them as soft warnings only.)
+    # Gate 18 — config / provenance
+    "local_only_provenance": "Gate 18",
+    "config_hash": "Gate 18",
+    "config_snapshot": "Gate 18",
+    "runtime_mode": "Gate 18",
+}
+
+# v1.1 hard-block fields. If a v1.1 row has these values,
+# the row must be rejected (BLOCKED readiness).
+V1_1_BLOCK_FIELDS = (
+    "used_species_ability_inference",
+    "impossible_target_detected",
+    "blocked_action_resurrected_by_joint",
+)
 
 # HP bucket boundaries (inclusive upper bounds).
 HP_BUCKETS = [0.25, 0.5, 0.75, 1.01]
@@ -164,6 +229,134 @@ def _action_key_to_tuple(key: Any) -> Optional[Tuple]:
     if not isinstance(key, list):
         return None
     return tuple(str(x) for x in key)
+
+
+def _check_v1_1_gates(
+    rows: List[Dict[str, Any]],
+    schema_versions: Counter,
+) -> Dict[str, Any]:
+    """Phase RL-DATA-2b: implement v1.1 data-quality gates.
+
+    Returns a dict with:
+        - schema_coverage: dict (schema version -> count)
+        - v11_n_rows: int
+        - v10_n_rows: int
+        - field_coverage: dict (field -> coverage_rate)
+        - hard_blocks: list[str] (descriptions of hard-block
+          violations; any non-empty list is a BLOCKED
+          readiness)
+        - warnings: list[str] (soft warnings; warnings do
+          not block but are surfaced)
+        - n_unknown_support_moves: int
+        - support_group_counts: dict (group -> count)
+        - readiness_impact: str (READY / WARN / BLOCKED)
+    """
+    v10_n_rows = schema_versions.get("turn_rl_v1.0", 0)
+    v11_n_rows = schema_versions.get("turn_rl_v1.1", 0)
+    n_total = len(rows)
+    n_v11 = v11_n_rows
+    n_v10 = v10_n_rows
+
+    # Gate 11 — schema coverage
+    schema_coverage = {
+        "v10": v10_n_rows,
+        "v11": v11_n_rows,
+        "other": n_total - v10_n_rows - v11_n_rows,
+    }
+
+    # Field coverage for v1.1 rows
+    v11_rows = [
+        r for r in rows
+        if r.get("schema_version") == "turn_rl_v1.1"
+    ]
+    field_coverage: Dict[str, float] = {}
+    if n_v11 > 0:
+        for f in V1_1_GATE_FIELDS:
+            present = sum(
+                1 for r in v11_rows if f in r
+            )
+            field_coverage[f] = present / n_v11
+
+    # Hard-block checks
+    hard_blocks: List[str] = []
+    warnings: List[str] = []
+    for r in v11_rows:
+        bt = r.get("battle_tag", "?")
+        ti = r.get("turn_index", "?")
+        # Gate 13 — hard blocks
+        if r.get("used_species_ability_inference") is True:
+            hard_blocks.append(
+                f"Gate 13: used_species_ability_inference=True "
+                f"at battle={bt} turn={ti}"
+            )
+        if r.get("impossible_target_detected") is True:
+            hard_blocks.append(
+                f"Gate 13: impossible_target_detected=True "
+                f"at battle={bt} turn={ti}"
+            )
+        if r.get("blocked_action_resurrected_by_joint") is True:
+            hard_blocks.append(
+                f"Gate 13: blocked_action_resurrected_by_joint=True "
+                f"at battle={bt} turn={ti}"
+            )
+        # Gate 18 — official server provenance
+        if r.get("local_only_provenance") is False:
+            hard_blocks.append(
+                f"Gate 18: local_only_provenance=False "
+                f"at battle={bt} turn={ti}"
+            )
+
+    # Gate 17 — unknown support move detector
+    n_unknown = sum(
+        1 for r in v11_rows
+        if r.get("unknown_support_move_detected") is True
+    )
+
+    # Aggregate support-group counts from per-candidate
+    # classifications.
+    support_group_counts: Dict[str, int] = {}
+    for r in v11_rows:
+        dist = r.get("support_move_distribution")
+        if isinstance(dist, dict):
+            for g, c in dist.items():
+                support_group_counts[g] = (
+                    support_group_counts.get(g, 0) + c
+                )
+
+    # Soft warnings (do not block)
+    if n_v11 > 0:
+        for f, gate in V1_1_GATE_FIELDS.items():
+            cov = field_coverage.get(f, 1.0)
+            if cov < 0.5:
+                warnings.append(
+                    f"{gate}: field `{f}` coverage "
+                    f"= {cov:.1%} in v1.1 rows"
+                )
+        if n_unknown > 0:
+            warnings.append(
+                f"Gate 17: {n_unknown} v1.1 row(s) with "
+                f"unknown_support_move_detected=True (not blocking)"
+            )
+
+    # Readiness impact
+    if hard_blocks:
+        readiness_impact = "BLOCKED"
+    elif warnings or n_v11 == 0:
+        readiness_impact = "WARN"
+    else:
+        readiness_impact = "READY"
+
+    return {
+        "schema_coverage": schema_coverage,
+        "v11_n_rows": v11_n_rows,
+        "v10_n_rows": v10_n_rows,
+        "field_coverage": field_coverage,
+        "hard_blocks": hard_blocks,
+        "warnings": warnings,
+        "n_unknown_support_moves": n_unknown,
+        "support_group_counts": support_group_counts,
+        "readiness_impact": readiness_impact,
+    }
 
 
 def analyze(input_paths: List[str], top_n: int = 20) -> Dict[str, Any]:
@@ -545,6 +738,9 @@ def analyze(input_paths: List[str], top_n: int = 20) -> Dict[str, Any]:
         "side_counts": dict(side_counts),
     }
 
+    # 10. v1.1 quality gates (Phase RL-DATA-2b).
+    v11_gates = _check_v1_1_gates(rows, schema_versions)
+
     # 9. RL readiness.
     criteria = {
         "schema_valid": (
@@ -586,6 +782,19 @@ def analyze(input_paths: List[str], top_n: int = 20) -> Dict[str, Any]:
         "criteria": criteria,
     }
 
+    # Adjust readiness based on v1.1 hard blocks.
+    # A v1.1 hard block makes the dataset BLOCKED regardless
+    # of v1.0 readiness criteria. v1.1 warnings are
+    # surfaced but do not change v1.0 readiness.
+    v11_impact = v11_gates.get("readiness_impact", "WARN")
+    if v11_impact == "BLOCKED":
+        readiness = "BLOCKED"
+    rl_readiness["readiness"] = readiness
+    rl_readiness["v11_impact"] = v11_impact
+    rl_readiness["n_v11_hard_blocks"] = len(
+        v11_gates.get("hard_blocks", [])
+    )
+
     # Assemble report.
     report = {
         "row_summary": row_summary,
@@ -596,6 +805,7 @@ def analyze(input_paths: List[str], top_n: int = 20) -> Dict[str, Any]:
         "score_margin_summary": score_margin_summary,
         "counterfactual_coverage": counterfactual_coverage,
         "duplicate_bias": duplicate_bias,
+        "v11_gates": v11_gates,
         "rl_readiness": rl_readiness,
     }
     return report

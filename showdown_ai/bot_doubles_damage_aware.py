@@ -14355,9 +14355,67 @@ class DoublesDamageAwarePlayer(Player):
                 v4a_final_action_keys=getattr(
                     self, "_v4a_final_keys", []
                 ),
+                # Phase RL-DATA-3a.2: pass live move
+                # metadata from the audit path so the
+                # v1.1 emission prefers live poke-env
+                # ``Move`` / order data over the
+                # static fallback. The helper is
+                # observational only: it never changes
+                # scoring or selected actions. If the
+                # helper fails, ``log_turn_decision``
+                # still works (it just gets a ``None``
+                # override). The v1.0 audit logging
+                # path is unchanged.
+                move_metadata_map_override=(
+                    self._v1_1_live_move_metadata_for_audit(
+                        battle,
+                        valid_orders,
+                    )
+                ),
             )
 
         return best_joint
+
+    def _v1_1_live_move_metadata_for_audit(
+        self, battle, valid_orders,
+    ):
+        """Phase RL-DATA-3a.2: collect live move
+        metadata for the v1.1 audit override path.
+
+        Returns a dict mapping normalized move id to
+        a metadata dict. The audit logger's
+        ``_populate_v1_1_move_metadata_map`` reads
+        this dict first before falling back to the
+        static resolver.
+
+        The helper is wrapped in try/except so a
+        failure here cannot break the bot's
+        choose_move path. A failure returns
+        ``None`` (the audit logger treats ``None``
+        as "no override", i.e., use the static
+        fallback).
+        """
+        try:
+            from doubles_engine.move_metadata import (
+                collect_live_move_metadata,
+            )
+            v4a_legal = (
+                list(
+                    getattr(self, "_v4a_legal_keys_slot0", [])
+                    or []
+                )
+                + list(
+                    getattr(self, "_v4a_legal_keys_slot1", [])
+                    or []
+                )
+            )
+            return collect_live_move_metadata(
+                battle=battle,
+                valid_orders=valid_orders,
+                v4a_legal_keys=v4a_legal,
+            )
+        except Exception:
+            return None
 
     @staticmethod
     def _v2l1_action_key_to_str(action_key) -> str:

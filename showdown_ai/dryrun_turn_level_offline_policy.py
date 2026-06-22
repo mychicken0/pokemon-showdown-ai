@@ -41,7 +41,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple
 
 
-SCHEMA_VERSION = "turn_rl_v1.0"
+SCHEMA_VERSION = "turn_rl_v1.0"  # v1.1 is a strict superset, also accepted
 MIN_ROWS_FOR_PIPELINE_WORKS = 50
 MIN_EPISODES_FOR_PIPELINE_WORKS = 5
 

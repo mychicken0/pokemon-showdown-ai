@@ -1137,6 +1137,21 @@ class DoublesDecisionAuditLogger:
         v4a_raw_scores_slot1=None,
         v4a_selected_joint_key=None,
         v4a_final_action_keys=None,
+        # Phase RL-DATA-3a.2: optional live move
+        # metadata override. ``move_metadata_map_override``
+        # is a dict mapping normalized move id to a
+        # metadata dict (with ``base_power`` /
+        # ``category`` / ``move_type`` / ``target`` /
+        # ``metadata_source``). When provided, the
+        # v1.1 emission prefers these entries over
+        # the static fallback. The audit logger
+        # stores the override on the turn_data so
+        # downstream tools (builder, analyzer) can
+        # see the live source. If absent, the v1.1
+        # emission falls back to the static
+        # resolver. Optional kwarg; the v1.0 audit
+        # logging path is unchanged.
+        move_metadata_map_override=None,
         # Phase 6.3.8b — Support Move Target Hard Safety.
         # ``support_target_candidates`` is the full
         # per-turn candidate table produced by the
@@ -2330,6 +2345,17 @@ class DoublesDecisionAuditLogger:
         turn_data["v4a_final_action_keys"] = (
             v4a_final_action_keys
         )
+        # Phase RL-DATA-3a.2: stash the optional
+        # ``move_metadata_map_override`` on the
+        # turn_data so the v1.1 emission can
+        # prefer live metadata over the static
+        # fallback. The override is normalized in
+        # ``_populate_v1_1_move_metadata_map``
+        # (lazy import, try/except wrap).
+        if move_metadata_map_override is not None:
+            turn_data["_v11_move_metadata_override_raw"] = (
+                move_metadata_map_override
+            )
         # Phase 6.3.8b — Support Move Target Hard Safety
         # audit fields. The full candidate table is
         # written for the analyzer to iterate; the
@@ -2769,6 +2795,20 @@ class DoublesDecisionAuditLogger:
             )
             turn_data[_slot_key] = _slot
 
+        # Phase RL-DATA-3a: emit the ``turn_rl_v1.1``
+        # instrumentation fields directly into the
+        # turn_data dict. The persisted JSONL therefore
+        # carries the v1.1 fields; the builder's
+        # ``_extract_v1_1_*`` helpers will read them
+        # from ``turn.get("xxx")`` and pass them
+        # through. The v1.1 emission is observational
+        # only: it does not change scoring, behavior,
+        # or selected actions. ``used_species_ability_inference``
+        # is hardcoded to ``False`` and
+        # ``local_only_provenance`` is hardcoded to
+        # ``True``.
+        self._emit_v1_1_fields(turn_data)
+
         self.pending_turns[battle_tag] = turn_data
         self._append_live_event(self._build_live_decision_event(battle_tag, turn_data))
 
@@ -3179,6 +3219,163 @@ class DoublesDecisionAuditLogger:
 
         self.completed_turns.setdefault(battle_tag, []).append(pending)
         self._append_live_event(self._build_live_outcome_event(battle_tag, pending))
+
+    def _emit_v1_1_fields(self, turn_data):
+        """Phase RL-DATA-3a: add turn_rl_v1.1 fields to
+        a turn_data dict in place.
+
+        Delegates to
+        ``doubles_engine.audit_v1_1_metadata.populate_v1_1_audit_fields``
+        so the helper is the single source of truth for
+        v1.1 field emission. Wrapped in try/except so a
+        failure in the v1.1 emission path never breaks
+        the audit logger's hot path (i.e., real battle
+        decision logging is never lost because of a
+        v1.1 instrumentation bug).
+
+        Phase RL-DATA-3a.1: pre-compute a per-move
+        metadata map (``base_power``, ``category``,
+        ``move_type``, ``target``, ``metadata_source``)
+        by walking the V4a legal-action keys and
+        calling ``doubles_engine.move_metadata`` to
+        resolve each move id. The map is stashed on
+        the turn_data so the support classifier
+        receives real ``base_power`` / ``category``
+        values for known damaging moves such as
+        ``fakeout`` and ``hurricane``. This prevents
+        false ``unknown_needs_probe`` tags.
+
+        Phase RL-DATA-3a.2: the metadata helper
+        ``_populate_v1_1_move_metadata_map`` honors
+        the optional ``_v11_move_metadata_override_raw``
+        kwarg the caller may have stashed on the
+        turn_data (via ``move_metadata_map_override``
+        in ``log_turn_decision``). The override is
+        normalized and used first; the static
+        resolver fills in any missing entries.
+        """
+        try:
+            self._populate_v1_1_move_metadata_map(turn_data)
+            from doubles_engine.audit_v1_1_metadata import (
+                populate_v1_1_audit_fields,
+            )
+            populate_v1_1_audit_fields(turn_data)
+        except Exception as exc:
+            # Observational only: never raise. Mark the
+            # emission as failed so downstream tools
+            # can detect a regression. The keys are
+            # added with explicit safe defaults so the
+            # analyzer still sees the gates.
+            try:
+                turn_data["v1_1_emission_failed"] = True
+                turn_data["v1_1_emission_error"] = (
+                    f"{type(exc).__name__}: {exc}"[:200]
+                )
+            except Exception:
+                pass
+
+    def _populate_v1_1_move_metadata_map(
+        self, turn_data,
+    ) -> None:
+        """Phase RL-DATA-3a.1 + RL-DATA-3a.2: build a
+        per-move metadata map from the V4a legal-action
+        keys, with optional live override.
+
+        The map is written to ``turn_data["move_metadata_map"]``
+        so ``populate_v1_1_audit_fields`` can read it
+        and pass ``base_power`` / ``category`` into
+        the support classifier.
+
+        The map keys are normalized move ids
+        (lowercased, no spaces / dashes / underscores
+        / apostrophes) so the audit fast path can do
+        a direct ``dict.get`` lookup.
+
+        Resolution order (per move id):
+
+        1. **Live override** (``_v11_move_metadata_override_raw``):
+           if the caller passed ``move_metadata_map_override``
+           to ``log_turn_decision``, the override is
+           normalized and used first. ``metadata_source =
+           "override"`` unless the caller set a different
+           label. This is the primary path for real
+           production audits (RL-DATA-3a.2).
+        2. The audit logger does not carry order
+           objects or active-mons on the turn_data.
+           A future ``move_metadata_map_override``
+           pass-through from choose_move would inject
+           live poke-env ``Move`` objects here.
+        3. The static fallback table in
+           ``doubles_engine.move_metadata`` (covers
+           smoke / test fixtures and the SUPPORT-AUDIT-1
+           inventory).
+
+        Wrapped in try/except so a failure in the
+        metadata path never breaks the v1.1 emission.
+        """
+        try:
+            from doubles_engine.move_metadata import (
+                resolve_move_metadata_for_audit,
+                normalize_override,
+            )
+            from doubles_engine.audit_v1_1_metadata import (
+                _normalize_v1_1_move_id as _norm,
+            )
+            out: dict = {}
+            # 1) Override wins.
+            override_raw = turn_data.get(
+                "_v11_move_metadata_override_raw"
+            )
+            if isinstance(override_raw, dict):
+                out.update(normalize_override(override_raw))
+            # 2) Collect unique move ids from the V4a
+            # legal-action keys.
+            seen: set = set()
+            move_ids: list = []
+            for legal_key in (
+                "v4a_legal_action_keys_slot0",
+                "v4a_legal_action_keys_slot1",
+            ):
+                keys = turn_data.get(legal_key) or []
+                if not isinstance(keys, list):
+                    continue
+                for k in keys:
+                    if not isinstance(k, (list, tuple)) or len(k) < 2:
+                        continue
+                    mid_norm = _norm(k[1])
+                    if not mid_norm or mid_norm in seen:
+                        continue
+                    seen.add(mid_norm)
+                    move_ids.append(mid_norm)
+            # 3) Fill any missing entries from the
+            # static resolver. The audit logger
+            # does not carry order objects or
+            # active-mons on the turn_data, so the
+            # resolver falls back to the static table
+            # for known moves. A real production audit
+            # (not the smoke) injects live metadata
+            # via the override path.
+            for mid in move_ids:
+                if mid in out:
+                    continue
+                meta = resolve_move_metadata_for_audit(mid)
+                out[mid] = meta
+            turn_data["move_metadata_map"] = out
+        except Exception as exc:
+            # Observational only: a failure here means
+            # the classifier will fall back to
+            # ``base_power=None`` / ``category=None``,
+            # which is the conservative default. We
+            # mark the metadata map as failed so
+            # downstream tools can detect a regression.
+            try:
+                turn_data["v1_1_move_metadata_failed"] = True
+                turn_data["v1_1_move_metadata_error"] = (
+                    f"{type(exc).__name__}: {exc}"[:200]
+                )
+                turn_data["move_metadata_map"] = {}
+            except Exception:
+                pass
 
     def set_battle_arm(
         self, battle_tag, benchmark_arm, enable_mega_evolution,

@@ -25,7 +25,12 @@ import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 # Schema version this builder emits.
-SCHEMA_VERSION = "turn_rl_v1.0"
+# Phase RL-5 emitted "turn_rl_v1.0". Phase RL-DATA-2 adds
+# v1.1 support-move instrumentation. v1.1 is backward
+# compatible: every v1.0 field is preserved, only new
+# fields are added.
+SCHEMA_VERSION = "turn_rl_v1.0"  # v1.1 added by RL-DATA-2 (also accepted)
+SCHEMA_VERSION_V1_1 = "turn_rl_v1.1"
 
 # Required top-level fields for v1.0.
 REQUIRED_IDENTITY = (
@@ -338,6 +343,489 @@ def _row_has_required_fields(row: Dict[str, Any]) -> List[str]:
     return missing
 
 
+# ============================================================
+# Phase RL-DATA-2: turn_rl_v1.1 instrumentation helpers
+# ============================================================
+# These helpers add the v1.1 fields defined in
+# logs/rl_data_1_turn_level_schema_plan.md. They are
+# instrumentation-only: they do NOT change scoring, behavior,
+# or selected actions. They run inside build_row() and
+# produce extra fields that downstream tools (analyzer,
+# dry-run) can read.
+
+# Lazy import: support_targets depends on bot_doubles_damage_aware
+# (late binding for DoublesDamageAwareConfig). Importing
+# support_targets here triggers the cycle, so we do a lazy
+# import inside each function that needs it.
+def _support_targets_classify():
+    """Lazy import to avoid circular dependency."""
+    from doubles_engine.support_targets import (
+        classify_support_move_for_dataset,
+        aggregate_support_distribution,
+    )
+    return classify_support_move_for_dataset, aggregate_support_distribution
+
+
+# Setter move ids for WT-2 (per logs/phaseWT2_setter_audit.md).
+_WT2_SETTER_MOVE_IDS = frozenset({
+    "raindance", "sunnyday", "sandstorm", "hail", "snowscape",
+    "electricterrain", "grassyterrain", "mistyterrain", "psychicterrain",
+})
+
+# Type-boost moves: moves whose type is boosted by the
+# current weather/terrain. v1.1 records which are legal
+# and selected. The actual list is data-driven (from
+# state_snapshot.weather / state_snapshot.fields).
+_TYPE_BOOST_MOVE_IDS = frozenset({
+    # Rain
+    "hurricane", "thunder", "watergun", "hydroPump", "surf",
+    "muddywater", "weatherball",
+    # Sun
+    "fireblast", "flamethrower", "solarbeam", "solarblade",
+    "firepunch", "flamecharge",
+    # Sand
+    "rockslide", "stoneedge", "earthpower", "earthquake",
+    # Electric terrain
+    "thunderbolt", "thunderpunch", "voltswitch",
+    # Grassy terrain
+    "gigadrain", "razorleaf", "leafstorm", "energyball",
+    "leafblade", "powerwhip",
+    # Psychic terrain
+    "psychic", "psyshock", "psybeam", "zenheadbutt", "extrasensory",
+    # Misty terrain
+    "moonblast", "drainingkiss", "fairywind",
+})
+
+
+def _extract_v1_1_config_snapshot(turn: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract a config-snapshot dict from the turn if
+    available, else return an empty dict.
+
+    The audit logger does not currently record the
+    full DoublesDamageAwareConfig. v1.1 records whatever
+    is available; missing fields are safe defaults.
+    """
+    cfg = turn.get("config_snapshot") or {}
+    if not isinstance(cfg, dict):
+        return {}
+    return _to_json_safe(cfg)
+
+
+def _extract_v1_1_metadata(
+    turn: Dict[str, Any],
+    row_battle: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Extract v1.1 metadata fields.
+
+    Returns a dict with:
+        - config_hash: str | None (None if not recorded)
+        - config_snapshot: dict (may be empty)
+        - local_only_provenance: bool (always True)
+        - format: str | None
+        - team_id: str | None
+        - opponent_team_id: str | None
+        - runtime_mode: str | None (from turn.runtime_mode)
+        - terminal_win_loss: int | None
+        - turn_delta_hp: dict (per-side delta this turn)
+        - faint_caused: int | None
+        - faint_suffered: int | None
+        - delayed_reward_placeholder: float (0.0)
+        - sparse_reward_warning: bool
+        - reward_provenance: str ("terminal_only")
+        - reward_confidence: float (1.0)
+    """
+    metadata: Dict[str, Any] = {
+        "config_hash": turn.get("config_hash"),
+        "config_snapshot": _extract_v1_1_config_snapshot(turn),
+        "local_only_provenance": True,
+        "format": turn.get("format") or row_battle.get("format"),
+        "team_id": turn.get("team_id") or row_battle.get("team_id"),
+        "opponent_team_id": (
+            turn.get("opponent_team_id")
+            or row_battle.get("opponent_team_id")
+        ),
+        "runtime_mode": turn.get("runtime_mode"),
+        "terminal_win_loss": None,  # filled from episode
+        "turn_delta_hp": _to_json_safe(turn.get("turn_delta_hp", {})),
+        "faint_caused": turn.get("faint_caused"),
+        "faint_suffered": turn.get("faint_suffered"),
+        "delayed_reward_placeholder": 0.0,
+        "sparse_reward_warning": True,
+        "reward_provenance": "terminal_only",
+        "reward_confidence": 1.0,
+    }
+    return metadata
+
+
+def _extract_v1_1_weather_terrain(
+    turn: Dict[str, Any],
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Extract v1.1 weather/terrain fields.
+
+    Returns a dict with:
+        - weather_current: str | None
+        - terrain_current: str | None
+        - setter_move_legal: list[str]
+        - setter_move_selected: list[str]
+        - setter_move_raw_score: dict (None if not available)
+        - type_boost_move_legal: list[str]
+        - type_boost_move_selected: list[str]
+        - type_boost_applied: list[str]
+        - wt2_relevance_flag: bool (setter move was legal)
+        - wt3_relevance_flag: bool (type-boost move was legal)
+        - wt4_relevance_flag: bool (setter move was selected)
+
+    Phase RL-DATA-3a: prefer audit-emitted values when
+    present (turn.get("weather_current") /
+    turn.get("terrain_current")). The audit logger
+    already populated these when v1.1 emission is
+    enabled. We only fall back to the v1.0 state
+    snapshot when the audit fields are missing.
+
+    The state-snapshot fallback handles a pre-existing
+    audit logger quirk where ``_enum_keys`` iterates
+    a string and returns single characters
+    (``["r", "a", "i", "n", ...]``). We detect that
+    case and join the list back into the original
+    string before lowercasing.
+    """
+    # Prefer audit-emitted values
+    if "weather_current" in turn or "terrain_current" in turn:
+        return {
+            "weather_current": turn.get("weather_current"),
+            "terrain_current": turn.get("terrain_current"),
+            "setter_move_legal": _setter_legal(turn),
+            "setter_move_selected": _setter_selected(turn),
+            "setter_move_raw_score": turn.get(
+                "setter_move_raw_score"
+            ),
+            "type_boost_move_legal": _tb_legal(turn),
+            "type_boost_move_selected": _tb_selected(turn),
+            "type_boost_applied": turn.get(
+                "type_boost_applied", []
+            ),
+            "wt2_relevance_flag": bool(
+                turn.get("setter_move_legal", [])
+            ),
+            "wt3_relevance_flag": bool(
+                turn.get("type_boost_move_legal", [])
+            ),
+            "wt4_relevance_flag": bool(
+                turn.get("setter_move_selected", [])
+            ),
+        }
+
+    ss = turn.get("state_snapshot") or {}
+    weather = ss.get("weather", "none")
+    fields = ss.get("fields", [])
+
+    def _canon(value: Any) -> Optional[str]:
+        if isinstance(value, str):
+            if not value or value == "none":
+                return None
+            return value.split(".")[-1].lower()
+        if isinstance(value, list):
+            if not value:
+                return None
+            # Detect the audit logger character-list
+            # quirk and join the list back into a
+            # string.
+            if all(
+                isinstance(x, str) and len(x) == 1
+                for x in value
+            ):
+                joined = "".join(value)
+                return joined.split(".")[-1].lower() or None
+            for x in value:
+                if not x:
+                    continue
+                s = str(x).split(".")[-1].lower()
+                if s:
+                    return s
+            return None
+        return None
+
+    weather_current = _canon(weather)
+    terrain_current = _canon(fields)
+
+    # Setter moves: collect from legal actions
+    legal0 = turn.get("v4a_legal_action_keys_slot0") or []
+    legal1 = turn.get("v4a_legal_action_keys_slot1") or []
+
+    def _setter_moves_in(keys) -> List[str]:
+        out: List[str] = []
+        for k in keys:
+            if not isinstance(k, (list, tuple)) or len(k) < 2:
+                continue
+            mid = _normalize_v1_1_move_id(k[1])
+            if mid in _WT2_SETTER_MOVE_IDS:
+                out.append(mid)
+        return out
+
+    setter_legal = sorted(set(_setter_moves_in(legal0) + _setter_moves_in(legal1)))
+
+    # Selected setter
+    sel_joint = turn.get("v4a_selected_joint_key")
+    setter_selected: List[str] = []
+    if isinstance(sel_joint, (list, tuple)):
+        for k in sel_joint:
+            if isinstance(k, (list, tuple)) and len(k) >= 2:
+                mid = _normalize_v1_1_move_id(k[1])
+                if mid in _WT2_SETTER_MOVE_IDS:
+                    setter_selected.append(mid)
+
+    # Type-boost moves
+    def _type_boost_moves_in(keys) -> List[str]:
+        out: List[str] = []
+        for k in keys:
+            if not isinstance(k, (list, tuple)) or len(k) < 2:
+                continue
+            mid = _normalize_v1_1_move_id(k[1])
+            if mid in _TYPE_BOOST_MOVE_IDS:
+                out.append(mid)
+        return out
+
+    tb_legal = sorted(
+        set(_type_boost_moves_in(legal0) + _type_boost_moves_in(legal1))
+    )
+
+    tb_selected: List[str] = []
+    if isinstance(sel_joint, (list, tuple)):
+        for k in sel_joint:
+            if isinstance(k, (list, tuple)) and len(k) >= 2:
+                mid = _normalize_v1_1_move_id(k[1])
+                if mid in _TYPE_BOOST_MOVE_IDS:
+                    tb_selected.append(mid)
+
+    # Raw scores for setter moves (v4a_raw_scores_slot0/1)
+    setter_raw: Dict[str, Any] = {}
+    raw0 = turn.get("v4a_raw_scores_slot0") or {}
+    raw1 = turn.get("v4a_raw_scores_slot1") or {}
+    if isinstance(raw0, dict):
+        for k, v in raw0.items():
+            mid = _normalize_v1_1_move_id(k)
+            if mid in _WT2_SETTER_MOVE_IDS:
+                setter_raw[mid] = _to_json_safe(v)
+    if isinstance(raw1, dict):
+        for k, v in raw1.items():
+            mid = _normalize_v1_1_move_id(k)
+            if mid in _WT2_SETTER_MOVE_IDS:
+                setter_raw[mid] = _to_json_safe(v)
+
+    # WT-2 / WT-3 / WT-4 relevance flags
+    wt2 = bool(setter_legal)
+    wt3 = bool(tb_legal)
+    wt4 = bool(setter_selected)
+
+    return {
+        "weather_current": weather_current,
+        "terrain_current": terrain_current,
+        "setter_move_legal": setter_legal,
+        "setter_move_selected": setter_selected,
+        "setter_move_raw_score": setter_raw if setter_raw else None,
+        "type_boost_move_legal": tb_legal,
+        "type_boost_move_selected": tb_selected,
+        "type_boost_applied": [],  # would need execution-time data
+        "wt2_relevance_flag": wt2,
+        "wt3_relevance_flag": wt3,
+        "wt4_relevance_flag": wt4,
+    }
+
+
+def _normalize_v1_1_move_id(move_id: Any) -> str:
+    """Normalize a move id to a lowercased no-space string."""
+    if move_id is None:
+        return ""
+    s = str(move_id)
+    return s.lower().replace(" ", "").replace("-", "").replace("_", "").replace("'", "")
+
+
+# Phase RL-DATA-3a: small helpers for the audit-emitted
+# fast path in ``_extract_v1_1_weather_terrain``. When
+# the audit logger has already emitted v1.1 fields, we
+# pass them through directly. These helpers only run on
+# the audit-fast path; the state-snapshot fallback
+# path uses inline logic.
+def _setter_legal(turn: Dict[str, Any]) -> List[str]:
+    """Return the audit-emitted setter_move_legal list
+    (defaulting to ``[]`` if absent)."""
+    v = turn.get("setter_move_legal")
+    if isinstance(v, list):
+        return list(v)
+    return []
+
+
+def _setter_selected(turn: Dict[str, Any]) -> List[str]:
+    v = turn.get("setter_move_selected")
+    if isinstance(v, list):
+        return list(v)
+    return []
+
+
+def _tb_legal(turn: Dict[str, Any]) -> List[str]:
+    v = turn.get("type_boost_move_legal")
+    if isinstance(v, list):
+        return list(v)
+    return []
+
+
+def _tb_selected(turn: Dict[str, Any]) -> List[str]:
+    v = turn.get("type_boost_move_selected")
+    if isinstance(v, list):
+        return list(v)
+    return []
+
+
+def _extract_v1_1_safety_fields(turn: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract v1.1 safety/mechanics fields.
+
+    Returns a dict with:
+        - block_reason_wrong_side: str | None
+        - block_reason_narrow_ally_heal: str | None
+        - block_reason_broad_support_target: str | None
+        - block_reason_ability_hard_safety: str | None
+        - revealed_ability_source: str ("revealed" or "singleton_deduction")
+        - used_species_ability_inference: bool (always False)
+        - impossible_target_detected: bool (always False unless audit says so)
+        - blocked_action_resurrected_by_joint: bool (always False)
+    """
+    out: Dict[str, Any] = {
+        "block_reason_wrong_side": turn.get("block_reason_wrong_side"),
+        "block_reason_narrow_ally_heal": (
+            turn.get("block_reason_narrow_ally_heal")
+        ),
+        "block_reason_broad_support_target": (
+            turn.get("block_reason_broad_support_target")
+        ),
+        "block_reason_ability_hard_safety": (
+            turn.get("block_reason_ability_hard_safety")
+        ),
+        "revealed_ability_source": turn.get("revealed_ability_source")
+        or "revealed",
+        "used_species_ability_inference": False,  # never True
+        "impossible_target_detected": bool(
+            turn.get("impossible_target_detected", False)
+        ),
+        "blocked_action_resurrected_by_joint": bool(
+            turn.get("blocked_action_resurrected_by_joint", False)
+        ),
+    }
+    return out
+
+
+def _extract_v1_1_support_classification(
+    turn: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Extract v1.1 support-move classification.
+
+    For each candidate action in the legal set, classify
+    the move using the SUPPORT-AUDIT-1 inventory. Returns
+    a dict with:
+        - per_candidate: dict mapping move_id -> classification
+        - support_move_distribution: dict (group -> count)
+        - unknown_support_move_detected: bool (any candidate)
+
+    Phase RL-DATA-3a.1: prefer the audit-emitted
+    ``move_metadata_map`` (built by the audit logger
+    from poke-env ``Move`` objects, the active mon's
+    moves, or the static fallback). Without metadata
+    the classifier treats known damaging moves like
+    ``fakeout`` and ``hurricane`` as
+    ``unknown_needs_probe``. With metadata they are
+    correctly identified as damage-like.
+    """
+    classify, aggregate = _support_targets_classify()
+    # Audit-emitted per-move metadata map (preferred)
+    move_metadata_map: Dict[str, Any] = (
+        turn.get("move_metadata_map") or {}
+    )
+    per_candidate: Dict[str, Any] = {}
+    classifications: List[Dict[str, Any]] = []
+
+    # Walk legal keys for slot 0 and slot 1
+    legal0 = turn.get("v4a_legal_action_keys_slot0") or []
+    legal1 = turn.get("v4a_legal_action_keys_slot1") or []
+    for keys in (legal0, legal1):
+        if not isinstance(keys, list):
+            continue
+        for k in keys:
+            if not isinstance(k, (list, tuple)) or len(k) < 2:
+                continue
+            mid = _normalize_v1_1_move_id(k[1])
+            if not mid:
+                continue
+            # Look up metadata for this move. The
+            # audit logger populates ``move_metadata_map``
+            # via the resolver. If absent, the
+            # classifier falls back to the conservative
+            # ``base_power=None, category=None`` path.
+            meta = move_metadata_map.get(mid) or {}
+            base_power = meta.get("base_power")
+            category = meta.get("category")
+            cls = classify(
+                mid,
+                base_power=base_power,
+                category=category,
+            )
+            # Annotate each per-candidate entry with
+            # the metadata source for downstream
+            # inspection. Mirrors the audit logger.
+            cls_with_meta = dict(cls)
+            cls_with_meta["metadata_source"] = meta.get(
+                "metadata_source"
+            ) or "unknown"
+            cls_with_meta["resolved_base_power"] = base_power
+            cls_with_meta["resolved_category"] = category
+            classifications.append(cls_with_meta)
+            per_candidate[mid] = cls_with_meta
+
+    distribution = aggregate(classifications)
+    any_unknown = any(
+        c.get("unknown_support_move_detected", False)
+        for c in classifications
+    )
+
+    return {
+        "per_candidate_support_classification": per_candidate,
+        "support_move_distribution": distribution,
+        "unknown_support_move_detected": any_unknown,
+    }
+
+
+def _build_v1_1_fields(
+    turn: Dict[str, Any],
+    row_battle: Dict[str, Any],
+    state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the v1.1 field group for a turn.
+
+    Combines metadata, weather/terrain, safety, and
+    support-classification. All v1.1 fields are added
+    with safe defaults (None / False / 0 / empty list)
+    when source data is unavailable.
+    """
+    out: Dict[str, Any] = {}
+
+    # Metadata
+    metadata = _extract_v1_1_metadata(turn, row_battle)
+    out.update(metadata)
+
+    # Weather / Terrain
+    wt = _extract_v1_1_weather_terrain(turn, state)
+    out.update(wt)
+
+    # Safety
+    safety = _extract_v1_1_safety_fields(turn)
+    out.update(safety)
+
+    # Support classification
+    support = _extract_v1_1_support_classification(turn)
+    out.update(support)
+
+    return out
+
+
 def build_row(
     row_battle: Dict[str, Any],
     turn: Dict[str, Any],
@@ -384,7 +872,7 @@ def build_row(
 
     # Identity.
     row = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": SCHEMA_VERSION_V1_1,  # RL-DATA-2: v1.1
         "dataset_id": dataset_id,
         "source_artifact": source_artifact,
         "battle_tag": battle_tag,
@@ -413,8 +901,15 @@ def build_row(
         "selected_per_slot": selected_per_slot,
         "selected_score": selected_score,
     }
-    # Add optional.
+    # Add v1.0 optional fields.
     row.update(optional)
+
+    # Phase RL-DATA-2: add v1.1 instrumentation fields. These
+    # are instrumentation-only; they do NOT change scoring,
+    # behavior, or selected actions.
+    v1_1 = _build_v1_1_fields(turn, row_battle, state)
+    row.update(v1_1)
+
     return row
 
 
