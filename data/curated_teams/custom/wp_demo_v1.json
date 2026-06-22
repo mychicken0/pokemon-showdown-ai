@@ -1,0 +1,66 @@
+{
+  "id": "wp_demo_v1",
+  "rank": 0,
+  "player": "custom",
+  "event": "SCENARIO-18",
+  "record": "0-0",
+  "source_platform": "custom",
+  "source_url": "",
+  "parse_status": "ok",
+  "team": [
+    {
+      "species": "Dragonite",
+      "ability": "Multiscale",
+      "item": "Weakness Policy",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Dragon Dance", "Outrage", "Earthquake", "Protect"]
+    },
+    {
+      "species": "Baxcalibur",
+      "ability": "Thermal Exchange",
+      "item": "Loaded Dice",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Icicle Spear", "Dragon Claw", "Earthquake", "Protect"]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Lum Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Protect", "Extreme Speed", "Flare Blitz", "Crunch"]
+    },
+    {
+      "species": "Kingambit",
+      "ability": "Defiant",
+      "item": "Leftovers",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Kowtow Cleave", "Sucker Punch", "Iron Head", "Protect"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Yache Berry",
+      "nature": "Jolly",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Lum Berry",
+      "nature": "Adamant",
+      "level": 50,
+      "evs": {"hp": 4},
+      "moves": ["Rock Slide", "Crunch", "Dragon Dance", "Protect"]
+    }
+  ]
+}

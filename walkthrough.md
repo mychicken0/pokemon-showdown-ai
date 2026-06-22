@@ -7497,3 +7497,59 @@ Non-goals:
 - No Beat Up / Weakness Policy scoring until curated scenarios prove
   it.
 - No `test_51`.
+
+---
+
+## SCENARIO-ROADMAP-1 — Runner Scenario Tooling Plan
+
+The next infrastructure track is scenario tooling for targeted probes.
+
+The plan is recorded in:
+
+- `logs/phaseSCENARIOROADMAP1_runner_scenario_tooling_plan.md`
+
+Why:
+
+- Top-200 or mirror sampling often contains the desired move but does
+  not cause the AI to use it.
+- Planner work needs battle states where the key event actually
+  happens.
+- Scripted scenarios are needed to validate responses such as Taunt
+  into Trick Room, Wide Guard into spread pressure, or combo support.
+
+Scenario layers:
+
+1. Curated team.
+2. Curated matchup.
+3. Scripted behavior.
+
+Required tools:
+
+- scenario JSON schema
+- scenario loader / validator
+- scripted opponent player
+- audit-based scenario validation analyzer
+
+First target:
+
+- Anti-Trick Room: opponent uses Trick Room, our bot has Taunt /
+  Encore / Disable legal, audit verifies the signal and response
+  opportunity.
+
+Recommended phases:
+
+1. **SCENARIO-1:** framework design.
+2. **SCENARIO-2:** loader and validator.
+3. **SCENARIO-3:** scripted opponent player.
+4. **SCENARIO-4:** first anti-Trick Room scenario.
+5. **SCENARIO-5:** 1-pair validation.
+6. **SCENARIO-6:** expand scenario library.
+
+Non-goals:
+
+- No scoring change.
+- No RL/training.
+- No default flip.
+- No large debug benchmarks.
+- No hidden-information leakage.
+- No `test_51`.
