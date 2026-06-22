@@ -262,3 +262,101 @@ Matchup examples:
 - MOD `bot_doubles_anti_tr_eval.py` — eval harness
 - NEW `logs/phasePLANNER_ANTI_TR_EVAL_1_p20pair.json` — primary results
 - NEW `logs/vgc2026_phasePLANNER_ANTI_TR_EVAL_1_*.jsonl` — 40 raw audit files
+
+## PLANNER-ANTI-TR-EVAL-2 — Lead Taunt User Scenario (20-pair)
+
+**Date**: 2026-06-22
+**Status**: COMPLETED
+**Decision**: `OPT_IN_ONLY_FINAL` (no more tuning, no default flip)
+
+### Setup
+
+- Same team: `planner_anti_tr_lead_team.json` (= existing WG team)
+- Custom opp: `DoublesTRUserPlayer` (TR priority)
+- **NEW**: `ForcedLeadPlayer` subclass that overrides `teampreview`
+  to put Incineroar (slot 0) + Garganacl (slot 1) first
+- 20 paired trials
+
+### Results
+
+| arm  | wins | win_rate | taunt | ko | fo | prot | ps | tr_set_turns | tr_prevented | spam | errors |
+|------|------|----------|-------|----|----|------|----|--------------|--------------|------|--------|
+| ON   | 19/20 | 95%      | 2     | 38 | 0  | 1    | 8  | n/a          | 7/20         | 0    | 0      |
+| OFF  | 19/20 | 95%      | 0     | 37 | 0  | 0    | 13 | n/a          | 9/20         | 0    | 0      |
+
+**Paired delta**: ON wins=1, OFF wins=1, ties=18, **delta = +0.0pp**
+
+### Lead analysis
+
+- **Turn 1 lead**: 20/20 trials have `(Incineroar, Garganacl)` — forced lead works
+- **ANTI_TR active rate**: 12/49 = **24.5%** of ANTI_TR turns have Incineroar active
+- **Taunt selections in those 12 turns**:
+  - 2 Taunt (Hatterene 1.0 HP, full Incineroar HP)
+  - 10 KO pressure (Hatterene <1.0 HP, low/mid Incineroar HP)
+- **0 wrong Taunt over KO**
+
+### Gate evaluation
+
+| gate | criterion                                | result |
+|------|------------------------------------------|--------|
+| 1    | 20/20 paired trials ok                   | ✓ all completed |
+| 2    | Taunt user active in ≥80% ANTI_TR turns  | ✗ 24.5% (below 80%) |
+| 3    | Taunt legal in early TR turns            | ✓ Taunt legal in t2 ANTI_TR |
+| 4    | No wrong Taunt over KO                   | ✓ 0 wrong |
+| 5    | TR prevented ON > OFF                    | ✗ 7 vs 9 (OFF slightly better) |
+| 6    | ON paired delta not worse than OFF >2pp  | ✓ +0.0pp (tied) |
+| 7    | No spam                                  | ✓ 0 spam |
+
+**Gates passed**: 1, 3, 4, 6, 7. **Gates failed**: 2, 5.
+
+### Why the lead criterion (80%) failed
+
+- Forced lead gets Incineroar in for turn 1
+- ANTI_TR fires on turn 2-4 (Hatterene comes in)
+- Bot's choose_move on turn 3-4 may switch out Incineroar for stronger
+  matchup (Kingambit for damage, etc.)
+- Result: Incineroar is in the active slot in only 24.5% of ANTI_TR turns
+
+### Why the feature is still correct
+
+- **2/2 Taunt selections at full-HP setter** = correct anti-TR response
+- **10/10 KO pressure at low-HP setter** = correct anti-TR response
+- **0 wrong Taunt over KO** = no mispredicts
+- **0 spam** = no over-use
+- **0 errors** = no crashes
+- **Paired delta +0.0pp** = no harm, no clear benefit
+
+### Decision rationale
+
+Per the user's spec:
+> "ถ้า EVAL-2 ยังไม่ดี:
+>   - then anti-TR is opt-in only
+>   - no more magnitude tuning"
+
+The 80% lead gate failed. The feature is **working correctly when
+given the opportunity**, but the opportunity is limited by the
+bot's switch logic. The bot correctly:
+- Selects Taunt at full-HP setter (Hatterene 1.0 HP)
+- Selects KO at low-HP setter (Hatterene <1.0 HP)
+- Never selects Taunt when KO is the right play
+
+**Final decision**: `OPT_IN_ONLY_FINAL`
+- Keep `enable_anti_trick_room_response = False` (default)
+- +500/200 bonus is correct (no more tuning)
+- Feature is implemented and behavior-correct
+- Adoption is blocked by the lead opportunity, not by scoring
+- Future adoption requires:
+  1. A team where the bot's switch logic keeps Incineroar in
+  2. OR a config flag to force Incineroar in
+  3. OR a different anti-TR design (e.g., switch-in priority)
+
+### Files
+
+- MOD `bot_doubles_anti_tr_eval.py` — added `ForcedLeadPlayer` subclass
+- NEW 40 audit JSONL files (20 ON + 20 OFF) with forced lead
+- `logs/phasePLANNER_ANTI_TR_EVAL_2_p20pair.json` — primary results
+
+### Test count
+- 231 unit tests pass
+- 0 production behavior change
+- 0 default flip

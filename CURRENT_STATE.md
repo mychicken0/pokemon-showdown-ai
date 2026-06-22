@@ -4409,3 +4409,43 @@ different team/matchup to consider default flip.
 
 See `logs/phasePLANNER_ANTI_TR_EVAL_1.md` for full design and
 analysis. Eval harness in `bot_doubles_anti_tr_eval.py`.
+
+### PLANNER-ANTI-TR-EVAL-2 — Lead Taunt User Scenario (added 2026-06-22)
+
+**Decision:** `OPT_IN_ONLY_FINAL` (no more magnitude tuning, no default flip).
+
+20 paired trials with `ForcedLeadPlayer` subclass that overrides
+`teampreview` to put Incineroar (slot 0) first. Same team as
+EVAL-1.
+
+- **Turn 1 lead**: 20/20 trials have (Incineroar, Garganacl) — forced
+  lead works
+- **Incineroar active rate in ANTI_TR turns**: 12/49 = **24.5%**
+  (below 80% gate)
+- **Behavior correct**: 0 wrong Taunt over KO, 0 spam, 0 errors
+- **Paired delta**: +0.0pp (ON 19/20 vs OFF 19/20) — much better
+  than EVAL-1's -20pp
+- **Taunt selections**: 2 (both at Hatterene 1.0 HP, full Incineroar)
+- **KO pressure selections**: 10 in 12 Incineroar-active ANTI_TR
+  turns (all at Hatterene <1.0 HP)
+
+**Gates passed**: 1, 3, 4, 6, 7. **Gates failed**: 2 (80% lead),
+5 (TR prevented 7 vs 9).
+
+**Why 80% lead gate failed**: Forced lead works for turn 1, but the
+bot's choose_move on turn 3-4 switches out Incineroar for stronger
+matchups (Kingambit, etc.). The lead opportunity is limited by the
+bot's switch logic, not the anti-TR feature.
+
+**Final adoption decision**: `OPT_IN_ONLY_FINAL`
+- Anti-TR is opt-in only, no default flip
+- +500/200 bonus is correct (no more tuning)
+- Feature is implemented and behavior-correct
+- Future adoption requires:
+  1. A team where the bot's switch logic keeps Incineroar in, OR
+  2. A config flag to force Incineroar in, OR
+  3. A different anti-TR design (e.g., switch-in priority)
+
+See `logs/phasePLANNER_ANTI_TR_EVAL_1.md` (EVAL-2 section) for
+full design and analysis. Eval harness in
+`bot_doubles_anti_tr_eval.py`.

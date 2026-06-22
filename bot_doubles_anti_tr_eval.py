@@ -15,12 +15,36 @@ sys.path.insert(0, "/home/phurin/Program/Showdown_AI/pokemon-showdown-ai")
 
 import bot_doubles_planner_spread_smoke as smoke
 from bot_doubles_tr_user import DoublesTRUserPlayer
+from bot_doubles_damage_aware import DoublesDamageAwarePlayer
 
 smoke.DoublesBasicAwarePlayer = DoublesTRUserPlayer
 
+# PLANNER-ANTI-TR-EVAL-2: Force Incineroar into the lead.
+# The default teampreview is random. To ensure the Taunt user
+# is in the active slot, override teampreview to always pick
+# Incineroar (slot 0 in our team) first.
+TAUNT_LEAD_INDICES = {0, 1}  # Incineroar + Garganacl by slot
+
+
+class ForcedLeadPlayer(DoublesDamageAwarePlayer):
+    """Player that forces a specific lead in team preview."""
+
+    def teampreview(self, battle):
+        members = list(range(1, len(battle.team) + 1))
+        # Pick all 6 mons, but always put Incineroar (slot 0) first
+        # in the team preview order
+        for i in members:
+            list(battle.team.values())[i - 1]._selected_in_teampreview = True
+        # Put slot 0 (Incineroar) and slot 1 (Garganacl) first
+        ordered = [1, 2] + [i for i in members if i not in (1, 2)]
+        return "/team " + "".join(str(c) for c in ordered)
+
+
+smoke.DoublesDamageAwarePlayer = ForcedLeadPlayer
+
 original_make_config = smoke._make_config
 
-WG_TEAM = "data/curated_teams/custom/planner_anti_tr_wg_team.json"
+WG_TEAM = "data/curated_teams/custom/planner_anti_tr_lead_team.json"
 OPP_TEAM = "data/curated_teams/custom/general_opp_tr.json"
 
 ARTIFACT_DIR = Path("logs")
