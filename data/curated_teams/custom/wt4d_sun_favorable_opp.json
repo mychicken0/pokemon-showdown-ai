@@ -1,0 +1,58 @@
+{
+  "team": [
+    {
+      "species": "Pelipper",
+      "ability": "Drizzle",
+      "item": "Damp Rock",
+      "evs": {"hp": 252, "spa": 252, "def": 4},
+      "nature": "Modest",
+      "moves": ["Hurricane", "Hydro Pump", "U-turn", "Protect"],
+      "types": ["water", "flying"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Dragon Claw", "Iron Head", "Scale Shot", "Earthquake"],
+      "types": ["dragon", "ground"]
+    },
+    {
+      "species": "Rhyperior",
+      "ability": "Solid Rock",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "atk": 252, "spd": 4},
+      "nature": "Adamant",
+      "moves": ["Earthquake", "Rock Slide", "Stone Edge", "Megahorn"],
+      "types": ["ground", "rock"]
+    },
+    {
+      "species": "Clefable",
+      "ability": "Magic Guard",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "def": 252, "spa": 4},
+      "nature": "Bold",
+      "moves": ["Moonblast", "Wish", "Protect", "Thunder Wave"],
+      "types": ["fairy"]
+    },
+    {
+      "species": "Dragapult",
+      "ability": "Clear Body",
+      "item": "Choice Specs",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Draco Meteor", "Shadow Ball", "Flamethrower", "U-turn"],
+      "types": ["dragon", "ghost"]
+    },
+    {
+      "species": "Primarina",
+      "ability": "Torrent",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "spa": 252, "def": 4},
+      "nature": "Modest",
+      "moves": ["Moonblast", "Psychic", "Ice Beam", "Protect"],
+      "types": ["water", "fairy"]
+    }
+  ]
+}

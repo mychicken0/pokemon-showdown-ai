@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-23 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed. RL-DATA-3b-small small real local battle audit smoke completed (5 battles, 64 v1.1 rows, 0 hard blocks, 66% live order metadata source). RL-DATA-3b-followup switch/pass action filter completed (Gate 17 unknown count 58 → 27, unknown_rate 34% → 5.4%). RL-DATA-3c consolidated v1.1 dataset build + quality gates + baselines completed (407 battles, 5923 v1.1 rows, READY, 0 hard blocks, 0 warnings, 0% unknown rate, training NOT approved). RL-DATA-3d action distribution + baseline audit completed (metric bug confirmed: real double_attack=50.6%, not 100%; policy biased: 0% setup / 0% weather setter selected; score-based baseline 64.0%). RL-DATA-3e diversity expansion dataset + merged baseline audit completed (400 new exploration battles, 5970 new rows, 11893 merged rows, setup_ratio 0%→11.6%, weather_ratio 0%→8.3%, dataset USABLE_FOR_BC_DRYRUN, training NOT approved). RL-DATA-3f BC dry-run analysis completed (BC model has non-zero setup recall 24-46%, weather_setter recall 7-22%, protect recall 28-33%; model does NOT fully collapse to attack; dataset READY_FOR_BC_DRYRUN_NEXT, training NOT approved). RL-DATA-4 real trajectory exploration completed (600 battles, 7062 v1.1 true-trajectory rows, 1385 live exploration triggers, setup 430 + weather 326 + terrain 253 + protect 376, all invariants pass: 100% submitted==selected, 100% action legal, 100% local_only_provenance, 0% postprocess_only=True; BC dry-run setup recall 64% slot0 / 44% slot1, weather recall 76% slot0 / 70% slot1, **TRUE_TRAJECTORY_DATASET_READY_FOR_PHASE7_PROPOSAL**, training NOT approved). RL-DATA-5 Phase 7 proposal package completed (proposal document at logs/rl_data_5_phase7_proposal.md, readiness summary at logs/rl_data_5_phase7_readiness_summary.json; 2 pre-existing v1.0-vs-v1.1 test failures fixed safely: test_build_basic_row updated to expect v1.1, validate_dataset schema_version gate now accepts both v1.0 and v1.1, 2 new regression tests added; **decision: READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED**, training NOT approved, 11/13 readiness items PASS, 2/13 BLOCKED on user authorization and AGENTS.md sign-off).
+Last updated: 2026-06-23 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed. Phase 6.3.8a narrow flag integrated. Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1..5 completed: v1.1 schema + instrumentation, 3 datasets (5,923 / 11,893 / 7,062 rows), all quality gates pass, live trajectory exploration validated. RL-DATA-5 Phase 7 proposal package completed: READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED (training NOT approved, blocked on user authorization + AGENTS.md sign-off). WT-3..WT-4g Weather/Terrain positive scoring completed as opt-in: WT4G_OPT_IN_READY_DEFAULT_OFF (opt-in implemented, default OFF preserved, 517/517 tests pass, not default-adopted, no 100-pair benchmark required). See `docs/wt_weather_terrain_opt_in.md` for the canonical WT summary.
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -84,16 +84,16 @@ V2j fingerprint remains:
   - 6.4.10d had 2542 ON eligible turns but 0 selected voluntary switches.
   - The scoring rule is empirically a no-op in random doubles.
   - Default stays `enable_voluntary_switch_quality_scoring = False`.
-- Weather/Terrain setter audit is **CLOSED** as of Phase WT-2
-  (commit `010ace4`). Status: `SWITCH_SCORING_GAP_CONFIRMED`.
-  - Setter audit (custom team with Politoed + Rain Dance and Rillaboom
-    + Grassy Terrain) ran 3 battles, 71 turns.
-  - Setter moves were legal 31/71 turns; the bot selected a setter
-    move 0/31.
-  - No Weather/Terrain scoring change was made.
-  - No default flip.
-  - Weather/Terrain scoring calibration remains future work (WT-2,
-    WT-3, WT-4 in the deferred plan).
+- Weather/Terrain is now opt-in implemented (WT-3..WT-4g, see
+  `docs/wt_weather_terrain_opt_in.md`). Status:
+  `WT4G_OPT_IN_READY_DEFAULT_OFF`.
+  - WT-2 setter audit (commit `010ace4`) is the historical root
+    cause reference: `SWITCH_SCORING_GAP_CONFIRMED`.
+  - WT-4f found the real root cause: WT hook was below the
+    status-move early return in `_score_action_impl`. Moved to
+    the beginning of the function.
+  - Opt-in flag `enable_weather_terrain_positive_scoring` defaults
+    to `False`. No default flip.
 
 ### VGC 2026
 
@@ -513,12 +513,25 @@ those are auto-started.
 
 Other future-work candidates, none promoted:
 
-- WT-3: type-boost scoring calibration (Hurricane in rain, Psychic in
-  Psychic Terrain, etc.).
-- WT-4: setter-move scoring calibration.
 - Phase 6.3.8 broader adoption: requires the paired gates to pass
   before any default flip.
 - A new scenario-targeting phase in the SCENARIO-ROADMAP family.
+
+Weather/Terrain positive scoring is **closed as opt-in** (WT-3 → WT-4g).
+Status: `WT4G_OPT_IN_READY_DEFAULT_OFF`.
+- opt-in implemented, default OFF preserved, not default-adopted
+- 517/517 tests PASS
+- no 100-pair benchmark required before moving on
+- permanent doc: `docs/wt_weather_terrain_opt_in.md`
+- real setter selection observed: Jolteon `electricterrain` score 400 in turn 1
+- 0 bad/redundant setters across 11+ smoke battles
+- no Anti-TR change, no species-based ability inference,
+  no Magic Bounce species inference, no official server,
+  no Phase 7, no model training
+
+The old WT-3 / WT-4a / WT-4b / WT-4c / WT-4d / WT-4e
+future-work bullet entries above are now superseded
+by this opt-in implementation.
 
 ## Working Tree
 
@@ -528,8 +541,15 @@ The worktree is expected to be dirty. Recent uncommitted lines include:
 - Narrow ally-heal repair/audit files.
 - Voluntary-switch probe, qualification, and analyzer files.
 - Local server helper script.
-- Documentation edits in `AGENTS.md`, `README.md`, `CURRENT_STATE.md`, and
-  `walkthrough.md`.
+- WT-3..WT-4g Weather/Terrain opt-in implementation:
+  `doubles_engine/wt3_weather_terrain_positive.py`,
+  `doubles_engine/wt4b_rank_attribution.py`,
+  tests, local smoke/eval scripts, custom local teams,
+  phase logs, and the early WT hook integration
+  in `showdown_ai/bot_doubles_damage_aware.py`.
+- Documentation edits in `AGENTS.md`, `README.md`,
+  `CURRENT_STATE.md`, `walkthrough.md`,
+  `docs/ROOT_INDEX.md`, and `docs/wt_weather_terrain_opt_in.md`.
 
 As of Phase 6.4.0 (handoff sync), the most recent pushed commits are:
 

@@ -1,0 +1,58 @@
+{
+  "team": [
+    {
+      "species": "Jolteon",
+      "ability": "Volt Absorb",
+      "item": "Choice Scarf",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Electric Terrain", "Thunderbolt", "Volt Switch", "Protect"],
+      "types": ["electric"]
+    },
+    {
+      "species": "Arcanine",
+      "ability": "Intimidate",
+      "item": "Sitrus Berry",
+      "evs": {"hp": 252, "atk": 252, "spd": 4},
+      "nature": "Adamant",
+      "moves": ["Protect", "Extreme Speed", "Flare Blitz", "Crunch"],
+      "types": ["fire"]
+    },
+    {
+      "species": "Politoed",
+      "ability": "Water Absorb",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "spa": 252, "def": 4},
+      "nature": "Modest",
+      "moves": ["Scald", "Ice Beam", "Toxic", "Protect"],
+      "types": ["water"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Leftovers",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Heat Wave", "Bug Buzz", "Protect", "Quiver Dance"],
+      "types": ["bug", "fire"]
+    },
+    {
+      "species": "Rillaboom",
+      "ability": "Overgrow",
+      "item": "Leftovers",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Grassy Terrain", "Wood Hammer", "U-turn", "Protect"],
+      "types": ["grass"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"],
+      "types": ["dragon", "ground"]
+    }
+  ]
+}

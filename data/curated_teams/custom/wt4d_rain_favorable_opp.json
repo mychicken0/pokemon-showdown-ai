@@ -1,0 +1,58 @@
+{
+  "team": [
+    {
+      "species": "Incineroar",
+      "ability": "Intimidate",
+      "item": "Sitrus Berry",
+      "evs": {"hp": 252, "atk": 252, "def": 4},
+      "nature": "Adamant",
+      "moves": ["Fake Out", "Flare Blitz", "Knock Off", "U-turn"],
+      "types": ["fire", "dark"]
+    },
+    {
+      "species": "Rhyperior",
+      "ability": "Solid Rock",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "atk": 252, "spd": 4},
+      "nature": "Adamant",
+      "moves": ["Earthquake", "Rock Slide", "Stone Edge", "Megahorn"],
+      "types": ["ground", "rock"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Smooth Rock",
+      "evs": {"hp": 252, "atk": 252, "spd": 4},
+      "nature": "Adamant",
+      "moves": ["Crunch", "Stone Edge", "Ice Punch", "Dragon Dance"],
+      "types": ["rock", "dark"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Dragon Claw", "Iron Head", "Scale Shot", "Earthquake"],
+      "types": ["dragon", "ground"]
+    },
+    {
+      "species": "Volcarona",
+      "ability": "Flame Body",
+      "item": "Leftovers",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Heat Wave", "Bug Buzz", "Quiver Dance", "Protect"],
+      "types": ["bug", "fire"]
+    },
+    {
+      "species": "Clefable",
+      "ability": "Magic Guard",
+      "item": "Leftovers",
+      "evs": {"hp": 252, "def": 252, "spa": 4},
+      "nature": "Bold",
+      "moves": ["Moonblast", "Wish", "Protect", "Thunder Wave"],
+      "types": ["fairy"]
+    }
+  ]
+}

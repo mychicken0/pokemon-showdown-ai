@@ -1,0 +1,22 @@
+{
+  "team": [
+    {
+      "species": "Politoed",
+      "ability": "Water Absorb",
+      "item": "Choice Scarf",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Rain Dance", "Hydro Pump", "Ice Beam", "Protect"],
+      "types": ["water"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"],
+      "types": ["dragon", "ground"]
+    }
+  ]
+}

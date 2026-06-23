@@ -1,0 +1,22 @@
+{
+  "team": [
+    {
+      "species": "Jolteon",
+      "ability": "Volt Absorb",
+      "item": "Choice Scarf",
+      "evs": {"spa": 252, "spd": 252, "hp": 4},
+      "nature": "Timid",
+      "moves": ["Electric Terrain", "Thunderbolt", "Volt Switch", "Protect"],
+      "types": ["electric"]
+    },
+    {
+      "species": "Garchomp",
+      "ability": "Rough Skin",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Earthquake", "Rock Slide", "Protect", "Scale Shot"],
+      "types": ["dragon", "ground"]
+    }
+  ]
+}

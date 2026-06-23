@@ -7628,3 +7628,71 @@ No code, no tests, no scoring, no default flips. Recommended next
 phases (none auto-started): V3a.3 rerun (VGC preview), WT-3
 (type-boost scoring calibration), new SCENARIO-ROADMAP successor.
 Phase 7 (VGC RL training) is not approved.
+
+## WT Closure — Weather/Terrain Opt-in (WT-3 → WT-4h)
+
+**Date**: 2026-06-23
+**Status**: `WT4G_OPT_IN_READY_DEFAULT_OFF`
+**Permanent doc**: `docs/wt_weather_terrain_opt_in.md`
+
+The Weather/Terrain positive scoring work is closed
+as an opt-in, default-OFF feature. WT began as a
+`SWITCH_SCORING_GAP` from Phase WT-2 (setters legal
+but never selected) and was investigated across
+seven sub-phases: WT-3 (helper + 36 tests),
+WT-4a (bonus sweep + Misty fix), WT-4b
+(attribution), WT-4c (candidate inclusion helper),
+WT-4d (forced synergy smoke), WT-4e (active-setter
+smoke), WT-4f (deep integration fix — the real
+root cause), and WT-4g (regression guards + small
+paired eval). WT-4h is docs-only closure.
+
+**Root cause** (WT-4f): The WT hook was below the
+status-move early return inside
+`_score_action_impl`. Weather/Terrain setters are
+status moves, so they returned before the hook
+fired. WT-4f moved the hook to the very beginning
+of the function; the bonus is stored in
+`_wt3_pending_bonus` and applied to the final
+return.
+
+**Fix summary**:
+- early WT hook at the start of
+  `_score_action_impl` (line 6241)
+- pending bonus applied at the final return
+  (line 6717)
+- 19 new regression tests prove no bonus leakage,
+  flag OFF unchanged, non-WT status moves
+  unaffected
+- flag OFF remains `False` — preserved
+- no Anti-TR change
+- no species-based ability inference
+- no Magic Bounce species inference
+- no official server, no Phase 7, no model training
+
+**Validation** (WT-4g):
+- 517/517 tests PASS (498 + 19 new WT-4g tests)
+- activation guard: 6 battles, 44 setter
+  decisions, 5 positive bonuses, 4 setters
+  selected, 0 bad/redundant setters
+- small paired eval (5 OFF vs 5 ON, terrain):
+  OFF 0 positive bonus, ON 25 positive bonus
+- first real setter selection: Jolteon
+  `electricterrain` score 400.0 in turn 1
+
+**Decision**: `WT4G_OPT_IN_READY_DEFAULT_OFF`. WT
+is complete as opt-in. No 100-pair benchmark is
+required before moving on. The default must not
+be flipped without a future qualification phase.
+
+**Recommended next phase after WT closure**:
+- `WT-COMMIT-CHECKPOINT` — commit the WT work
+  to a checkpoint branch.
+- OR `SUPPORT-SAFETY-ADOPT-1` — continue with
+  Phase 6.3.8 support-move target safety adoption
+  (the next priority in AGENTS.md).
+
+See `docs/wt_weather_terrain_opt_in.md` for the
+canonical summary, `logs/wt_4g_small_paired_eval.md`
+for the WT-4g report, and `logs/wt_4f_deep_integration_fix.md`
+for the root-cause analysis.

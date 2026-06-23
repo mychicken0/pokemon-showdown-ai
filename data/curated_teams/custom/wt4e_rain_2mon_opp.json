@@ -1,0 +1,22 @@
+{
+  "team": [
+    {
+      "species": "Blaziken",
+      "ability": "Speed Boost",
+      "item": "Choice Scarf",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Flare Blitz", "Close Combat", "Stone Edge", "Protect"],
+      "types": ["fire", "fighting"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Leftovers",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Rock Slide", "Crunch", "Stone Edge", "Protect"],
+      "types": ["rock", "dark"]
+    }
+  ]
+}

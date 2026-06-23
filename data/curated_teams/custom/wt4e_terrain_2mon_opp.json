@@ -1,0 +1,22 @@
+{
+  "team": [
+    {
+      "species": "Gyarados",
+      "ability": "Intimidate",
+      "item": "Leftovers",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Waterfall", "Ice Fang", "Dragon Dance", "Protect"],
+      "types": ["water", "flying"]
+    },
+    {
+      "species": "Tyranitar",
+      "ability": "Sand Stream",
+      "item": "Leftovers",
+      "evs": {"atk": 252, "spd": 252, "hp": 4},
+      "nature": "Jolly",
+      "moves": ["Rock Slide", "Crunch", "Stone Edge", "Protect"],
+      "types": ["rock", "dark"]
+    }
+  ]
+}

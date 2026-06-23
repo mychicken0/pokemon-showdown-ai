@@ -349,5 +349,11 @@ pytest config entry point.
   (RL-DATA-5). Status: `READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED`.
   Training NOT approved. Requires explicit user authorization
   and AGENTS.md sign-off.
+- `docs/wt_weather_terrain_opt_in.md` — Weather/Terrain
+  positive scoring opt-in implementation (WT-3 through
+  WT-4g, closed). Status:
+  `WT4G_OPT_IN_READY_DEFAULT_OFF`. Opt-in implemented,
+  default OFF, not default-adopted, no 100-pair benchmark
+  required before moving on.
 - `data/vgc2026_teams_detailed.json` — VGC 2026 team detail dataset
   (moved from root in Phase ORG-MOVE-2).

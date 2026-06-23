@@ -710,6 +710,45 @@ class DoublesDamageAwareConfig:
     voluntary_switch_risk_reduction_multiplier: float = 0.5
     voluntary_switch_stay_penalty: float = 100.0
 
+    # Phase WT-3: opt-in conservative positive scoring
+    # for Weather / Terrain setter moves in doubles.
+    # The bot currently has a SWITCH_SCORING_GAP:
+    # setters are legal in many turns but selected 0%
+    # of the time. WT-3 adds a positive bonus when
+    # there is clear, observable, conservative
+    # synergy. Default OFF (opt-in only). Bonus
+    # magnitudes (500 weather, 400 terrain after
+    # WT-4a tuning) are smaller than the existing
+    # anti_trick_room_response_bonus=500 and
+    # setup_intent_speed_setup_bonus=450 to keep
+    # the change conservative.
+    #
+    # WT-4a tuning note: the original WT-3 values
+    # (150 weather, 120 terrain) were too small to
+    # activate setters in the bot's score scale
+    # (median damage score ~830). The tuned values
+    # (500 weather, 400 terrain) are closer to the
+    # activation threshold. The sweep showed these
+    # values produce 0 redundant setters and 0 bad
+    # setters in 3-battle runs. WT-4b paired
+    # evaluation is needed to determine if these
+    # values produce good game-play outcomes.
+    #
+    # No species-based ability inference. No Magic
+    # Bounce species inference. Revealed-only.
+    # Redundant setter prevention: no bonus if the
+    # target weather/terrain is already active.
+    # Opponent-benefit penalty: net_score =
+    # own_synergy - opponent_synergy; no bonus if
+    # net_score <= 0.
+    enable_weather_terrain_positive_scoring: bool = False
+    weather_terrain_positive_weather_bonus: float = 500.0
+    weather_terrain_positive_terrain_bonus: float = 400.0
+    weather_terrain_positive_max_picks_per_game: int = 3
+    weather_terrain_positive_min_turn_between_picks: int = 2
+    weather_terrain_positive_require_survival: bool = True
+
+
 
 
 
@@ -1971,6 +2010,17 @@ from doubles_engine.revealed_switch import (
     estimate_revealed_move_target_likelihood,
     summarize_revealed_move_threats,
     evaluate_revealed_move_switch_interception,
+)
+
+# Phase WT-3: Weather/Terrain positive scoring helper.
+# Imported at module load time so the bot can call
+# the pure helper from inside ``_score_action_impl``.
+# Default behavior is unchanged because the master
+# flag ``enable_weather_terrain_positive_scoring``
+# defaults to False.
+from doubles_engine.wt3_weather_terrain_positive import (
+    get_weather_terrain_positive_bonus,
+    is_wt3_setter_move,
 )
 
 def select_best_joint_from_score_maps(
@@ -6188,6 +6238,45 @@ class DoublesDamageAwarePlayer(Player):
         battle_tag = battle.battle_tag
         current_turn = battle.turn
 
+        # Phase WT-4f: Record WT-3 hook decision EARLY so
+        # it is captured for ALL orders including status
+        # moves that return early in the status-move block.
+        # The bonus is deferred to the final return via
+        # _wt3_pending_bonus. This ensures the hook fires
+        # for setters like electricterrain that would
+        # otherwise be filtered out by early returns.
+        _wt3_pending_bonus = 0.0
+        score = 0.0
+        try:
+            from doubles_engine.wt3_weather_terrain_positive import (
+                get_weather_terrain_positive_bonus as _wt3_get_bonus,
+            )
+            _wt3_pending_bonus, _wt3_pending_reason = _wt3_get_bonus(
+                order, active_idx, battle, config=self.config
+            )
+            battle_tag = getattr(battle, "battle_tag", "")
+            if not hasattr(self, "_wt3_decisions"):
+                self._wt3_decisions = {}
+            _inner_move = getattr(order, "order", None)
+            _move_id = (
+                getattr(_inner_move, "id", "")
+                if _inner_move is not None
+                else ""
+            )
+            self._wt3_decisions.setdefault(
+                battle_tag, []
+            ).append(
+                {
+                    "turn": getattr(battle, "turn", 0),
+                    "active_idx": active_idx,
+                    "move_id": str(_move_id),
+                    "bonus": float(_wt3_pending_bonus),
+                    "reason": str(_wt3_pending_reason),
+                }
+            )
+        except Exception:
+            _wt3_pending_bonus = 0.0
+
         # Defensive mock safety initialization
         for attr in (
             "_ability_hard_block_avoided",
@@ -6626,7 +6715,7 @@ class DoublesDamageAwarePlayer(Player):
                         if target_mon == dangerous_opp:
                             score += 50.0
 
-                return max(score, 0.0)
+            return max(score, 0.0) + _wt3_pending_bonus
 
             # 3. Generic Status Moves
             if category_name == "STATUS" or base_power == 0:
@@ -6798,7 +6887,45 @@ class DoublesDamageAwarePlayer(Player):
                     for m in battle.available_moves[active_idx]
                 )
                 if has_damaging_move:
-                    return 0.0
+                    # Phase WT-4d: narrow exception for
+                    # WT-3 setters. If the move is a known
+                    # WT-3 setter and the inclusion helper
+                    # returns a positive bonus, skip the
+                    # status move penalty. This allows
+                    # setters to be scored and potentially
+                    # selected when they have clear
+                    # positive synergy. The bonus is added
+                    # at the hook (line ~8361), so we just
+                    # need to NOT return 0 here.
+                    from doubles_engine.wt3_weather_terrain_positive import (
+                        should_include_weather_terrain_setter_candidate as _wt3_should_include,
+                    )
+                    _setter_inner = getattr(order, "order", None)
+                    _setter_id = (
+                        getattr(_setter_inner, "id", "")
+                        if _setter_inner is not None
+                        else ""
+                    )
+                    if _setter_id:
+                        _wt3_inc = (
+                            _wt3_should_include(
+                                _setter_id,
+                                active_idx,
+                                battle,
+                                self.config,
+                            )
+                        )
+                        if _wt3_inc["include"]:
+                            # Skip the penalty. Fall
+                            # through to the rest of the
+                            # scoring path. The WT-3
+                            # bonus will be added at the
+                            # hook (line ~8361).
+                            pass
+                        else:
+                            return 0.0
+                    else:
+                        return 0.0
                 return 10.0
 
             # 4. Damaging Moves
@@ -8295,6 +8422,17 @@ class DoublesDamageAwarePlayer(Player):
                         )
                     )
 
+            # Phase WT-4f: WT-3 hook is now called EARLY
+            # at the start of _score_action_impl (see
+            # line ~6241). The decision is recorded in
+            # _wt3_decisions and the bonus is stored in
+            # _wt3_pending_bonus. The bonus is applied to
+            # the final return value below. This ensures
+            # the hook fires for ALL orders including
+            # status moves that return early in the
+            # status-move block.
+            pass
+
             return max(score, 0.0)
 
         return 0.0
@@ -8824,6 +8962,102 @@ class DoublesDamageAwarePlayer(Player):
         self._current_valid_orders = _augment_valid_orders_with_mega(
             battle, battle.valid_orders, self.config
         )
+        # Phase WT-4c: narrow opt-in inclusion of
+        # Weather/Terrain setter candidates. When the
+        # master flag is ON and the inclusion helper
+        # finds positive synergy, add the setter move
+        # to the scored candidate set. This is a
+        # narrow opt-in path: setters are only added
+        # if the helper passes ALL inclusion checks
+        # (flag ON, positive own synergy, opp does
+        # not benefit more, not redundant, bonus > 0).
+        # When the flag is OFF, this is a no-op and
+        # valid_orders is unchanged.
+        try:
+            from doubles_engine.wt3_weather_terrain_positive import (
+                should_include_weather_terrain_setter_candidate,
+                is_wt3_setter_move as _is_wt3_setter,
+            )
+            for _slot_idx in (0, 1):
+                _slot_orders = (
+                    self._current_valid_orders[_slot_idx]
+                    if _slot_idx < len(self._current_valid_orders)
+                    else None
+                )
+                if not _slot_orders:
+                    continue
+                _active_mon = (
+                    battle.active_pokemon[_slot_idx]
+                    if _slot_idx < len(battle.active_pokemon)
+                    else None
+                )
+                if not _active_mon:
+                    continue
+                _setter_moves = [
+                    m for m in _active_mon.moves
+                    if _is_wt3_setter(
+                        getattr(m, "id", "")
+                    )
+                ]
+                for _setter_move in _setter_moves:
+                    _setter_id = getattr(
+                        _setter_move, "id", ""
+                    )
+                    # Check if already in valid_orders
+                    _already_in = False
+                    for _existing_order in _slot_orders:
+                        _existing_inner = getattr(
+                            _existing_order, "order", None
+                        )
+                        if (
+                            _existing_inner is not None
+                            and getattr(
+                                _existing_inner, "id", ""
+                            ) == _setter_id
+                        ):
+                            _already_in = True
+                            break
+                    if _already_in:
+                        continue
+                    # Check inclusion
+                    _inc = should_include_weather_terrain_setter_candidate(
+                        _setter_id, _slot_idx, battle, self.config
+                    )
+                    if _inc["include"]:
+                        # Build a SingleBattleOrder
+                        # and add to valid_orders
+                        from poke_env.player.battle_order import (
+                            SingleBattleOrder,
+                        )
+                        _new_order = SingleBattleOrder(
+                            _setter_move
+                        )
+                        _slot_orders.append(_new_order)
+                        # Observational: record inclusion
+                        if not hasattr(
+                            self, "_wt4c_inclusions"
+                        ):
+                            self._wt4c_inclusions = []
+                        self._wt4c_inclusions.append(
+                            {
+                                "battle_tag": getattr(
+                                    battle,
+                                    "battle_tag",
+                                    "",
+                                ),
+                                "turn": getattr(
+                                    battle, "turn", 0
+                                ),
+                                "slot": _slot_idx,
+                                "setter": _setter_id,
+                                "reason": _inc["reason"],
+                                "bonus": _inc["bonus"],
+                            }
+                        )
+        except Exception:
+            # Never let WT-4c inclusion error break
+            # the scoring path.
+            pass
         valid_orders = self._current_valid_orders
         # V2l.1 — capture per-slot legal action keys.
         # The canonical engine uses ``_order_action_key``
