@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-22 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed. RL-DATA-3b-small small real local battle audit smoke completed (5 battles, 64 v1.1 rows, 0 hard blocks, 66% live order metadata source). RL-DATA-3b-followup switch/pass action filter completed (Gate 17 unknown count 58 → 27, unknown_rate 34% → 5.4%). RL-DATA-3c consolidated v1.1 dataset build + quality gates + baselines completed (407 battles, 5923 v1.1 rows, READY, 0 hard blocks, 0 warnings, 0% unknown rate, training NOT approved). RL-DATA-3d action distribution + baseline audit completed (metric bug confirmed: real double_attack=50.6%, not 100%; policy biased: 0% setup / 0% weather setter selected; score-based baseline 64.0%).
+Last updated: 2026-06-23 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed, Phase 6.3.8a narrow flag integrated, Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1 turn-level dataset schema planned. RL-DATA-2 turn_rl_v1.1 instrumentation implemented. RL-DATA-2b v1.1 smoke + quality gates asserted. RL-DATA-3a v1.1 audit logger emission + tiny local audit smoke completed. RL-DATA-3a.1 audit move metadata enrichment completed (clean smoke is READY). RL-DATA-3a.2 live move-object metadata override wiring completed. RL-DATA-3b-small small real local battle audit smoke completed (5 battles, 64 v1.1 rows, 0 hard blocks, 66% live order metadata source). RL-DATA-3b-followup switch/pass action filter completed (Gate 17 unknown count 58 → 27, unknown_rate 34% → 5.4%). RL-DATA-3c consolidated v1.1 dataset build + quality gates + baselines completed (407 battles, 5923 v1.1 rows, READY, 0 hard blocks, 0 warnings, 0% unknown rate, training NOT approved). RL-DATA-3d action distribution + baseline audit completed (metric bug confirmed: real double_attack=50.6%, not 100%; policy biased: 0% setup / 0% weather setter selected; score-based baseline 64.0%). RL-DATA-3e diversity expansion dataset + merged baseline audit completed (400 new exploration battles, 5970 new rows, 11893 merged rows, setup_ratio 0%→11.6%, weather_ratio 0%→8.3%, dataset USABLE_FOR_BC_DRYRUN, training NOT approved). RL-DATA-3f BC dry-run analysis completed (BC model has non-zero setup recall 24-46%, weather_setter recall 7-22%, protect recall 28-33%; model does NOT fully collapse to attack; dataset READY_FOR_BC_DRYRUN_NEXT, training NOT approved). RL-DATA-4 real trajectory exploration completed (600 battles, 7062 v1.1 true-trajectory rows, 1385 live exploration triggers, setup 430 + weather 326 + terrain 253 + protect 376, all invariants pass: 100% submitted==selected, 100% action legal, 100% local_only_provenance, 0% postprocess_only=True; BC dry-run setup recall 64% slot0 / 44% slot1, weather recall 76% slot0 / 70% slot1, **TRUE_TRAJECTORY_DATASET_READY_FOR_PHASE7_PROPOSAL**, training NOT approved). RL-DATA-5 Phase 7 proposal package completed (proposal document at logs/rl_data_5_phase7_proposal.md, readiness summary at logs/rl_data_5_phase7_readiness_summary.json; 2 pre-existing v1.0-vs-v1.1 test failures fixed safely: test_build_basic_row updated to expect v1.1, validate_dataset schema_version gate now accepts both v1.0 and v1.1, 2 new regression tests added; **decision: READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED**, training NOT approved, 11/13 readiness items PASS, 2/13 BLOCKED on user authorization and AGENTS.md sign-off).
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
@@ -320,6 +320,190 @@ primary actions. 35 new analysis tests pass. 297
 total RL tests pass. **RL training remains NOT
 approved** — the policy bias is a known limitation.
 No training. No commit. No push.
+
+The diversity expansion dataset has been built via
+**RL-DATA-3e** (see
+`logs/rl_data_3e_diversity_expansion_dataset.md`). A
+new script
+`showdown_ai/rl_data_3e_diversity_local_audit.py`
+runs 400 local battles with an analysis-only
+exploration mode that post-processes the audit JSONL
+to occasionally replace the bot's selected action
+with a setup / weather / terrain / protect action
+when legal. The exploration triggered 906 times
+(15.2% trigger rate): 312 setup, 241 weather, 145
+terrain, 208 protect. The exploration dataset (5970
+rows) is READY with 0 hard blocks, 0 warnings. The
+merged dataset (11893 rows = 5923 old + 5970 new) is
+READY with 0 hard blocks, 0 warnings. Setup selection
+rate went from 0% (3c) to 11.6% (merged); weather
+setter from 0% to 8.3%. The score-based baseline
+dropped from 64.0% to 61.3% (expected: the exploration
+introduced non-max-score actions, so the max-score
+baseline is less accurate). **Final decision:
+`DATASET_USABLE_FOR_BC_DRYRUN`**. Dry-run loads the
+merged dataset (`DRYRUN_PIPELINE_WORKS`). 30 new
+exploration tests pass. 327 total RL tests pass.
+**RL training remains NOT approved** — the user must
+explicitly authorize Phase 7 after reviewing this BC
+dry-run analysis. No training. No commit. No push.
+
+A BC dry-run analysis has been completed via
+**RL-DATA-3f** (see
+`logs/rl_data_3f_bc_dryrun_analysis.md`). A new script
+`scripts/analyze/analyze_rl_data_3f_bc_dryrun.py`
+runs a no-dependency multinomial Naive Bayes
+classifier (scikit-learn is not available in this
+environment) on the 3c and 3e_merged datasets. The
+BC model has **non-zero recall** on setup
+(24-46%), weather_setter (7-22%), and protect
+(28-33%) actions without using exploration features
+as inputs. The model does **not** fully collapse to
+attack predictions on the 3e_merged dataset. On the
+3c dataset, setup and weather_setter have zero support
+(never selected), so the BC model cannot learn them.
+The 3e_merged dataset has a **lower** BC primary
+accuracy (75.8% vs 83.1%) but **better** minority-class
+recall, which is the expected and correct signal that
+the diversity expansion worked. 37 new BC tests pass.
+364 total RL tests pass. **Final decision:
+`DATASET_READY_FOR_BC_DRYRUN_NEXT`**. **RL training
+remains NOT approved** — the user must explicitly
+authorize Phase 7 after reviewing this decision
+summary. No training. No model artifact. No commit. No
+push.
+
+A real trajectory exploration has been completed via
+**RL-DATA-4** (see
+`logs/rl_data_4_real_trajectory_exploration.md`).
+This is the **true trajectory** version of the
+diversity expansion: the explored action is actually
+submitted to the local server, not post-processed.
+A new script
+`showdown_ai/rl_data_4_live_exploration_local_audit.py`
+runs a custom
+`LiveExplorationDoublesDamageAwarePlayer` that
+overrides `choose_move`. When exploration triggers,
+the bot finds a non-attack legal action in
+`battle.valid_orders[slot_idx]`, builds a new joint
+order, and returns it. The poke-env client sends that
+exact order to the server. The next battle state
+reflects the explored action. The audit logger's new
+`update_pending_turn_with_live_exploration` method
+updates the pending turn's `selected_joint_order`
+and `v4a_selected_joint_key` to the explored order
+at log time (not as post-processing).
+
+**Key invariant**: when `live_exploration_triggered=True`,
+the selected action equals the submitted action, and
+`live_exploration_postprocess_only=False`. This is a
+**true trajectory** dataset, unlike RL-DATA-3e which
+post-processed labels.
+
+The audit fields emitted at log time are:
+`live_exploration_enabled`,
+`live_exploration_triggered`,
+`live_exploration_rate`,
+`live_exploration_seed`,
+`live_exploration_candidate_group`,
+`live_exploration_original_action`,
+`live_exploration_selected_action`,
+`live_exploration_submitted_action`,
+`live_exploration_reason`,
+`live_exploration_no_candidate_reason`,
+`live_exploration_action_was_legal`,
+`live_exploration_postprocess_only`. The dataset
+builder's new `_extract_v1_1_live_exploration`
+helper passes these through into v1.1 dataset rows.
+
+**Long run result**: 600 battles finished, 0 failed,
+1385 live exploration triggers (setup 430, weather
+326, terrain 253, protect 376). The dataset has 7062
+v1.1 rows (100% v1.1 schema), 0 hard blocks, 0
+warnings, 0 unknown support moves, readiness_impact
+READY. **All invariants pass at 100%**:
+submitted==selected (7062/7062), action was legal
+(7062/7062), local_only_provenance=True (7062/7062),
+used_species_ability_inference=False (7062/7062),
+live_exploration_postprocess_only=True (0/7062).
+
+**Distribution comparison**:
+- 3c default: setup_ratio=0%, weather_ratio=0%
+- 3e postprocessed: setup_ratio=11.6%, weather_ratio=8.3%
+- 4 live trajectory: setup_ratio=19.3%, weather_ratio=16.6%
+
+**BC dry-run comparison** (slot0 BC no exploration):
+- 3c: setup=0% (0 support), weather=0% (0 support)
+- 3e: setup=46.2%, weather=21.9%
+- 4: setup=**64.4%**, weather=**75.5%**
+
+The 4 (live trajectory) dataset has the **highest**
+minority-class recall because the (state, action)
+pairs are causally consistent (true trajectories).
+
+**Final decision**:
+`TRUE_TRAJECTORY_DATASET_READY_FOR_PHASE7_PROPOSAL`.
+41 new tests pass. 405 total RL tests pass
+(excluding 2 pre-existing v1.0-vs-v1.1 failures
+in `test_build_turn_level_offline_dataset` from
+RL-DATA-2, not caused by this phase). **RL training
+ remains NOT approved** — the user must explicitly
+authorize Phase 7 after reviewing this decision
+summary. No training. No model artifact. No commit.
+No push. **Recommended next single phase**:
+`RL-DATA-5 — Phase 7 proposal document` (decision
+summary, not training).
+
+A Phase 7 proposal package has been completed via
+**RL-DATA-5** (see
+`logs/rl_data_5_phase7_proposal.md` and the
+machine-readable
+`logs/rl_data_5_phase7_readiness_summary.json`).
+This is a **decision-summary** phase, not a
+training phase. It does not train any model and
+does not save any model artifact.
+
+**Test hygiene resolution**: 2 pre-existing test
+failures in `test_build_turn_level_offline_dataset`
+(from RL-DATA-2) were fixed safely:
+* `test_build_basic_row` expected `turn_rl_v1.0` but
+  the builder produces `turn_rl_v1.1` (since
+  RL-DATA-2). Updated to expect v1.1.
+* `validate_dataset` schema_version gate used
+  `SCHEMA_VERSION = "turn_rl_v1.0"` and rejected
+  v1.1 rows. Updated to accept both v1.0 and
+  v1.1.
+* 2 new regression tests added:
+  * `test_schema_version_gate_accepts_v10_and_v11`
+  * `test_schema_version_gate_rejects_unknown`
+
+**Result**: 407/407 RL-DATA tests pass (44/44 in
+`test_build_turn_level_offline_dataset` after fix).
+
+**13-item RL readiness checklist** (11 PASS, 2
+BLOCKED):
+1. local-only provenance: PASS
+2. v1.1 schema coverage: PASS
+3. analyzer gates pass: PASS
+4. safety mechanics fields clean: PASS
+5. no species-based ability inference: PASS
+6. no official server: PASS
+7. support/setup/weather represented: PASS
+8. true trajectory dataset exists: PASS
+9. BC dry-run non-collapse: PASS
+10. dry-run loader works: PASS
+11. tests pass or known issues documented: PASS
+12. **user explicitly authorized Phase 7: BLOCKED**
+13. **AGENTS.md sign-off for Phase 7: BLOCKED**
+
+**Final decision**:
+`READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED`. The
+RL-DATA pipeline is technically ready for a Phase 7
+proposal, but the 2 governance items (user
+authorization, AGENTS.md sign-off) are BLOCKED.
+The user must explicitly authorize Phase 7 before
+any Phase 7 work begins. AGENTS.md must be updated
+with a Phase 7 sign-off section.
 
 The audit recommends four follow-on phases
 (`SUPPORT-3` follow-me / rage-powder, `SUPPORT-4` anti-stat-setup,

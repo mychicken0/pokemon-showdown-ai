@@ -141,7 +141,10 @@ class TestBuildRow(unittest.TestCase):
             policy_name_fallback="treatment",
         )
         self.assertIsNotNone(row)
-        self.assertEqual(row["schema_version"], "turn_rl_v1.0")
+        # Phase RL-DATA-2: builder produces turn_rl_v1.1
+        # rows. v1.0 is still accepted as a legacy schema
+        # but the current build_row default is v1.1.
+        self.assertEqual(row["schema_version"], "turn_rl_v1.1")
         self.assertEqual(row["battle_tag"], "test_battle")
         self.assertEqual(row["turn_index"], 1)
         self.assertEqual(row["won"], True)
@@ -327,6 +330,67 @@ class TestValidateDataset(unittest.TestCase):
                     gate["pass"],
                     f"gate {gate_name} failed: {gate}",
                 )
+        finally:
+            os.unlink(tmppath)
+
+    def test_schema_version_gate_accepts_v10_and_v11(self):
+        """Phase RL-DATA-5: regression test for the
+        schema_version gate. The gate must accept both
+        turn_rl_v1.0 and turn_rl_v1.1 (the current
+        default produced by build_row).
+        """
+        from build_turn_level_offline_dataset import (
+            SCHEMA_VERSION,
+            SCHEMA_VERSION_V1_1,
+        )
+        # Build 3 rows: v1.0, v1.1, v1.1
+        with tempfile.NamedTemporaryFile(
+            suffix=".jsonl", delete=False
+        ) as f:
+            tmppath = f.name
+        try:
+            rows = self._build_n_rows(3)
+            rows[0]["schema_version"] = SCHEMA_VERSION  # v1.0
+            rows[1]["schema_version"] = SCHEMA_VERSION_V1_1  # v1.1
+            rows[2]["schema_version"] = SCHEMA_VERSION_V1_1  # v1.1
+            write_dataset(rows, tmppath)
+            report = validate_dataset(
+                rows, tmppath, source_artifacts=[tmppath]
+            )
+            # The schema_version gate must pass
+            self.assertTrue(
+                report["gates"]["schema_version"]["pass"],
+                (
+                    f"schema_version gate failed: "
+                    f"{report['gates']['schema_version']}"
+                ),
+            )
+            self.assertEqual(
+                report["gates"]["schema_version"]["n_violations"],
+                0,
+            )
+        finally:
+            os.unlink(tmppath)
+
+    def test_schema_version_gate_rejects_unknown(self):
+        """The schema_version gate must reject unknown
+        schema versions.
+        """
+        with tempfile.NamedTemporaryFile(
+            suffix=".jsonl", delete=False
+        ) as f:
+            tmppath = f.name
+        try:
+            rows = self._build_n_rows(3)
+            rows[0]["schema_version"] = "turn_rl_v9.9"
+            write_dataset(rows, tmppath)
+            report = validate_dataset(
+                rows, tmppath, source_artifacts=[tmppath]
+            )
+            # The schema_version gate must fail
+            self.assertFalse(
+                report["gates"]["schema_version"]["pass"]
+            )
         finally:
             os.unlink(tmppath)
 

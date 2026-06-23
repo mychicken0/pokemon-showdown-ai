@@ -2812,6 +2812,52 @@ class DoublesDecisionAuditLogger:
         self.pending_turns[battle_tag] = turn_data
         self._append_live_event(self._build_live_decision_event(battle_tag, turn_data))
 
+    def update_pending_turn_with_live_exploration(
+        self,
+        battle_tag,
+        turn,
+        explored_selected_joint_order,
+        explored_v4a_selected_joint_key,
+        live_exploration_state,
+    ):
+        """
+        Update the pending turn for ``battle_tag`` with
+        live exploration metadata and the explored
+        order. This is called by
+        ``LiveExplorationDoublesDamageAwarePlayer``
+        after the parent's ``choose_move`` returns the
+        original (non-explored) order. The explored
+        order is what will actually be submitted to the
+        server (true trajectory). The audit record's
+        ``selected_joint_order`` and
+        ``v4a_selected_joint_key`` are updated to the
+        explored order so the audit correctly reflects
+        the action that was sent.
+
+        If no pending turn exists (e.g. the parent's
+        ``choose_move`` was not yet called), this is a
+        no-op. If the pending turn is for a different
+        turn number, it is also a no-op.
+        """
+        pending = self.pending_turns.get(battle_tag)
+        if not pending:
+            return
+        if pending.get("turn") != turn:
+            return
+        # Update the selected order to the explored order
+        pending["selected_joint_order"] = str(
+            explored_selected_joint_order
+        )
+        pending["v4a_selected_joint_key"] = (
+            explored_v4a_selected_joint_key
+        )
+        # Emit the live_exploration fields
+        for key, value in live_exploration_state.items():
+            pending[key] = value
+        # Update the v1.1 emission so the dataset
+        # builder sees the explored action
+        # (v4a_selected_joint_key is already updated).
+
     def update_previous_turn(self, battle_tag, battle):
         """
         Scan battle._replay_data and resolve the outcome of the previous turn.

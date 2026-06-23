@@ -839,6 +839,57 @@ def _extract_v1_1_support_classification(
     }
 
 
+# Phase RL-DATA-4: live exploration fields emitted by
+# the audit logger at log time. These are true
+# trajectory metadata (not post-processing). The audit
+# logger's ``update_pending_turn_with_live_exploration``
+# sets these on the pending turn dict; the builder
+# passes them through into the v1.1 dataset row.
+LIVE_EXPLORATION_FIELDS = (
+    "live_exploration_enabled",
+    "live_exploration_triggered",
+    "live_exploration_rate",
+    "live_exploration_seed",
+    "live_exploration_candidate_group",
+    "live_exploration_original_action",
+    "live_exploration_selected_action",
+    "live_exploration_submitted_action",
+    "live_exploration_reason",
+    "live_exploration_no_candidate_reason",
+    "live_exploration_action_was_legal",
+    "live_exploration_postprocess_only",
+)
+
+
+def _extract_v1_1_live_exploration(turn: Dict[str, Any]) -> Dict[str, Any]:
+    """Pass through live exploration fields from the
+    audit JSONL into the v1.1 dataset row. Defaults to
+    safe values when the audit JSONL does not have the
+    fields (i.e., the audit was produced without
+    live exploration enabled).
+    """
+    out: Dict[str, Any] = {}
+    for field in LIVE_EXPLORATION_FIELDS:
+        out[field] = turn.get(field, None)
+    # Backward-compat defaults: if the audit JSONL has
+    # no live_exploration fields at all (older
+    # artifacts), set the safe defaults.
+    if "live_exploration_enabled" not in turn:
+        out["live_exploration_enabled"] = False
+        out["live_exploration_triggered"] = False
+        out["live_exploration_rate"] = 0.0
+        out["live_exploration_seed"] = 0
+        out["live_exploration_candidate_group"] = "none"
+        out["live_exploration_original_action"] = ""
+        out["live_exploration_selected_action"] = ""
+        out["live_exploration_submitted_action"] = ""
+        out["live_exploration_reason"] = ""
+        out["live_exploration_no_candidate_reason"] = ""
+        out["live_exploration_action_was_legal"] = True
+        out["live_exploration_postprocess_only"] = False
+    return out
+
+
 def _build_v1_1_fields(
     turn: Dict[str, Any],
     row_battle: Dict[str, Any],
@@ -868,6 +919,15 @@ def _build_v1_1_fields(
     # Support classification
     support = _extract_v1_1_support_classification(turn)
     out.update(support)
+
+    # Phase RL-DATA-4: pass through live_exploration
+    # fields from the audit JSONL into the v1.1 dataset
+    # row. These fields are emitted by the audit logger
+    # at log time (true trajectory exploration, not
+    # post-processing). They are additive and do not
+    # change scoring or behavior.
+    live_explore_fields = _extract_v1_1_live_exploration(turn)
+    out.update(live_explore_fields)
 
     return out
 
@@ -1163,8 +1223,14 @@ def validate_dataset(
         "pass": True,
     }
     # Gate 9: schema version present.
+    # Phase RL-DATA-2: the builder produces
+    # turn_rl_v1.1 rows by default. v1.0 is still
+    # accepted as a legacy schema. The gate accepts
+    # both.
     n_wrong_schema = sum(
-        1 for r in rows if r.get("schema_version") != SCHEMA_VERSION
+        1 for r in rows
+        if r.get("schema_version")
+        not in (SCHEMA_VERSION, SCHEMA_VERSION_V1_1)
     )
     report["gates"]["schema_version"] = {
         "n_violations": n_wrong_schema,
