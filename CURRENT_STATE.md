@@ -120,6 +120,31 @@ V2j fingerprint remains:
     target safety adoption. No Anti-TR change. No
     species-based ability inference. No Magic Bounce
     species inference. Phase 7 still not approved.
+- SUPPORT-SCORING-1B (in progress / completed).
+  - Conservative target semantics + default-OFF
+    positive scoring for two support moves:
+    `helpinghand` and `tailwind`. All other support
+    moves (wideguard, followme, ragepowder, coaching,
+    lifedew, pollenpuff, haze, clearsmog, screens,
+    hazards, Icy Wind, Electroweb, Snarl, Taunt,
+    Encore, spore, willowisp, thunderwave, fakeout,
+    protect, detect, healpulse, floralhealing,
+    decorate) return no bonus from this helper.
+  - New flags (all default OFF):
+    `enable_support_positive_scoring`,
+    `helping_hand_bonus=120.0`,
+    `tailwind_bonus=180.0`.
+  - Final decision:
+    `SUPPORT_SCORING_1B_HELPINGHAND_TAILWIND_OPT_IN_READY`.
+  - No default flips. No WT change. No broad support
+    target safety adoption. No Anti-TR change. No
+    species-based ability inference. No Magic Bounce
+    species inference. Phase 7 still not approved.
+  - Narrow ally heal hard safety remains default ON.
+  - All 53 new tests pass. All 726 total tests pass
+    (2 pre-existing failures in
+    `test_doubles_support_move_target_safety` are
+    unrelated to this phase).
 
 ### VGC 2026
 

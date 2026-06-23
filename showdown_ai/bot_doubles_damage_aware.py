@@ -756,6 +756,24 @@ class DoublesDamageAwareConfig:
     weather_terrain_positive_min_turn_between_picks: int = 2
     weather_terrain_positive_require_survival: bool = True
 
+    # Phase SUPPORT-SCORING-1B (2026-06-23):
+    # Opt-in positive scoring for two support moves:
+    # Helping Hand and Tailwind. All flags default OFF.
+    # Master ``enable_support_positive_scoring`` must
+    # be True for any positive scoring to fire.
+    # Wide Guard, Follow Me, Rage Powder, Coaching,
+    # Life Dew, Pollen Puff, Haze, Clear Smog, screens,
+    # hazards, Icy Wind, Electroweb, Snarl, Taunt,
+    # Encore, spore, willowisp, thunderwave, fakeout,
+    # protect, detect, healpulse, floralhealing, and
+    # decorate are NOT scored in this phase. They
+    # remain classified by
+    # ``doubles_engine.support_scoring_audit`` for
+    # future phases.
+    enable_support_positive_scoring: bool = False
+    helping_hand_bonus: float = 120.0
+    tailwind_bonus: float = 180.0
+
 
 
 
@@ -6285,6 +6303,48 @@ class DoublesDamageAwarePlayer(Player):
         except Exception:
             _wt3_pending_bonus = 0.0
 
+        # Phase SUPPORT-SCORING-1B (2026-06-23):
+        # Record support positive scoring hook decision
+        # EARLY so it is captured for ALL orders
+        # including status moves that return early in
+        # the status-move block. The bonus is deferred
+        # to the final return via
+        # ``_support_pending_bonus``. This ensures the
+        # hook fires for support moves like Tailwind
+        # and Helping Hand that would otherwise be
+        # filtered out by early returns.
+        # Scope: only ``helpinghand`` and ``tailwind``.
+        # All other support moves return no bonus
+        # (see ``SCORED_MOVE_IDS`` in
+        # ``doubles_engine.support_positive_scoring``).
+        _support_pending_bonus = 0.0
+        try:
+            from doubles_engine.support_positive_scoring import (
+                get_support_positive_bonus as _ss_get_bonus,
+            )
+            _ss_result = _ss_get_bonus(
+                order, active_idx, battle, config=self.config
+            )
+            if _ss_result.should_score:
+                _support_pending_bonus = float(_ss_result.bonus)
+            if not hasattr(self, "_support_decisions"):
+                self._support_decisions = {}
+            self._support_decisions.setdefault(
+                battle_tag, []
+            ).append(
+                {
+                    "turn": getattr(battle, "turn", 0),
+                    "active_idx": active_idx,
+                    "move_id": str(_move_id),
+                    "bonus": float(_ss_result.bonus),
+                    "should_score": bool(_ss_result.should_score),
+                    "reason": str(_ss_result.reason),
+                    "target_side": str(_ss_result.target_side),
+                }
+            )
+        except Exception:
+            _support_pending_bonus = 0.0
+
         # Defensive mock safety initialization
         for attr in (
             "_ability_hard_block_avoided",
@@ -6723,7 +6783,7 @@ class DoublesDamageAwarePlayer(Player):
                         if target_mon == dangerous_opp:
                             score += 50.0
 
-            return max(score, 0.0) + _wt3_pending_bonus
+            return max(score, 0.0) + _wt3_pending_bonus + _support_pending_bonus
 
             # 3. Generic Status Moves
             if category_name == "STATUS" or base_power == 0:
