@@ -107,6 +107,19 @@ V2j fingerprint remains:
     still works. Broad support target safety remains
     default OFF. Anti-TR unchanged. WT unchanged. Phase 7
     still not approved.
+- SUPPORT-SCORING-1A (in progress / completed).
+  - Support-move visibility audit. All four Tier 1
+    support moves (tailwind, wideguard, helpinghand,
+    followme) reach `_score_action_impl` and appear in
+    the legal action keys. The scoring path does NOT
+    need an early hook like WT-4f. The issue is the
+    lack of a positive scoring hook for support moves
+    and the need for clear target semantics.
+  - Final decision: `SUPPORT_SCORING_1A_NEEDS_TARGET_SEMANTICS_FIRST`.
+  - No default flips. No WT change. No broad support
+    target safety adoption. No Anti-TR change. No
+    species-based ability inference. No Magic Bounce
+    species inference. Phase 7 still not approved.
 
 ### VGC 2026
 
