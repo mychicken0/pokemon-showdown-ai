@@ -542,11 +542,15 @@ class TestUnknownMovesFailOpen(unittest.TestCase):
 
 
 class TestFeatureOffLeavesSelectionUnchanged(unittest.TestCase):
-    def test_default_config_disables_narrow_flag(self):
-        # The default value MUST be False per task
-        # requirement.
+    def test_default_config_narrow_flag_is_on_after_adopt1(self):
+        # SUPPORT-SAFETY-ADOPT-1 (2026-06-23): the
+        # narrow flag is now default ON. The previous
+        # default was False; this test was updated to
+        # reflect the new adoption.
         config = DoublesDamageAwareConfig()
-        self.assertFalse(config.enable_ally_heal_wrong_side_hard_safety)
+        self.assertTrue(
+            config.enable_ally_heal_wrong_side_hard_safety
+        )
         self.assertEqual(
             config.ally_heal_wrong_side_block_score, 0.0
         )
@@ -560,8 +564,9 @@ class TestFeatureOffLeavesSelectionUnchanged(unittest.TestCase):
         )
 
     def test_narrow_flag_off_does_not_block(self):
+        # Explicit opt-out: flag is OFF (set explicitly).
         config = DoublesDamageAwareConfig()
-        # Flag is OFF (default).
+        config.enable_ally_heal_wrong_side_hard_safety = False
         battle = _make_battle()
         move = _make_move_mock("healpulse", base_power=0, category="STATUS")
         order = _make_order(move, target=1)
@@ -714,9 +719,12 @@ class TestSafetyBlocksReturnShape(unittest.TestCase):
         for d in result:
             self.assertEqual(d, {})
 
-    def test_narrow_dicts_empty_when_flag_off(self):
+    def test_narrow_dicts_empty_when_flag_explicitly_off(self):
         config = DoublesDamageAwareConfig()
-        # Flag is OFF (default).
+        # SUPPORT-SAFETY-ADOPT-1: default is now ON, so we
+        # explicitly turn it off here to verify the
+        # explicit opt-out path still works.
+        config.enable_ally_heal_wrong_side_hard_safety = False
         battle = _make_battle()
         move = _make_move_mock("healpulse", base_power=0, category="STATUS")
         order = _make_order(move, target=1)
@@ -725,8 +733,8 @@ class TestSafetyBlocksReturnShape(unittest.TestCase):
                 battle, config, [[order], []]
             )
         )
-        # Flag OFF: no narrow block even though the
-        # move is a wrong-side ally heal.
+        # Flag explicitly OFF: no narrow block even
+        # though the move is a wrong-side ally heal.
         self.assertEqual(narrow_blocked, {})
         self.assertEqual(narrow_reasons, {})
 

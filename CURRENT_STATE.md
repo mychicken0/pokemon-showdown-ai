@@ -35,7 +35,12 @@ ability_hard_safety_direct_absorb_only = True
 ability_hard_safety_allow_singleton_deduction = True
 
 enable_support_move_target_hard_safety = False
-enable_ally_heal_wrong_side_hard_safety = False
+# SUPPORT-SAFETY-ADOPT-1 (2026-06-23): narrow
+# wrong-side ally heal/buff hard safety adopted
+# as default ON. Covers only Heal Pulse, Floral
+# Healing, Decorate aimed at an opponent. Broad
+# support target safety above remains default OFF.
+enable_ally_heal_wrong_side_hard_safety = True
 enable_voluntary_switch_quality_diagnostics = True
 enable_voluntary_switch_quality_scoring = False
 
@@ -94,6 +99,14 @@ V2j fingerprint remains:
     the beginning of the function.
   - Opt-in flag `enable_weather_terrain_positive_scoring` defaults
     to `False`. No default flip.
+- SUPPORT-SAFETY-ADOPT-1 (in progress / completed).
+  - Narrow wrong-side ally heal/buff hard safety adopted
+    as default ON. Covers only Heal Pulse, Floral
+    Healing, Decorate aimed at an opponent. Explicit
+    opt-out (`enable_ally_heal_wrong_side_hard_safety=False`)
+    still works. Broad support target safety remains
+    default OFF. Anti-TR unchanged. WT unchanged. Phase 7
+    still not approved.
 
 ### VGC 2026
 

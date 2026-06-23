@@ -718,13 +718,36 @@ class TestSupportMoveWrongSideBlock(unittest.TestCase):
 
 
 class TestNarrowAllyHealWrongSideBlock(unittest.TestCase):
-    def test_flag_off(self):
+    def test_default_flag_is_on_after_adopt1(self):
+        """SUPPORT-SAFETY-ADOPT-1: the narrow flag is
+        now default ON. This test was renamed from
+        ``test_flag_off`` to reflect the new default.
+        """
         from doubles_engine.support_targets import (
             narrow_ally_heal_wrong_side_block,
         )
         from bot_doubles_damage_aware import DoublesDamageAwareConfig
         battle = _FakeBattle()
-        config = DoublesDamageAwareConfig()  # default off
+        config = DoublesDamageAwareConfig()  # default ON
+        move = _FakeMove(id="healpulse")
+        order = _FakeOrder(move, move_target=1)
+        blocked, _ = narrow_ally_heal_wrong_side_block(
+            order, 0, battle, config=config
+        )
+        # Default ON: healpulse at opponent is blocked.
+        self.assertTrue(blocked)
+
+    def test_explicit_flag_off_does_not_block(self):
+        """Explicit opt-out: ``enable_ally_heal_wrong_side_hard_safety=False``
+        must disable the hard safety.
+        """
+        from doubles_engine.support_targets import (
+            narrow_ally_heal_wrong_side_block,
+        )
+        from bot_doubles_damage_aware import DoublesDamageAwareConfig
+        battle = _FakeBattle()
+        config = DoublesDamageAwareConfig()
+        config.enable_ally_heal_wrong_side_hard_safety = False
         move = _FakeMove(id="healpulse")
         order = _FakeOrder(move, move_target=1)
         blocked, _ = narrow_ally_heal_wrong_side_block(
@@ -836,18 +859,22 @@ class TestNarrowAllyHealWrongSideBlock(unittest.TestCase):
         blocked, _ = narrow_ally_heal_wrong_side_block(None, 0, battle, config)
         self.assertFalse(blocked)
 
-    def test_no_config_uses_default(self):
+    def test_no_config_uses_default_on_after_adopt1(self):
+        """SUPPORT-SAFETY-ADOPT-1: with ``config=None``,
+        the helper falls back to the default which is now
+        ON. Heal Pulse at opponent must be blocked.
+        """
         from doubles_engine.support_targets import (
             narrow_ally_heal_wrong_side_block,
         )
         battle = _FakeBattle()
         move = _FakeMove(id="healpulse")
         order = _FakeOrder(move, move_target=1)
-        # No config = uses default (False), so no block
+        # No config = uses default (now ON), so block
         blocked, _ = narrow_ally_heal_wrong_side_block(
             order, 0, battle, config=None
         )
-        self.assertFalse(blocked)
+        self.assertTrue(blocked)
 
 
 # ---------------------------------------------------------------------------

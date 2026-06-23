@@ -7696,3 +7696,68 @@ See `docs/wt_weather_terrain_opt_in.md` for the
 canonical summary, `logs/wt_4g_small_paired_eval.md`
 for the WT-4g report, and `logs/wt_4f_deep_integration_fix.md`
 for the root-cause analysis.
+
+## SUPPORT-SAFETY-ADOPT-1 — Narrow Ally-Heal Hard Safety Default Adoption
+
+**Date**: 2026-06-23
+**Status**: `SUPPORT_SAFETY_ADOPT_1_READY_FOR_COMMIT_CHECKPOINT`
+
+Promote the narrow wrong-side ally heal/buff hard
+safety from opt-in/default-OFF to default-ON. The
+flag `enable_ally_heal_wrong_side_hard_safety` was
+implemented in Phase 6.3.8 / 6.3.8a and was the
+narrowest correct production-grade replacement
+for the broad support target safety. Phase 6.3.8a
+wired it into scoring, and Phase 6.3.8d narrowed
+the allowlist to exactly three moves: Heal Pulse,
+Floral Healing, Decorate. The flag remained default
+OFF pending a safety-adoption phase.
+
+**What default changed**:
+`enable_ally_heal_wrong_side_hard_safety` changed
+from `False` to `True` in
+`DoublesDamageAwareConfig`. Explicit
+`enable_ally_heal_wrong_side_hard_safety=False` is
+still honored and disables the hard safety.
+
+**Scope guard**:
+- Narrow flag covers ONLY the three moves:
+  `healpulse`, `floralhealing`, `decorate` aimed
+  at an opponent. No other support moves are
+  affected. No broad support target safety.
+- `enable_support_move_target_hard_safety`
+  (broad) remains default `False`.
+- `enable_anti_trick_room_response` (Anti-TR)
+  remains default `False`. This phase does not
+  touch Anti-TR.
+- `enable_weather_terrain_positive_scoring`
+  (WT) remains default `False`. This phase does
+  not touch WT.
+- `enable_priority_field_hard_safety` remains
+  default `False`.
+- No species-based ability inference.
+- No Magic Bounce species inference.
+
+**Tests**: `tests/test_support_safety_adopt_1.py`
+(26 tests) — default adoption, move safety,
+explicit opt-out, scope guards, regression
+guards.
+
+**Smoke result** (5 battles, `gen9doublescustomgame`,
+local-only): 5/5 finished, 0 crashes, 0 errors,
+0 narrow blocks (test teams have no Heal Pulse /
+Floral Healing / Decorate; the smoke verifies
+that the default-ON flag does not crash and does
+not cause illegal actions).
+
+**Final decision**:
+`SUPPORT_SAFETY_ADOPT_1_READY_FOR_COMMIT_CHECKPOINT`.
+
+**Recommended next single phase**:
+`SUPPORT-SAFETY-ADOPT-1-COMMIT-CHECKPOINT` — commit
+the SUPPORT-SAFETY-ADOPT-1 work to a checkpoint
+branch (requires explicit user authorization per
+AGENTS.md and CURRENT_STATE.md).
+
+**Alternative**: continue with Phase 6.3.8 broader
+adoption work (not adopted in this phase).

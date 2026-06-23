@@ -655,7 +655,15 @@ class DoublesDamageAwareConfig:
     # (production-grade replacement for the broad
     # support-target safety; only blocks Heal Pulse,
     # Floral Healing, Decorate aimed at an opponent).
-    enable_ally_heal_wrong_side_hard_safety: bool = False
+    # SUPPORT-SAFETY-ADOPT-1 (2026-06-23): adopted as
+    # default ON. Narrow hard safety only; broad
+    # support-target safety above remains default OFF.
+    # Explicit opt-out preserved: callers that pass
+    # ``enable_ally_heal_wrong_side_hard_safety=False``
+    # disable the hard safety and restore the
+    # pre-adoption behavior. Anti-TR, WT, and other
+    # support-related defaults are unaffected.
+    enable_ally_heal_wrong_side_hard_safety: bool = True
     ally_heal_wrong_side_block_score: float = 0.0
 
     # Phase 6.4.9: Voluntary Switch Quality and Sacrifice Awareness
