@@ -345,5 +345,9 @@ pytest config entry point.
 - `docs/phases/` — implementation plans for historical phases
   (moved from root in Phase ORG-MOVE-2).
 - `docs/commit_boundaries/` — commit-boundary audit artifacts.
+- `docs/phase7_proposal.md` — Phase 7 RL training proposal
+  (RL-DATA-5). Status: `READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED`.
+  Training NOT approved. Requires explicit user authorization
+  and AGENTS.md sign-off.
 - `data/vgc2026_teams_detailed.json` — VGC 2026 team detail dataset
   (moved from root in Phase ORG-MOVE-2).
