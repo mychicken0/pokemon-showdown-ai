@@ -212,5 +212,60 @@ class TestModelArchitecture(unittest.TestCase):
         self.assertEqual(out.shape, (4, 50))
 
 
+
+
+# ---------------------------------------------------------------------------
+# Legal-mask tests
+# ---------------------------------------------------------------------------
+
+
+class TestLegalMask(unittest.TestCase):
+    def test_legal_keys_to_labels_move(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _legal_keys_to_labels
+        keys = [["move", "tailwind", "0", ""], ["move", "protect", "0", ""]]
+        labels = _legal_keys_to_labels(keys)
+        self.assertIn("move|tailwind|0", labels)
+        self.assertIn("move|protect|0", labels)
+        self.assertEqual(len(labels), 2)
+
+    def test_legal_keys_to_labels_switch(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _legal_keys_to_labels
+        keys = [["switch", "charizard", "0", ""]]
+        labels = _legal_keys_to_labels(keys)
+        self.assertIn("switch|charizard", labels)
+
+    def test_legal_keys_to_labels_empty(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _legal_keys_to_labels
+        self.assertEqual(len(_legal_keys_to_labels([])), 0)
+        self.assertEqual(len(_legal_keys_to_labels(None)), 0)
+
+    def test_build_legal_mask_coverage(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import build_legal_mask
+        label_map = {"move|tailwind|0": 0, "move|protect|0": 1, "move|attack|1": 2}
+        legal = {"move|tailwind|0", "move|protect|0"}
+        mask = build_legal_mask(legal, label_map, 3)
+        self.assertTrue(mask[0].item())
+        self.assertTrue(mask[1].item())
+        self.assertFalse(mask[2].item())
+
+    def test_build_legal_mask_true_label_always_covered(self):
+        """The true selected action must always be legal."""
+        from showdown_ai.phase7_1_bc_warmstart_train_local import (
+            build_legal_mask, _legal_keys_to_labels, _extract_action_label,
+        )
+        legal_keys = [["move", "tailwind", "0", ""], ["move", "protect", "0", ""]]
+        selected = ["move", "tailwind", "0", ""]
+        legal_labels = _legal_keys_to_labels(legal_keys)
+        true_label = _extract_action_label(selected)
+        label_map = {lbl: i for i, lbl in enumerate(sorted(legal_labels))}
+        mask = build_legal_mask(legal_labels, label_map, len(label_map))
+        self.assertIn(true_label, legal_labels,
+                      "true selected action must be in legal set")
+        idx = label_map.get(true_label)
+        self.assertIsNotNone(idx)
+        self.assertTrue(mask[idx].item(),
+                        "true action must be masked as legal")
+
+
 if __name__ == "__main__":
     unittest.main()

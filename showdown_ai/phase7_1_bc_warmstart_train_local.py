@@ -190,6 +190,28 @@ class FeatureEncoder:
 # ---------------------------------------------------------------------------
 
 
+def _legal_keys_to_labels(legal_keys: List) -> Set[str]:
+    """Convert a list of V4a legal action keys (e.g. `[['move', 'tailwind', '0', ''], ...]`)
+    to a set of label strings matching _extract_action_label output."""
+    labels: Set[str] = set()
+    for k in legal_keys or []:
+        if isinstance(k, (list, tuple)) and len(k) >= 2:
+            labels.add(_extract_action_label(k))
+    return labels
+
+
+def build_legal_mask(legal_labels: Set[str], label_map: Dict[str, int],
+                     num_classes: int) -> torch.Tensor:
+    """Build a boolean mask of shape `(num_classes,)` where True means
+    the action index is legal (present in legal_labels)."""
+    mask = torch.zeros(num_classes, dtype=torch.bool)
+    for lbl in legal_labels:
+        idx = label_map.get(lbl)
+        if idx is not None:
+            mask[idx] = True
+    return mask
+
+
 def _extract_action_label(slot_key: List) -> str:
     """Convert a per-slot action key like `['move', 'tailwind', '0', '']`
     into a label string like `move|tailwind|0`."""
@@ -361,6 +383,8 @@ def main():
     parser.add_argument("--dataset", default="logs/rl_data_refresh_enhanced_turns.jsonl")
     parser.add_argument("--output-dir", default="artifacts/phase7_1_bc_warmstart/run")
     parser.add_argument("--report", default="logs/phase7_1_bc_warmstart/report.md")
+    parser.add_argument("--load-model", default=None,
+                        help="path to a pre-trained model.pt to evaluate instead of training")
     parser.add_argument("--device", choices=["auto", "cuda", "cpu"], default="auto")
     parser.add_argument("--seed", type=int, default=20260701)
     parser.add_argument("--epochs", type=int, default=20)
@@ -368,6 +392,9 @@ def main():
     parser.add_argument("--hidden", type=int, default=256)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--early-stopping-patience", type=int, default=4)
+    parser.add_argument("--legal-mask", action="store_true",
+                        help="evaluate legal-action-constrained accuracy on test set "
+                             "(no retraining, uses existing model if available)")
     args = parser.parse_args()
 
     # Device
@@ -428,74 +455,89 @@ def main():
 
     # Model
     model = BCMlp(input_dim, num_classes, hidden=args.hidden).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=2
-    )
 
-    # Training
-    best_val_loss = float("inf")
-    patience_counter = 0
-    history = []
+    # Load pre-trained model if provided (eval-only mode)
+    if args.load_model:
+        model.load_state_dict(torch.load(args.load_model, map_location=device, weights_only=True))
+        print(f"Loaded pre-trained model: {args.load_model}")
+        history = []
+        best_val_loss = float("inf")
+        train_start = time.time()
+        # Skip training; go straight to evaluation
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=2
+        )
 
-    print(f"\nTraining: {args.epochs} epochs, batch={args.batch_size}, lr={args.lr}")
-    train_start = time.time()
+        # Training
+        best_val_loss = float("inf")
+        patience_counter = 0
+        history = []
 
-    for epoch in range(1, args.epochs + 1):
-        model.train()
-        train_loss = 0.0
-        train_batches = 0
-        for xb, y0b, y1b in train_loader:
-            xb, y0b, y1b = xb.to(device), y0b.to(device), y1b.to(device)
-            optimizer.zero_grad(set_to_none=True)
-            logits = model(xb)
-            loss0 = F.cross_entropy(logits, y0b)
-            loss1 = F.cross_entropy(logits, y1b)
-            loss = loss0 + loss1
-            loss.backward()
-            optimizer.step()
-            train_loss += float(loss.detach().cpu())
-            train_batches += 1
-        train_loss /= max(train_batches, 1)
+        print(f"\nTraining: {args.epochs} epochs, batch={args.batch_size}, lr={args.lr}")
+        train_start = time.time()
 
-        # Validation
-        model.eval()
-        val_loss = 0.0
-        val_batches = 0
-        with torch.no_grad():
-            for xb, y0b, y1b in val_loader:
+    if not args.load_model:
+        for epoch in range(1, args.epochs + 1):
+            model.train()
+            train_loss = 0.0
+            train_batches = 0
+            for xb, y0b, y1b in train_loader:
                 xb, y0b, y1b = xb.to(device), y0b.to(device), y1b.to(device)
+                optimizer.zero_grad(set_to_none=True)
                 logits = model(xb)
                 loss0 = F.cross_entropy(logits, y0b)
                 loss1 = F.cross_entropy(logits, y1b)
                 loss = loss0 + loss1
-                val_loss += float(loss.detach().cpu())
-                val_batches += 1
-        val_loss /= max(val_batches, 1)
-        scheduler.step(val_loss)
+                loss.backward()
+                optimizer.step()
+                train_loss += float(loss.detach().cpu())
+                train_batches += 1
+            train_loss /= max(train_batches, 1)
 
-        history.append({"epoch": epoch, "train_loss": round(train_loss, 4),
-                        "val_loss": round(val_loss, 4)})
+            # Validation
+            model.eval()
+            val_loss = 0.0
+            val_batches = 0
+            with torch.no_grad():
+                for xb, y0b, y1b in val_loader:
+                    xb, y0b, y1b = xb.to(device), y0b.to(device), y1b.to(device)
+                    logits = model(xb)
+                    loss0 = F.cross_entropy(logits, y0b)
+                    loss1 = F.cross_entropy(logits, y1b)
+                    loss = loss0 + loss1
+                    val_loss += float(loss.detach().cpu())
+                    val_batches += 1
+            val_loss /= max(val_batches, 1)
+            scheduler.step(val_loss)
 
-        print(f"  epoch {epoch:2d}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-              f"lr={optimizer.param_groups[0]['lr']:.2e}")
+            history.append({"epoch": epoch, "train_loss": round(train_loss, 4),
+                            "val_loss": round(val_loss, 4)})
 
-        # Early stopping
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            patience_counter = 0
-            torch.save(model.state_dict(), str(out_dir / "model.pt"))
-        else:
-            patience_counter += 1
-            if patience_counter >= args.early_stopping_patience:
-                print(f"  Early stopping at epoch {epoch}")
-                break
+            print(f"  epoch {epoch:2d}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+                  f"lr={optimizer.param_groups[0]['lr']:.2e}")
 
-    elapsed = time.time() - train_start
-    print(f"Training time: {elapsed:.1f}s")
+            # Early stopping
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience_counter = 0
+                torch.save(model.state_dict(), str(out_dir / "model.pt"))
+            else:
+                patience_counter += 1
+                if patience_counter >= args.early_stopping_patience:
+                    print(f"  Early stopping at epoch {epoch}")
+                    break
 
-    # Load best model
-    model.load_state_dict(torch.load(str(out_dir / "model.pt"), weights_only=True))
+        elapsed = time.time() - train_start
+        print(f"Training time: {elapsed:.1f}s")
+
+        # Load best model
+        model.load_state_dict(torch.load(str(out_dir / "model.pt"), weights_only=True))
+    else:
+        elapsed = 0.0
+        # Save the loaded model to the output dir for consistency
+        torch.save(model.state_dict(), str(out_dir / "model.pt"))
 
     # Evaluate
     def evaluate(loader, label):
@@ -522,9 +564,90 @@ def main():
               f"n_classes: {m1['n_classes_seen']}")
         return m0, m1
 
+    # Evaluate without legal mask
     train_m0, train_m1 = evaluate(train_loader, "Train")
     val_m0, val_m1 = evaluate(val_loader, "Val")
     test_m0, test_m1 = evaluate(test_loader, "Test")
+
+    # Legal-mask constrained evaluation (no retraining)
+    constrained_metrics = None
+    if args.legal_mask:
+        print("\n  === Legal-Mask Constrained Evaluation ===")
+        model.eval()
+        all_m0_y, all_m0_p = [], []
+        all_m1_y, all_m1_p = [], []
+        legal_hit0 = legal_hit1 = 0
+        illegal0 = illegal1 = 0
+        fallback0 = fallback1 = 0
+        total = 0
+        with torch.no_grad():
+            for r in test_rows:
+                x = encoder(r).unsqueeze(0).to(device)
+                sk = r.get("selected_joint_key", []) or []
+                y0 = label_map.get(_extract_action_label(sk[0] if len(sk) >= 1 else ["pass"]), 0)
+                y1 = label_map.get(_extract_action_label(sk[1] if len(sk) >= 2 else ["pass"]), 0)
+
+                # Build legal masks per slot
+                la0 = _legal_keys_to_labels(r.get("legal_action_keys_slot0", []) or [])
+                la1 = _legal_keys_to_labels(r.get("legal_action_keys_slot1", []) or [])
+                mask0 = build_legal_mask(la0, label_map, num_classes)
+                mask1 = build_legal_mask(la1, label_map, num_classes)
+
+                logits = model(x).cpu().squeeze(0)
+                # Constrained: set illegal logits to -inf
+                constrained0 = logits.clone()
+                constrained1 = logits.clone()
+                constrained0[~mask0] = float("-inf")
+                constrained1[~mask1] = float("-inf")
+
+                pred0 = logits.argmax().item()
+                cp0 = constrained0.argmax().item()
+                cp1 = constrained1.argmax().item()
+
+                all_m0_y.append(y0)
+                all_m0_p.append(cp0)
+                all_m1_y.append(y1)
+                all_m1_p.append(cp1)
+
+                if cp0 == y0:
+                    legal_hit0 += 1
+                if cp1 == y1:
+                    legal_hit1 += 1
+                # unconstrained pred is same for both slots (shared output head)
+                if pred0 not in {j for j in range(num_classes) if mask0[j]}:
+                    illegal0 += 1
+                if pred0 not in {j for j in range(num_classes) if mask1[j]}:
+                    illegal1 += 1
+                if not mask0.any():
+                    fallback0 += 1
+                if not mask1.any():
+                    fallback1 += 1
+                total += 1
+
+        cm0 = compute_metrics(all_m0_y, all_m0_p)
+        cm1 = compute_metrics(all_m1_y, all_m1_p)
+        constrained_metrics = {
+            "legal_mask_slot0": cm0,
+            "legal_mask_slot1": cm1,
+            "illegal_prediction_rate_slot0": round(illegal0 / max(total, 1), 4),
+            "illegal_prediction_rate_slot1": round(illegal1 / max(total, 1), 4),
+            "fallback_rate_slot0": round(fallback0 / max(total, 1), 4),
+            "fallback_rate_slot1": round(fallback1 / max(total, 1), 4),
+            "legal_hit_rate_slot0": round(legal_hit0 / max(total, 1), 4),
+            "legal_hit_rate_slot1": round(legal_hit1 / max(total, 1), 4),
+        }
+        print(f"  slot0 constrained: acc={cm0['accuracy']:.4f} "
+              f"illegal_pred_rate={constrained_metrics['illegal_prediction_rate_slot0']:.4f} "
+              f"fallback_rate={constrained_metrics['fallback_rate_slot0']:.4f}")
+        print(f"  slot1 constrained: acc={cm1['accuracy']:.4f} "
+              f"illegal_pred_rate={constrained_metrics['illegal_prediction_rate_slot1']:.4f} "
+              f"fallback_rate={constrained_metrics['fallback_rate_slot1']:.4f}")
+        print(f"  Combined improvement: slot0 "
+              f"{'BETTER' if cm0['accuracy'] >= test_m0['accuracy'] else 'SAME_OR_LOWER'} "
+              f"({cm0['accuracy']:.4f} vs {test_m0['accuracy']:.4f}), "
+              f"slot1 "
+              f"{'BETTER' if cm1['accuracy'] >= test_m1['accuracy'] else 'SAME_OR_LOWER'} "
+              f"({cm1['accuracy']:.4f} vs {test_m1['accuracy']:.4f})")
 
     # Majority baseline (most common label)
     all_train_y0 = [_extract_action_label(r.get("selected_joint_key", [["pass"]])[0]) for r in train_rows]
@@ -592,6 +715,7 @@ def main():
         "train_slot0": train_m0,
         "train_slot1": train_m1,
         "collapse_check": collapse_str,
+        "constrained_metrics": constrained_metrics,
         "training_time_s": round(elapsed, 1),
     }
     with open(out_dir / "metrics.json", "w") as f:
@@ -691,7 +815,20 @@ User explicitly authorized Phase 7.1 BC warm-start training.
 - Slot0 top-prediction rate: {top_class_pct0:.4f}
 - Slot1 top-prediction rate: {top_class_pct1:.4f}
 
-## Artifacts
+## Legal-Mask Constrained Evaluation
+| Metric | Slot0 | Slot1 |
+|--------|------:|------:|
+| Unconstrained accuracy | {test_m0['accuracy']:.4f} | {test_m1['accuracy']:.4f} |
+"""
+    if constrained_metrics:
+        report += f"""| Constrained accuracy | {constrained_metrics['legal_mask_slot0']['accuracy']:.4f} | {constrained_metrics['legal_mask_slot1']['accuracy']:.4f} |
+| Illegal prediction rate | {constrained_metrics['illegal_prediction_rate_slot0']:.4f} | {constrained_metrics['illegal_prediction_rate_slot1']:.4f} |
+| Fallback rate | {constrained_metrics['fallback_rate_slot0']:.4f} | {constrained_metrics['fallback_rate_slot1']:.4f} |
+"""
+    else:
+        report += "\n(not run — use --legal-mask to enable)\n"
+
+    report += """## Artifacts
 - Model: `{out_dir / 'model.pt'}`
 - Config: `{out_dir / 'config.json'}`
 - Metrics: `{out_dir / 'metrics.json'}`
