@@ -73,6 +73,24 @@ LOCAL_BASE = "RLData3b"
 HEALTH_URL = "http://localhost:8000"
 HEALTH_TIMEOUT = 5.0
 DEFAULT_BATTLES = 5
+
+# Opponent policy: which bot class plays the opposing side.
+# Default is `damage_aware` (the same DoublesDamageAwarePlayer
+# already used safely in production). `random` is the legacy
+# RandomPlayer which can systematically target its own ally
+# with single-target damaging moves; it is NOT safe for data
+# expansion baseline scale-up and requires an explicit unsafe
+# opt-in flag. See
+# `logs/phase7_stage2_actual_friendly_fire_incident_audit/`
+# for the root-cause analysis.
+OPPONENT_POLICY_CHOICES = ("damage_aware", "random")
+DEFAULT_OPPONENT_POLICY = "damage_aware"
+
+# Module-level state set from CLI args in main(). Used by
+# run_single_battle so the existing async API does not need
+# new parameters threaded through.
+_OPPONENT_POLICY = DEFAULT_OPPONENT_POLICY
+_ALLOW_UNSAFE_RANDOM = False
 # Phase RL-DATA-3c: raised from 50 to 600 to support
 # the 5,000+ row dataset build. The script is still
 # local-only and small (5 battles is the default
@@ -152,6 +170,62 @@ Timid Nature
 - Protect"""
 
 
+def make_opponent(
+    policy: str,
+    opp_name: str,
+    team: str = OPP_TEAM,
+    allow_unsafe_random: bool = False,
+) -> Any:
+    """Build the opponent player for collection.
+
+    Args:
+        policy: ``damage_aware`` (default, safe) or ``random``
+            (unsafe for data expansion; requires
+            ``allow_unsafe_random=True``).
+        opp_name: Showdown username.
+        team: Showdown-format team string.
+        allow_unsafe_random: explicit unsafe opt-in for
+            ``random`` policy.
+
+    Returns:
+        A poke-env player instance.
+
+    Raises:
+        ValueError: if ``random`` is requested without the
+            explicit unsafe opt-in, or if ``policy`` is
+            unknown.
+    """
+    if policy == "damage_aware":
+        return DoublesDamageAwarePlayer(
+            account_configuration=AccountConfiguration(opp_name, None),
+            max_concurrent_battles=1,
+            log_level=30,
+            battle_format="gen9doublescustomgame",
+            team=team,
+        )
+    if policy == "random":
+        if not allow_unsafe_random:
+            raise ValueError(
+                "opponent-policy=random is unsafe for data expansion "
+                "baseline scale-up: RandomPlayer can systematically "
+                "target its own ally with single-target damaging moves "
+                "(see logs/phase7_stage2_actual_friendly_fire_incident_audit/). "
+                "Pass --allow-unsafe-random-opponent to opt in for "
+                "diagnostic use only."
+            )
+        return RandomPlayer(
+            account_configuration=AccountConfiguration(opp_name, None),
+            max_concurrent_battles=1,
+            log_level=30,
+            battle_format="gen9doublescustomgame",
+            team=team,
+        )
+    raise ValueError(
+        f"unknown opponent policy: {policy!r}; "
+        f"choose from {OPPONENT_POLICY_CHOICES}"
+    )
+
+
 def check_localhost_healthy(timeout: float = HEALTH_TIMEOUT) -> bool:
     """Verify the local Showdown server is healthy.
 
@@ -214,12 +288,11 @@ async def run_single_battle(
         battle_format="gen9doublescustomgame",
         team=our_team_showdown,
     )
-    opp = RandomPlayer(
-        account_configuration=AccountConfiguration(opp_name, None),
-        max_concurrent_battles=1,
-        log_level=30,
-        battle_format="gen9doublescustomgame",
+    opp = make_opponent(
+        _OPPONENT_POLICY,
+        opp_name,
         team=OPP_TEAM,
+        allow_unsafe_random=_ALLOW_UNSAFE_RANDOM,
     )
 
     start = time.time()
@@ -360,7 +433,51 @@ def main():
         default="logs/rl_data_3b_small_audit.jsonl",
         help="Output audit JSONL path",
     )
+    parser.add_argument(
+        "--opponent-policy",
+        choices=OPPONENT_POLICY_CHOICES,
+        default=DEFAULT_OPPONENT_POLICY,
+        help=(
+            "Opponent policy for collection. Default "
+            f"{DEFAULT_OPPONENT_POLICY!r} uses the same "
+            "DoublesDamageAwarePlayer as the bot side, which "
+            "is safe for data expansion. 'random' uses "
+            "poke_env RandomPlayer which can systematically "
+            "target its own ally with single-target damaging "
+            "moves and is NOT safe for data expansion "
+            "baseline scale-up. 'random' requires the "
+            "--allow-unsafe-random-opponent flag for "
+            "diagnostic use only."
+        ),
+    )
+    parser.add_argument(
+        "--allow-unsafe-random-opponent",
+        action="store_true",
+        dest="allow_unsafe_random",
+        help=(
+            "Required to use --opponent-policy random. This "
+            "is the only way to opt into the unsafe random "
+            "opponent. Diagnostic use only; never use for "
+            "data expansion baseline scale-up."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.opponent_policy == "random" and not args.allow_unsafe_random:
+        print(
+            "ERROR: --opponent-policy random requires "
+            "--allow-unsafe-random-opponent. RandomPlayer "
+            "is unsafe for data expansion (it can target "
+            "its own ally with single-target damaging moves). "
+            "Use the default 'damage_aware' policy for "
+            "data expansion baseline scale-up."
+        )
+        sys.exit(2)
+
+    # Set module-level state used by run_single_battle.
+    global _OPPONENT_POLICY, _ALLOW_UNSAFE_RANDOM
+    _OPPONENT_POLICY = args.opponent_policy
+    _ALLOW_UNSAFE_RANDOM = args.allow_unsafe_random
 
     if args.n_battles < 1:
         print("ERROR: --n-battles must be >= 1")
@@ -394,6 +511,10 @@ def main():
     print("RL-DATA-3b-small smoke summary")
     print("=" * 60)
     print(f"  audit path: {result['audit_path']}")
+    print(f"  opponent policy: {_OPPONENT_POLICY}")
+    if _OPPONENT_POLICY == "random":
+        print("  WARNING: unsafe random opponent is in use; do not")
+        print("           use this dataset for baseline training.")
     print(f"  battles attempted: {result['battles_attempted']}")
     succeeded = sum(
         1
