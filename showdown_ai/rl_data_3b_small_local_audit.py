@@ -66,6 +66,7 @@ from poke_env.player.baselines import RandomPlayer
 
 from bot_doubles_damage_aware import DoublesDamageAwarePlayer
 from doubles_decision_audit_logger import DoublesDecisionAuditLogger
+from rl_data_3b_raw_protocol_capture import RawProtocolCapture
 
 # ---- Hard guards ----
 # Only local server. Never default to official.
@@ -170,6 +171,28 @@ Timid Nature
 - Protect"""
 
 
+class RawCaptureBot(DoublesDamageAwarePlayer):
+    """DoublesDamageAwarePlayer that also captures raw
+    Showdown protocol lines via the optional ``raw_callback``
+    kwarg. Falls back silently if the poke-env version does
+    not expose ``_handle_battle_message``."""
+
+    def __init__(self, *args, raw_callback=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._raw_callback = raw_callback
+
+    def _handle_battle_message(self, split_msg: list) -> None:
+        try:
+            if self._raw_callback is not None:
+                self._raw_callback("|".join(split_msg))
+        except Exception:
+            pass
+        try:
+            return super()._handle_battle_message(split_msg)
+        except Exception:
+            return None
+
+
 def make_opponent(
     policy: str,
     opp_name: str,
@@ -270,6 +293,7 @@ async def run_single_battle(
     total: int,
     audit_logger: DoublesDecisionAuditLogger,
     our_team_showdown: str,
+    raw_capture: Optional[RawProtocolCapture] = None,
 ) -> Dict[str, Any]:
     """Run a single battle with the bot vs a random opp.
 
@@ -279,15 +303,28 @@ async def run_single_battle(
     suffix = str(idx) + str(int(time.time() * 1000) % 100000)[-5:]
     bot_name = f"{LOCAL_BASE}Bot_{suffix}"[:18]
     opp_name = f"{LOCAL_BASE}Opp_{suffix}"[:18]
+    battle_tag_guess = f"battle-gen9doublescustomgame-{idx}"
 
-    bot = DoublesDamageAwarePlayer(
-        account_configuration=AccountConfiguration(bot_name, None),
-        audit_logger=audit_logger,
-        max_concurrent_battles=1,
-        log_level=30,
-        battle_format="gen9doublescustomgame",
-        team=our_team_showdown,
-    )
+    raw_cb = raw_capture.feed if raw_capture is not None else None
+    if raw_cb is not None:
+        bot = RawCaptureBot(
+            account_configuration=AccountConfiguration(bot_name, None),
+            audit_logger=audit_logger,
+            max_concurrent_battles=1,
+            log_level=30,
+            battle_format="gen9doublescustomgame",
+            team=our_team_showdown,
+            raw_callback=raw_cb,
+        )
+    else:
+        bot = DoublesDamageAwarePlayer(
+            account_configuration=AccountConfiguration(bot_name, None),
+            audit_logger=audit_logger,
+            max_concurrent_battles=1,
+            log_level=30,
+            battle_format="gen9doublescustomgame",
+            team=our_team_showdown,
+        )
     opp = make_opponent(
         _OPPONENT_POLICY,
         opp_name,
@@ -337,11 +374,16 @@ async def run_single_battle(
 async def run_smoke(
     battles: int,
     output_path: str,
+    raw_protocol_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run the small audit smoke.
 
     Returns a dict with battle results, audit path,
     and a one-line summary.
+
+    If ``raw_protocol_dir`` is provided, raw Showdown
+    protocol lines are written to
+    ``{raw_protocol_dir}/{battle_id}.jsonl`` per battle.
     """
     if not check_localhost_healthy():
         return {
@@ -387,11 +429,23 @@ async def run_smoke(
         f"local audit smoke)...",
         flush=True,
     )
+    if raw_protocol_dir is not None:
+        print(
+            f"  raw protocol capture enabled: {raw_protocol_dir}",
+            flush=True,
+        )
     battle_results: List[Dict[str, Any]] = []
     for idx in range(1, battles + 1):
         try:
+            capture = None
+            if raw_protocol_dir is not None:
+                capture = RawProtocolCapture(
+                    battle_id=f"battle-{idx}",
+                    out_dir=raw_protocol_dir,
+                )
             r = await run_single_battle(
-                idx, battles, audit_logger, our_team_showdown
+                idx, battles, audit_logger, our_team_showdown,
+                raw_capture=capture,
             )
             battle_results.append(r)
             print(
@@ -411,6 +465,7 @@ async def run_smoke(
         "battles_attempted": battles,
         "battle_results": battle_results,
         "audit_path": output_path,
+        "raw_protocol_dir": raw_protocol_dir,
     }
 
 
@@ -461,6 +516,17 @@ def main():
             "data expansion baseline scale-up."
         ),
     )
+    parser.add_argument(
+        "--raw-protocol-dir",
+        default=None,
+        help=(
+            "If set, raw Showdown protocol lines are written "
+            "to this directory as {battle_id}.jsonl. Required "
+            "for the friendly-fire monitor v2 to definitively "
+            "classify suspected events. Default: disabled. "
+            "Directory must be under logs/."
+        ),
+    )
     args = parser.parse_args()
 
     if args.opponent_policy == "random" and not args.allow_unsafe_random:
@@ -500,8 +566,25 @@ def main():
         )
         sys.exit(1)
 
+    raw_protocol_dir = None
+    if args.raw_protocol_dir:
+        raw_dir_abs = os.path.abspath(args.raw_protocol_dir)
+        if not raw_dir_abs.startswith(
+            os.path.join(REPO_ROOT, "logs")
+        ):
+            print(
+                f"ERROR: --raw-protocol-dir must be under "
+                f"logs/ (got {raw_dir_abs})"
+            )
+            sys.exit(1)
+        raw_protocol_dir = raw_dir_abs
+
     result = asyncio.run(
-        run_smoke(args.n_battles, output_path)
+        run_smoke(
+            args.n_battles,
+            output_path,
+            raw_protocol_dir=raw_protocol_dir,
+        )
     )
     if result.get("error"):
         print(f"ERROR: {result['error']}")
