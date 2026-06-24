@@ -26,10 +26,10 @@ from showdown_ai.rl_data_3b_ff_monitor_v2 import (
 
 
 class TestActualFriendlyFireClassification(unittest.TestCase):
-    """Bug Buzz into same-side ally with damage is
-    ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE."""
+    """Bug Buzz into same-side ally with classification
+    changes based on confirmed_damage flag."""
 
-    def test_bug_buzz_ally_target_classified_actual(self):
+    def test_bug_buzz_ally_target_without_confirmed_is_submitted_noise(self):
         cl = classify_damage_event_from_protocol(
             actor_side="p2",
             actor_id="p2a: Volcarona",
@@ -38,18 +38,44 @@ class TestActualFriendlyFireClassification(unittest.TestCase):
             target_id="p2b: Tornadus",
             from_token="",
             raw_line="|move|p2a: Volcarona|Bug Buzz|p2b: Tornadus",
+            confirmed_damage=False,
         )
-        self.assertEqual(cl, "ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
+        self.assertEqual(cl, "SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE")
 
-    def test_psychic_into_ally_classified_actual(self):
+    def test_bug_buzz_ally_target_with_confirmed_is_actual(self):
+        cl = classify_damage_event_from_protocol(
+            actor_side="p2",
+            actor_id="p2a: Volcarona",
+            move_id="bugbuzz",
+            target_side="p2",
+            target_id="p2b: Tornadus",
+            from_token="",
+            raw_line="|move|p2a: Volcarona|Bug Buzz|p2b: Tornadus",
+            confirmed_damage=True,
+        )
+        self.assertEqual(cl, "CONFIRMED_ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
+
+    def test_psychic_into_ally_without_confirmed_is_submitted_noise(self):
         cl = classify_damage_event_from_protocol(
             actor_side="p1",
             actor_id="p1a: Tapu Lele",
             move_id="psychic",
             target_side="p1",
             target_id="p1b: Volcarona",
+            confirmed_damage=False,
         )
-        self.assertEqual(cl, "ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
+        self.assertEqual(cl, "SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE")
+
+    def test_psychic_into_ally_with_confirmed_is_actual(self):
+        cl = classify_damage_event_from_protocol(
+            actor_side="p1",
+            actor_id="p1a: Tapu Lele",
+            move_id="psychic",
+            target_side="p1",
+            target_id="p1b: Volcarona",
+            confirmed_damage=True,
+        )
+        self.assertEqual(cl, "CONFIRMED_ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
 
     def test_opponent_targeting_is_not_friendly_fire(self):
         cl = classify_damage_event_from_protocol(
@@ -59,7 +85,6 @@ class TestActualFriendlyFireClassification(unittest.TestCase):
             target_side="p2",
             target_id="p2a: Tyranitar",
         )
-        self.assertNotEqual(cl, "ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
         self.assertEqual(cl, "FALSE_POSITIVE_SPREAD_DAMAGE")
 
 
@@ -290,21 +315,15 @@ class TestAbilityDamage(unittest.TestCase):
 
 class TestLabelNoise(unittest.TestCase):
     """Selected negative-target label noise with no actual
-    ally HP damage is FALSE_POSITIVE_TARGET_LABEL_NOISE_NO_DAMAGE.
-    The classifier returns NOT_FRIENDLY_FIRE for cross-side; the
-    label-noise case is handled by the monitor wrapper that
-    combines selected-target and HP delta, not the raw
-    classifier."""
+    ally HP damage is SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE."""
 
-    def test_psychic_into_ally_no_damage_real_friendly_fire(self):
-        # If the move was psychic into ally with no [from] tag,
-        # the classifier says ACTUAL (same-side single-target).
+    def test_psychic_into_ally_no_damage(self):
         cl = classify_damage_event_from_protocol(
             actor_side="p1", actor_id="p1a: Tapu Lele",
             move_id="psychic", target_side="p1",
             target_id="p1b: Volcarona",
         )
-        self.assertEqual(cl, "ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE")
+        self.assertEqual(cl, "SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE")
 
 
 class TestMissingRawLogs(unittest.TestCase):
@@ -326,25 +345,36 @@ class TestMissingRawLogs(unittest.TestCase):
         s["unknown_friendly_fire_suspect_count"] = 1
         self.assertFalse(stage2_gate_passes(s))
 
-    def test_gate_fails_with_actual_friendly_fire(self):
+    def test_gate_fails_with_confirmed_actual_friendly_fire(self):
         s = make_empty_summary(raw_protocol_logs_present=True)
-        s["opponent_actual_friendly_fire_count"] = 1
+        s["opponent_confirmed_actual_friendly_fire_count"] = 1
         self.assertFalse(stage2_gate_passes(s))
 
-    def test_gate_passes_when_clean(self):
+    def test_gate_passes_clean(self):
         s = make_empty_summary(raw_protocol_logs_present=True)
+        self.assertTrue(stage2_gate_passes(s))
+
+    def test_gate_does_not_fail_from_submitted_target_noise(self):
+        s = make_empty_summary(raw_protocol_logs_present=True)
+        s["submitted_same_side_target_count"] = 20
+        s["bot_submitted_negative_target_count"] = 3
+        s["opponent_submitted_negative_target_count"] = 17
         self.assertTrue(stage2_gate_passes(s))
 
 
 class TestSummaryFields(unittest.TestCase):
-    """Summary must include raw_protocol_logs_present and
-    friendly_fire_monitor_version."""
+    """Summary must include confirmed-actual and submitted-noise fields."""
 
     def test_summary_has_required_fields(self):
         s = make_empty_summary()
         self.assertIn("raw_protocol_logs_present", s)
         self.assertIn("friendly_fire_monitor_version", s)
-        self.assertEqual(s["friendly_fire_monitor_version"], "v2_raw_protocol")
+        self.assertEqual(s["friendly_fire_monitor_version"], "v3_confirmed_damage")
+        self.assertIn("opponent_confirmed_actual_friendly_fire_count", s)
+        self.assertIn("bot_confirmed_actual_friendly_fire_count", s)
+        self.assertIn("submitted_same_side_target_count", s)
+        self.assertIn("bot_submitted_negative_target_count", s)
+        self.assertIn("opponent_submitted_negative_target_count", s)
 
     def test_required_fields_list_matches_summary(self):
         required = get_required_summary_fields()

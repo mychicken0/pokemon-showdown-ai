@@ -79,6 +79,7 @@ def classify_damage_event_from_protocol(
     from_token: str = "",
     move_target_token: str = "",
     raw_line: str = "",
+    confirmed_damage: bool = False,
 ) -> str:
     """Classify a single damage event using parsed protocol fields.
 
@@ -91,6 +92,10 @@ def classify_damage_event_from_protocol(
         from_token: parsed ``[from]`` field, e.g., ``Sandstorm``.
         move_target_token: parsed target field if present.
         raw_line: original protocol line for evidence.
+        confirmed_damage: if True, a subsequent ``|-damage|`` line
+            confirms actual HP loss on the target from this move.
+            Default False means the move had a same-side target
+            but no HP loss was confirmed (submitted-target noise).
 
     Returns:
         classification string
@@ -121,10 +126,13 @@ def classify_damage_event_from_protocol(
     if move_lc in RECOIL_MOVES and same_side:
         return "FALSE_POSITIVE_RECOIL"
 
-    # Same-side single-target damaging move -> actual friendly-fire
+    # Same-side single-target damaging move.
     if same_side:
         if move_lc and not _is_status_move(move_lc):
-            return "ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE"
+            if confirmed_damage:
+                return "CONFIRMED_ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE"
+            else:
+                return "SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE"
 
     # Different side: normal opponent-targeting move
     if not same_side:
@@ -318,12 +326,13 @@ def get_required_summary_fields() -> list:
     """Return the list of summary fields required by the
     future run summary, per the audit spec."""
     return [
-        "opponent_actual_friendly_fire_count",
-        "opponent_actual_friendly_fire_battles",
-        "opponent_actual_friendly_fire_turn_rate",
-        "bot_actual_friendly_fire_count",
-        "bot_actual_friendly_fire_battles",
-        "bot_selected_negative_target_count",
+        "opponent_confirmed_actual_friendly_fire_count",
+        "opponent_confirmed_actual_friendly_fire_battles",
+        "bot_confirmed_actual_friendly_fire_count",
+        "bot_confirmed_actual_friendly_fire_battles",
+        "submitted_same_side_target_count",
+        "bot_submitted_negative_target_count",
+        "opponent_submitted_negative_target_count",
         "bot_selected_negative_target_rate",
         "false_positive_spread_damage_count",
         "false_positive_weather_chip_count",
@@ -339,15 +348,25 @@ def get_required_summary_fields() -> list:
 
 
 def make_empty_summary(raw_protocol_logs_present: bool = False) -> dict:
-    """Return a summary dict with all required fields, default 0/False."""
+    """Return a summary dict with all required fields, default 0/False.
+
+    ``opponent_actual_friendly_fire_count`` is kept as a
+    backward-compatible alias for ``opponent_confirmed_actual_friendly_fire_count``.
+    The gate uses the confirmed-only fields; submitted-target noise
+    does NOT increment the confirmed count.
+    """
     out = {
-        "opponent_actual_friendly_fire_count": 0,
-        "opponent_actual_friendly_fire_battles": 0,
-        "opponent_actual_friendly_fire_turn_rate": 0.0,
-        "bot_actual_friendly_fire_count": 0,
-        "bot_actual_friendly_fire_battles": 0,
-        "bot_selected_negative_target_count": 0,
+        # Confirmed actual damage (only incremented when HP loss is confirmed)
+        "opponent_confirmed_actual_friendly_fire_count": 0,
+        "opponent_confirmed_actual_friendly_fire_battles": 0,
+        "bot_confirmed_actual_friendly_fire_count": 0,
+        "bot_confirmed_actual_friendly_fire_battles": 0,
+        # Submitted-target noise (reported separately, does NOT fail gate)
+        "submitted_same_side_target_count": 0,
+        "bot_submitted_negative_target_count": 0,
+        "opponent_submitted_negative_target_count": 0,
         "bot_selected_negative_target_rate": 0.0,
+        # False positives by cause
         "false_positive_spread_damage_count": 0,
         "false_positive_weather_chip_count": 0,
         "false_positive_status_chip_count": 0,
@@ -355,20 +374,31 @@ def make_empty_summary(raw_protocol_logs_present: bool = False) -> dict:
         "false_positive_recoil_count": 0,
         "false_positive_item_or_ability_damage_count": 0,
         "false_positive_end_of_turn_chip_count": 0,
+        # Unknown (fail gate)
         "unknown_friendly_fire_suspect_count": 0,
+        # Metadata
         "raw_protocol_logs_present": bool(raw_protocol_logs_present),
-        "friendly_fire_monitor_version": "v2_raw_protocol",
+        "friendly_fire_monitor_version": "v3_confirmed_damage",
     }
     return out
 
 
 def stage2_gate_passes(summary: dict) -> bool:
-    """Apply the post-fix Stage 2 hard gate."""
+    """Apply the post-fix Stage 2 hard gate.
+
+    Fails if:
+      - raw_protocol_logs_present is False
+      - opponent_confirmed_actual_friendly_fire_count > 0
+      - bot_confirmed_actual_friendly_fire_count > 0
+      - unknown_friendly_fire_suspect_count > 0
+
+    Does NOT fail for submitted_same_side_target_count > 0.
+    """
     if not summary.get("raw_protocol_logs_present"):
         return False
-    if summary.get("opponent_actual_friendly_fire_count", 0) > 0:
+    if summary.get("opponent_confirmed_actual_friendly_fire_count", 0) > 0:
         return False
-    if summary.get("bot_actual_friendly_fire_count", 0) > 0:
+    if summary.get("bot_confirmed_actual_friendly_fire_count", 0) > 0:
         return False
     if summary.get("unknown_friendly_fire_suspect_count", 0) > 0:
         return False

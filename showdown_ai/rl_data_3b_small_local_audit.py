@@ -181,14 +181,22 @@ class RawCaptureBot(DoublesDamageAwarePlayer):
         super().__init__(*args, **kwargs)
         self._raw_callback = raw_callback
 
-    def _handle_battle_message(self, split_msg: list) -> None:
+    def _handle_battle_message(self, split_messages: list) -> None:
+        """Override to capture each raw message before
+        passing to the superclass.
+
+        ``split_messages`` is a ``List[List[str]]`` — a batch
+        of messages, each split on ``|``.
+        """
         try:
             if self._raw_callback is not None:
-                self._raw_callback("|".join(split_msg))
+                for msg in split_messages:
+                    raw_line = "|".join(msg)
+                    self._raw_callback(raw_line)
         except Exception:
             pass
         try:
-            return super()._handle_battle_message(split_msg)
+            return super()._handle_battle_message(split_messages)
         except Exception:
             return None
 
