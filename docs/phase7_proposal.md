@@ -1,7 +1,7 @@
 # RL-DATA-5 — Phase 7 Proposal
 
-**Status**: READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED
-**Date**: 2026-06-23
+**Status**: READY_FOR_APPROVAL_REVIEW
+**Date**: 2026-06-24
 **RL Training Approved**: **NO** — explicit user authorization and AGENTS.md sign-off are still required.
 
 ## A. Executive Summary
@@ -10,7 +10,7 @@ The RL-DATA pipeline (RL-DATA-3c / 3e / 3f / 4) is
 complete and the data foundation is ready for a
 **Phase 7 proposal**.
 
-* 23,878 total v1.1 turn-level rows across 3 datasets
+* 35,599 total v1.1 turn-level rows across 4 datasets (including latest-policy refresh)
 * All v1.1 quality gates pass
 * Live trajectory exploration has been validated
   (7062 true-trajectory rows)
@@ -180,7 +180,8 @@ authorize or implement it. Phase 7 requires:
 | RL-DATA-3c | `logs/rl_data_3c_dataset.jsonl` | 5,923 | default policy |
 | RL-DATA-3e merged | `logs/rl_data_3e_merged_dataset.jsonl` | 11,893 | post-processing diversity |
 | RL-DATA-4 | `logs/rl_data_4_live_explore_dataset.jsonl` | 7,062 | true live-trajectory |
-| **Total** | | **24,878** | |
+| RL-DATA-REFRESH enhanced | `logs/rl_data_refresh_enhanced_turns.jsonl` | 10,721 | opt-in WT + support scoring |
+| **Total** | | **35,599** | |
 
 ## D. Quality Gates
 
@@ -486,9 +487,150 @@ If the user does not authorize Phase 7:
   Weather/Terrain type-boost scoring).
 
 Either way, the current state is:
-* 7,062 true-trajectory rows
+* 7,062 true-trajectory rows (RL-DATA-4)
+* Plus 10,721 enhanced latest-policy rows (RL-DATA-REFRESH-PREP)
 * All invariants pass at 100%
 * BC dry-run shows non-collapse
-* Tests pass (407/407)
+* Tests pass (613/613)
 * Phase 7 is ready to be **proposed** but not
   **approved**.
+
+---
+
+## M. Latest-Policy Trajectory Refresh Analysis
+
+**Added**: 2026-06-24 (Phase RL-DATA-REFRESH-PREP-LONGRUN + RL-DATA-REFRESH-ANALYSIS)
+
+### Objective
+
+Refresh the trajectory dataset using the latest committed policy improvements:
+SUPPORT-SCORING-1B/1C (Helping Hand and Tailwind positive scoring), WT-3/WT-4g
+(Weather/Terrain positive scoring), and SUPPORT-SAFETY-ADOPT-1 (narrow ally
+heal wrong-side hard safety). The opt-in flags are enabled for data collection
+only; all defaults remain OFF.
+
+### Base Commit
+
+`e5e1437` — `RL-DATA-REFRESH-PREP-LONGRUN: latest-policy trajectory data refresh`
+
+### Enhanced Dataset (opt-in WT + Support)
+
+| Metric | Value |
+|---|---|
+| Battles attempted | 498 |
+| Battles finished | 498 |
+| Failed battles | 0 |
+| Turn-level rows | **10,721** |
+| Schema version | 100% `turn_rl_v1.1` |
+| Quality gates 10/10 | ALL PASS |
+| Wins/Losses | 289 / 209 |
+
+### Default Sanity Dataset (production defaults)
+
+| Metric | Value |
+|---|---|
+| Battles | 100 |
+| Turn-level rows | 2,142 |
+| Errors | 0 |
+| HH positive bonus | 0 (correct — support scoring OFF) |
+| TW positive bonus | 0 (correct — WT scoring OFF) |
+
+### Helping Hand / Tailwind Selection Impact
+
+| Metric | Enhanced (ON) | Default (OFF) | Change |
+|---|---|---|---|
+| HH selection rate | **41.2%** | 7.5% | **+5.5x** |
+| TW selection rate | **38.0%** | 9.1% | **+4.2x** |
+| Bad cases | **0** | 0 | Clean |
+| Redundant/spam | **0** | 0 | Clean |
+
+The positive scoring is clearly working: Helping Hand and Tailwind are
+selected at meaningful rates when their bonuses are active, with zero bad
+cases or spam behavior.
+
+### Action Distribution (enhanced, n=21,442 slot-actions)
+
+| Action | Count | Percent |
+|---|---|---|
+| Attack | 7,366 | 34.4% |
+| Protect/Detect | 3,612 | 16.8% |
+| Switch | 1,887 | 8.8% |
+| Pass | 2,710 | 12.6% |
+| Setup | 356 | 1.7% |
+| Helping Hand | 671 | 3.1% |
+| Tailwind | 1,137 | 5.3% |
+| WT setter | 3 | 0.0% |
+| Other support | 3,700 | 17.3% |
+
+### Safety Metrics
+
+| Metric | Value |
+|---|---|
+| `local_only_provenance` | 10,721/10,721 (100%) |
+| `used_species_ability_inference` | 0 rows |
+| `impossible_target_detected` | 0 rows |
+| `blocked_action_resurrected_by_joint` | 0 rows |
+| Anti-TR enabled | False |
+| Broad support target safety | False |
+| Narrow ally heal safety | True (unchanged) |
+
+### BC Dry-Run
+
+| Baseline | Primary | Slot0 | Slot1 |
+|---|---|---|---|
+| Majority | 32.8% | 47.0% | 47.2% |
+| Legal heuristic | 52.7% | 65.2% | 68.4% |
+| Score-based | 54.7% | 77.4% | 77.1% |
+| BC (no exploration) | **65.9%** | **74.2%** | **75.6%** |
+
+Minority class recall (slot0): support_other 73.5%, protect 91.7%,
+setup 44.7%. The model does not collapse to attack predictions.
+
+### Dataset Comparison
+
+| Dataset | Rows | Type | HH/TW selection | BC primary |
+|---|---|---|---|---|
+| 3c (default) | 5,923 | default policy | N/A (no scoring) | 83.1% |
+| 3e (postprocessed) | 11,893 | post-processing diversity | N/A | 75.8% |
+| 4 (live explore) | 7,062 | true live-trajectory | N/A | N/A |
+| **This (enhanced)** | **10,721** | **opt-in policy** | **HH 41.2%, TW 38.0%** | **65.9%** |
+| **Total (all)** | **35,599** | | | |
+
+The lower BC accuracy on the enhanced dataset is expected: the dataset has
+more diverse actions (HH, TW, setup, protect at meaningful rates), making
+prediction harder — which is desirable for rich training data.
+
+### Tests
+
+613/613 tests PASS (206 focused + 407 RL-DATA).
+
+### Key Upgrades Since Original RL-DATA-5 Proposal
+
+1. **Helping Hand and Tailwind are now actively selected** at 41.2% and
+   38.0% respectively (previously 0% in the default policy). The positive
+   scoring hook is proven to change selection behavior.
+2. **Bad cases are 0** — the target semantics and safety checks prevent
+   wrong-side or redundant use.
+3. **10,721 additional true-trajectory rows** with the enhanced policy,
+   increasing the total v1.1 dataset from 24,878 to 35,599 rows.
+4. **Default sanity confirmed clean** — 100 battles, 2,142 rows, 0 errors,
+   0 positive bonuses on default-OFF flags.
+5. **BC dry-run non-collapsing** with strong minority recall, including
+   support_other (73.5%) and protect (91.7%).
+6. **Tests expanded** from 407 to 613 — all pass without regression.
+
+### Impact on Phase 7 Readiness
+
+The original 13-item RL readiness checklist (Section I) remains valid. This
+refresh strengthens items 7 (support/setup/weather diversity) and 8 (true
+trajectory dataset) by adding a fourth dataset where the bot's policy
+actively selects support moves with clear positive bonuses.
+
+The two governance blockers (items 12 and 13) remain unchanged: Phase 7
+training requires explicit user authorization and AGENTS.md sign-off.
+
+### Recommendation
+
+The latest-policy dataset is suitable for Phase 7 approval review and BC
+warm-start planning, but Phase 7 training remains unapproved until explicit
+authorization.

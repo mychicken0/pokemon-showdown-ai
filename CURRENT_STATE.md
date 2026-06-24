@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-23 (Asia/Bangkok) — Phase 6.4.0 handoff sync. WT-2 closed. Phase 6.3.8a narrow flag integrated. Phase 6.3.9 paired-test paths fixed. SUPPORT-AUDIT-1 support-move inventory added. RL-DATA-1..5 completed: v1.1 schema + instrumentation, 3 datasets (5,923 / 11,893 / 7,062 rows), all quality gates pass, live trajectory exploration validated. RL-DATA-5 Phase 7 proposal package completed: READY_FOR_PHASE7_PROPOSAL_BUT_NOT_APPROVED (training NOT approved, blocked on user authorization + AGENTS.md sign-off). WT-3..WT-4g Weather/Terrain positive scoring completed as opt-in: WT4G_OPT_IN_READY_DEFAULT_OFF (opt-in implemented, default OFF preserved, 517/517 tests pass, not default-adopted, no 100-pair benchmark required). See `docs/wt_weather_terrain_opt_in.md` for the canonical WT summary.
+Last updated: 2026-06-24 (Asia/Bangkok) — Latest analysis RL-DATA-REFRESH-ANALYSIS completed. RL-DATA-REFRESH-PREP-LONGRUN produced 10,721-row enhanced dataset with opt-in WT + support scoring (Helping Hand 41.2%, Tailwind 38.0% selection rates, 0 bad cases). Phase 7 proposal updated to READY_FOR_APPROVAL_REVIEW, but Phase 7 training remains NOT approved. Tests: 613/613 pass. See `docs/phase7_proposal.md` for full proposal.
 
 This file is the short handoff. It should answer: what is true now, what is
 blocked, and what should happen next. For historical phase details, use
