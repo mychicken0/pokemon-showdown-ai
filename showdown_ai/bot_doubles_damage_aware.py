@@ -39,6 +39,51 @@ _PROTECT_LIKE_MOVE_IDS_B12 = frozenset({
 })
 
 
+try:
+    from rl_data_3b_ff_monitor_v2 import SPREAD_MOVE_IDS as _FF_SPREAD_MOVES
+except Exception:
+    _FF_SPREAD_MOVES = frozenset()
+
+
+def _is_same_side_single_target_damage_blocked(order: Any) -> bool:
+    """Return True if the order is a single-target damaging
+    move targeting self or ally (same side). Such moves
+    would be executed as actual same-side damage by the
+    server and must be blocked.
+
+    Blocked: PHYSICAL/SPECIAL damaging moves with target < 0
+    NOT blocked: status moves, spread moves, switch/pass.
+
+    This is a narrow hard safety against the confirmed
+    friendly-fire events found in the 20-battle smoke:
+    ``PHASE7_SMOKE20_V3_REEVALUATION_BLOCK_CONFIRMED_ACTUAL_FRIENDLY_FIRE``
+    (see ``logs/phase7_data_expansion_smoke20_v3_reevaluation/``).
+    """
+    target = getattr(order, "move_target", 0)
+    if target >= 0:
+        return False  # opponent or field target; not blocked
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False  # pass / unknown order
+    if not hasattr(inner, "category"):
+        return False  # not a move (switch, etc.)
+    try:
+        cat_str = str(getattr(inner, "category", "")).lower()
+    except Exception:
+        return False
+    if cat_str == "status":
+        return False  # status/support moves targeting ally are legit
+    # PHYSICAL or SPECIAL -> damaging move
+    # Spread moves cause legitimate splash to ally; do not block
+    try:
+        mid = str(getattr(inner, "id", "")).lower()
+        if mid in _FF_SPREAD_MOVES:
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def _is_attack_action_under_expected_faint(order):
     """Phase BEHAVIOR-12: check if an action is a
     non-Protect, non-switch, non-pass action.
@@ -6344,6 +6389,16 @@ class DoublesDamageAwarePlayer(Player):
             )
         except Exception:
             _support_pending_bonus = 0.0
+
+        # Phase 7: Block same-side single-target damaging moves
+        # to prevent actual friendly-fire. The monitor v3
+        # confirmed 20 such events in the 20-battle smoke:
+        # 17 opponent-side, 3 bot-side (Tapu Lele Psychic,
+        # Clefable Moonblast, Garchomp Dragon Claw targeting
+        # own side). The raw protocol is the ground truth.
+        # See logs/phase7_data_expansion_smoke20_v3_reevaluation/.
+        if _is_same_side_single_target_damage_blocked(order):
+            return 0.0
 
         # Defensive mock safety initialization
         for attr in (
