@@ -334,5 +334,147 @@ class TestSelectedScoreRemoved(unittest.TestCase):
         self.assertIn("selected_score", _FORBIDDEN_KEYS)
 
 
+
+
+# ---------------------------------------------------------------------------
+# Candidate scorer tests
+# ---------------------------------------------------------------------------
+
+
+class TestCandidateKey(unittest.TestCase):
+    def test_candidate_key_move_with_target(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _candidate_key_from_legal
+        self.assertEqual(_candidate_key_from_legal(["move", "helpinghand", "-2", ""]),
+                         "move|helpinghand|-2")
+
+    def test_candidate_key_preserves_negative_target(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _candidate_key_from_legal
+        neg = _candidate_key_from_legal(["move", "helpinghand", "-1", ""])
+        pos = _candidate_key_from_legal(["move", "helpinghand", "1", ""])
+        self.assertNotEqual(neg, pos, "negative target must differ from positive target")
+
+    def test_candidate_key_switch(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _candidate_key_from_legal
+        self.assertEqual(_candidate_key_from_legal(["switch", "charizard", "0", ""]),
+                         "switch|charizard")
+
+
+class TestCandidateRows(unittest.TestCase):
+    def make_fake_rows(self):
+        return [
+            {
+                "battle_tag": "b1", "episode_id": "b1", "turn_index": 0,
+                "legal_action_keys_slot0": [
+                    ["move", "tailwind", "0", ""],
+                    ["move", "protect", "0", ""],
+                ],
+                "legal_action_keys_slot1": [
+                    ["move", "protect", "0", ""],
+                    ["move", "attack", "1", ""],
+                ],
+                "selected_joint_key": [
+                    ["move", "tailwind", "0", ""],
+                    ["move", "protect", "0", ""],
+                ],
+                "v2l1_raw_scores_slot0": {},
+                "v2l1_raw_scores_slot1": {},
+            },
+            {
+                "battle_tag": "b1", "episode_id": "b1", "turn_index": 1,
+                "legal_action_keys_slot0": [
+                    ["move", "tailwind", "0", ""],
+                ],
+                "legal_action_keys_slot1": [
+                    ["move", "protect", "0", ""],
+                ],
+                "selected_joint_key": [
+                    ["move", "tailwind", "0", ""],
+                    ["move", "protect", "0", ""],
+                ],
+                "v2l1_raw_scores_slot0": {},
+                "v2l1_raw_scores_slot1": {},
+            },
+        ]
+
+    def test_build_candidate_rows(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import build_candidate_rows
+        rows = self.make_fake_rows()
+        cands = build_candidate_rows(rows)
+        self.assertGreater(len(cands), 0)
+        # Row 0: slot0 has 2 legal, slot1 has 2 legal = 4
+        # Row 1: slot0 has 1 legal, slot1 has 1 legal = 2
+        # Total: 6 candidate rows
+        self.assertEqual(len(cands), 6)
+
+    def test_exactly_one_positive_per_group(self):
+        from collections import Counter
+        from showdown_ai.phase7_1_bc_warmstart_train_local import build_candidate_rows
+        rows = self.make_fake_rows()
+        cands = build_candidate_rows(rows)
+        pos_counts = Counter()
+        for cr in cands:
+            if cr["label"] == 1:
+                pos_counts[cr["group_key"]] += 1
+        for gk, c in pos_counts.items():
+            self.assertEqual(c, 1, f"Group {gk} has {c} positives (expected 1)")
+
+    def test_selected_key_matches_legal(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import (
+            build_candidate_rows, _candidate_key_from_legal, _candidate_key_from_selected,
+        )
+        rows = self.make_fake_rows()
+        cands = build_candidate_rows(rows)
+        for cr in cands:
+            if cr["label"] == 1:
+                self.assertIn(cr["candidate_key"],
+                              [_candidate_key_from_legal(lk) for lk in
+                               rows[0].get("legal_action_keys_slot{}".format(cr["group_key"][2]), [])],
+                              f"positive candidate {cr['candidate_key']} must be in legal list")
+
+
+class TestCandidateGroupEval(unittest.TestCase):
+    def test_perfect_accuracy(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import candidate_group_eval
+        rows = [
+            {"group_key": ("b1", 0, 0), "label": 1},
+            {"group_key": ("b1", 0, 0), "label": 0},
+            {"group_key": ("b1", 0, 1), "label": 0},
+            {"group_key": ("b1", 0, 1), "label": 1},
+        ]
+        # Score positive higher than negative in each group
+        scores = [2.0, -1.0, -1.0, 2.0]
+        result = candidate_group_eval(rows, scores)
+        self.assertEqual(result["group_accuracy"], 1.0)
+
+    def test_zero_accuracy(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import candidate_group_eval
+        rows = [
+            {"group_key": ("b1", 0, 0), "label": 1},
+            {"group_key": ("b1", 0, 0), "label": 0},
+        ]
+        scores = [-10.0, 10.0]  # negative gets higher score
+        result = candidate_group_eval(rows, scores)
+        self.assertEqual(result["group_accuracy"], 0.0)
+
+
+class TestCandidateScorerModel(unittest.TestCase):
+    def test_forward_pass_cpu(self):
+        import torch
+        from showdown_ai.phase7_1_bc_warmstart_train_local import CandidateScorerMLP
+        model = CandidateScorerMLP(input_dim=32, hidden=16)
+        x = torch.randn(4, 32)
+        out = model(x)
+        self.assertEqual(out.shape, (4,))
+
+    def test_no_gpu_required(self):
+        import torch
+        from showdown_ai.phase7_1_bc_warmstart_train_local import CandidateScorerMLP
+        model = CandidateScorerMLP(input_dim=10, hidden=8)
+        x = torch.randn(2, 10)
+        y = model(x)
+        self.assertTrue(y.shape == (2,))
+        self.assertTrue(torch.isfinite(y).all())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,7 +21,7 @@ import os
 import random
 import sys
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -293,6 +293,150 @@ class BCMlp(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# Candidate scorer utilities
+# ---------------------------------------------------------------------------
+
+
+def _candidate_key_from_legal(lk: List) -> str:
+    """Build a candidate key string from a V4a legal action key,
+    preserving target sign."""
+    if not isinstance(lk, (list, tuple)) or len(lk) < 2:
+        return "pass"
+    kind = _norm(lk[0])
+    if kind == "move":
+        mid = _norm(lk[1])
+        target = str(lk[2]) if len(lk) > 2 and lk[2] is not None else "0"
+        return f"move|{mid}|{target}"
+    if kind == "switch":
+        species = _norm(lk[1])
+        return f"switch|{species}"
+    return "pass"
+
+
+def _candidate_key_from_selected(sk: List) -> str:
+    """Same format as _candidate_key_from_legal for selected actions."""
+    return _candidate_key_from_legal(sk)
+
+
+def build_candidate_rows(rows: List[Dict], use_v2l1: bool = True) -> List[Dict]:
+    """Build one row per legal candidate per slot per turn.
+
+    Returns list of dicts with keys:
+        group_key: (battle_tag, turn_index, slot)
+        candidate_key: string matching _candidate_key_from_legal
+        label: 1 if candidate matches selected action, else 0
+        features: dict of candidate-level features (action type, move id, etc.)
+        v2l1_score: float or None
+    """
+    cand_rows = []
+    for r in rows:
+        bt = r.get("battle_tag", "") or r.get("episode_id", "?")
+        turn = r.get("turn_index", 0)
+        sk = r.get("selected_joint_key", []) or []
+
+        for slot in (0, 1):
+            legal = r.get(f"legal_action_keys_slot{slot}", []) or []
+            vscores = r.get(f"v2l1_raw_scores_slot{slot}", {}) or {}
+
+            selected_key = _candidate_key_from_selected(
+                sk[slot] if len(sk) > slot else ["pass"]
+            )
+
+            for lk in legal:
+                cand_key = _candidate_key_from_legal(lk)
+                # v2l1 score lookup
+                v2l1 = vscores.get(cand_key, 0.0)
+                if v2l1 is None:
+                    v2l1 = 0.0
+                try:
+                    v2l1 = float(v2l1)
+                except (ValueError, TypeError):
+                    v2l1 = 0.0
+
+                cand_rows.append({
+                    "group_key": (bt, turn, slot),
+                    "candidate_key": cand_key,
+                    "label": 1 if cand_key == selected_key else 0,
+                    "action_kind": _norm(lk[0]) if lk else "unknown",
+                    "action_id": _norm(lk[1]) if isinstance(lk, (list, tuple)) and len(lk) > 1 and lk[1] else "",
+                    "action_target": str(lk[2]) if isinstance(lk, (list, tuple)) and len(lk) > 2 and lk[2] is not None else "0",
+                    "slot": slot,
+                    "v2l1_score": v2l1,
+                    "legal_count": len(legal),
+                })
+    return cand_rows
+
+
+def candidate_group_eval(rows: List[Dict], scores: List[float]) -> Dict:
+    """Group candidates by (battle_tag, turn, slot) and evaluate argmax.
+
+    Args:
+        rows: list of candidate row dicts (in same order as scores)
+        scores: model output scores for each candidate row
+
+    Returns:
+        dict with grouped metrics
+    """
+    groups = defaultdict(list)
+    for r, s in zip(rows, scores):
+        groups[r["group_key"]].append({"score": s, "label": r["label"]})
+
+    correct = 0
+    total = 0
+    ranks = []
+    mrrs = []
+    for gkey, members in groups.items():
+        total += 1
+        best_idx = max(range(len(members)), key=lambda i: members[i]["score"])
+        if members[best_idx]["label"] == 1:
+            correct += 1
+        # Rank of the positive candidate
+        sorted_m = sorted(members, key=lambda x: -x["score"])
+        for rank, m in enumerate(sorted_m):
+            if m["label"] == 1:
+                ranks.append(rank + 1)
+                mrrs.append(1.0 / (rank + 1))
+                break
+
+    accuracy = correct / max(total, 1)
+    mean_rank = sum(ranks) / max(len(ranks), 1)
+    median_rank = sorted(ranks)[len(ranks) // 2] if ranks else 0
+    mrr = sum(mrrs) / max(len(mrrs), 1)
+
+    return {
+        "group_accuracy": round(accuracy, 4),
+        "group_count": total,
+        "mean_selected_rank": round(mean_rank, 2),
+        "median_selected_rank": median_rank,
+        "mrr": round(mrr, 4),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Candidate scorer model
+# ---------------------------------------------------------------------------
+
+
+class CandidateScorerMLP(nn.Module):
+    """Small MLP for per-candidate binary scoring.
+    ponytail: one hidden layer, binary output.
+    """
+    def __init__(self, input_dim: int, hidden: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden, hidden // 2),
+            nn.ReLU(),
+            nn.Linear(hidden // 2, 1),
+        )
+
+    def forward(self, x):
+        return self.net(x).squeeze(-1)
+
+
+# ---------------------------------------------------------------------------
 # Battle-aware split
 # ---------------------------------------------------------------------------
 
@@ -398,6 +542,27 @@ def main():
                         default="none", help="class weighting mode for cross-entropy loss")
     parser.add_argument("--class-weight-clip", type=float, default=5.0,
                         help="max class weight for clipping")
+    # Debug/profiling flags
+    parser.add_argument("--max-turn-rows", type=int, default=0,
+                        help="limit raw turn rows read from JSONL (0=unlimited)")
+    parser.add_argument("--candidate-debug-timing", action="store_true",
+                        help="print timing logs for candidate scorer path")
+    parser.add_argument("--candidate-dry-run-build", action="store_true",
+                        help="build candidate rows/features then exit before training")
+    # Candidate scorer flags
+    parser.add_argument("--mode", choices=["global_classifier", "candidate_scorer"],
+                        default="global_classifier",
+                        help="training mode: global label classifier or per-candidate scorer")
+    parser.add_argument("--candidate-score-feature", choices=["none", "v2l1"],
+                        default="v2l1",
+                        help="use per-candidate v2l1 raw score as candidate feature")
+    parser.add_argument("--candidate-loss", choices=["bce", "weighted_bce"],
+                        default="weighted_bce",
+                        help="loss type for candidate scorer")
+    parser.add_argument("--candidate-pos-weight", default="auto",
+                        help="positive class weight: 'auto' or float")
+    parser.add_argument("--candidate-eval-grouped", action="store_true",
+                        help="evaluate candidate scorer by group argmax")
     args = parser.parse_args()
 
     # Device
@@ -418,14 +583,332 @@ def main():
     log_dir = Path(args.report).parent
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load dataset
+    # Load dataset (optionally limited)
     print(f"\nLoading dataset: {args.dataset}")
     rows = []
     with open(args.dataset) as f:
-        for line in f:
+        for i, line in enumerate(f):
+            if args.max_turn_rows and i >= args.max_turn_rows:
+                break
             if line.strip():
                 rows.append(json.loads(line))
     print(f"Total rows: {len(rows)}")
+
+    # Candidate scorer path
+    if args.mode == "candidate_scorer":
+        _t0 = time.perf_counter()
+        print("\n=== Candidate Scorer Mode ===")
+        print("Building candidate rows...")
+        cand_rows = build_candidate_rows(rows, use_v2l1=(args.candidate_score_feature == "v2l1"))
+        _t1 = time.perf_counter()
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] build_candidate_rows: {_t1-_t0:.2f}s")
+        groups = set(r["group_key"] for r in cand_rows)
+        pos = sum(1 for r in cand_rows if r["label"] == 1)
+        neg = len(cand_rows) - pos
+        print(f"  Candidate rows: {len(cand_rows)}")
+        print(f"  Groups: {len(groups)}")
+        print(f"  Positive: {pos} ({100*pos/max(len(cand_rows),1):.2f}%)")
+        print(f"  Negative: {neg}")
+        print(f"  Imbalance: {neg/max(pos,1):.1f}:1")
+
+        # Split by battle
+        cand_train_idx, cand_val_idx, cand_test_idx, _, _, _ = battle_split(
+            rows, train_pct=0.7, val_pct=0.15, seed=args.seed
+        )
+        # Map candidate rows by their original row index (O(N) hash-based)
+        turn_to_row = {(r.get("battle_tag", ""), r.get("turn_index", 0)): i
+                       for i, r in enumerate(rows)}
+        row_to_cand = defaultdict(list)
+        for ci, cr in enumerate(cand_rows):
+            key = (cr["group_key"][0], cr["group_key"][1])
+            ri = turn_to_row.get(key)
+            if ri is not None:
+                row_to_cand[ri].append(ci)
+
+        train_cid = [ci for i in cand_train_idx for ci in row_to_cand.get(i, [])]
+        val_cid = [ci for i in cand_val_idx for ci in row_to_cand.get(i, [])]
+        test_cid = [ci for i in cand_test_idx for ci in row_to_cand.get(i, [])]
+        print(f"  Train candidates: {len(train_cid)}")
+        print(f"  Val candidates:   {len(val_cid)}")
+        print(f"  Test candidates:  {len(test_cid)}")
+        _t2 = time.perf_counter()
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] split_and_map: {_t2-_t1:.2f}s")
+
+        # Feature encoding for candidate rows
+        _t3 = time.perf_counter()
+        act_kinds = sorted(set(cr["action_kind"] for cr in cand_rows))
+        act_ids_vocab = sorted(set(cr["action_id"] for cr in cand_rows if cr["action_id"]))
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] vocab_build: {time.perf_counter()-_t3:.2f}s")
+
+        # Dry-run: exit before training
+        if args.candidate_dry_run_build:
+            print("  [DRY-RUN] build complete, exiting before training")
+            return
+
+        def encode_candidate(cr: Dict) -> torch.Tensor:
+            feats = []
+            # Action kind one-hot
+            ak_onehot = [0.0] * len(act_kinds)
+            for i, ak in enumerate(act_kinds):
+                if ak == cr["action_kind"]:
+                    ak_onehot[i] = 1.0
+                    break
+            feats.extend(ak_onehot)
+            # Action ID one-hot (top 200 common ids + fallback)
+            aid_onehot = [0.0] * min(len(act_ids_vocab), 200)
+            for i, aid in enumerate(act_ids_vocab[:200]):
+                if aid == cr["action_id"]:
+                    aid_onehot[i] = 1.0
+                    break
+            feats.extend(aid_onehot)
+            # Target as float
+            try:
+                tgt = float(cr["action_target"])
+            except (ValueError, TypeError):
+                tgt = 0.0
+            feats.append(tgt / 4.0)
+            # Slot
+            feats.append(float(cr["slot"]))
+            # Legal count normalized
+            feats.append(cr["legal_count"] / 30.0)
+            # V2L1 score if available
+            v2l1 = cr.get("v2l1_score", 0.0)
+            feats.append(v2l1 / 1000.0)
+            return torch.tensor(feats, dtype=torch.float32)
+
+        cand_input_dim = len(encode_candidate(cand_rows[0]))
+        print(f"  Candidate feature dim: {cand_input_dim}")
+        _t4 = time.perf_counter()
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] encode_function: {_t4-_t3:.2f}s")
+
+        # Compute pos_weight
+        pos_count = sum(1 for i in train_cid if cand_rows[i]["label"] == 1)
+        neg_count = len(train_cid) - pos_count
+        if args.candidate_pos_weight == "auto":
+            pos_weight_val = neg_count / max(pos_count, 1)
+            pos_weight_val = min(pos_weight_val, 20.0)
+        else:
+            pos_weight_val = float(args.candidate_pos_weight)
+        pos_weight_t = torch.tensor([pos_weight_val], dtype=torch.float).to(device)
+        print(f"  Positive weight: {pos_weight_val:.2f}")
+
+        # Datasets
+        class CandDataset(Dataset):
+            def __init__(self, cids, cand_rows, enc_fn):
+                self.cids = cids
+                self.rows = cand_rows
+                self.enc = enc_fn
+            def __len__(self):
+                return len(self.cids)
+            def __getitem__(self, idx):
+                cr = self.rows[self.cids[idx]]
+                return self.enc(cr), float(cr["label"])
+
+        train_cds = CandDataset(train_cid, cand_rows, encode_candidate)
+        val_cds = CandDataset(val_cid, cand_rows, encode_candidate)
+        test_cds = CandDataset(test_cid, cand_rows, encode_candidate)
+        train_cl = DataLoader(train_cds, batch_size=min(args.batch_size * 4, 4096), shuffle=True)
+        val_cl = DataLoader(val_cds, batch_size=min(args.batch_size * 4, 4096))
+        test_cl = DataLoader(test_cds, batch_size=min(args.batch_size * 4, 4096))
+
+        # Model
+        model = CandidateScorerMLP(cand_input_dim, hidden=args.hidden // 2).to(device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=2
+        )
+        loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight_t)
+
+        # Training
+        best_val_loss = float("inf")
+        patience_counter = 0
+        history = []
+        print(f"\nTraining candidate scorer: {args.epochs} epochs")
+        train_start = time.time()
+
+        for epoch in range(1, args.epochs + 1):
+            model.train()
+            train_loss = 0.0
+            tb = 0
+            for xb, yb in train_cl:
+                xb, yb = xb.to(device), yb.to(device)
+                optimizer.zero_grad(set_to_none=True)
+                logits = model(xb)
+                loss = loss_fn(logits, yb)
+                loss.backward()
+                optimizer.step()
+                train_loss += float(loss.detach().cpu())
+                tb += 1
+            train_loss /= max(tb, 1)
+
+            model.eval()
+            val_loss = 0.0
+            vb = 0
+            with torch.no_grad():
+                for xb, yb in val_cl:
+                    xb, yb = xb.to(device), yb.to(device)
+                    logits = model(xb)
+                    loss = loss_fn(logits, yb)
+                    val_loss += float(loss.detach().cpu())
+                    vb += 1
+            val_loss /= max(vb, 1)
+            scheduler.step(val_loss)
+            history.append({"epoch": epoch, "train_loss": round(train_loss, 4),
+                            "val_loss": round(val_loss, 4)})
+            print(f"  epoch {epoch:2d}: train_loss={train_loss:.4f} val_loss={val_loss:.4f}")
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                patience_counter = 0
+                torch.save(model.state_dict(), str(out_dir / "model.pt"))
+            else:
+                patience_counter += 1
+                if patience_counter >= args.early_stopping_patience:
+                    print(f"  Early stopping at epoch {epoch}")
+                    break
+
+        elapsed = time.time() - train_start
+        print(f"Training time: {elapsed:.1f}s")
+        model.load_state_dict(torch.load(str(out_dir / "model.pt"), weights_only=True))
+
+        # Evaluation
+        def cand_evaluate(cids):
+            """Batch evaluate candidates in minibatches for speed."""
+            model.eval()
+            all_scores = []
+            all_labels = []
+            bs = min(args.batch_size * 4, 4096)
+            with torch.no_grad():
+                for start in range(0, len(cids), bs):
+                    batch = cids[start:start + bs]
+                    xs = torch.stack([encode_candidate(cand_rows[i]) for i in batch]).to(device)
+                    logits = model(xs).cpu().tolist()
+                    all_scores.extend(logits)
+                    all_labels.extend([cand_rows[i]["label"] for i in batch])
+            return all_scores, all_labels
+
+        _t5 = time.perf_counter()
+        train_scores, train_labels = cand_evaluate(train_cid)
+        _t6 = time.perf_counter()
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] cand_evaluate_train: {_t6-_t5:.2f}s")
+        val_scores, val_labels = cand_evaluate(val_cid)
+        test_scores, test_labels = cand_evaluate(test_cid)
+        _t7 = time.perf_counter()
+        if args.candidate_debug_timing:
+            print(f"  [TIMER] cand_evaluate_all: {_t7-_t5:.2f}s")
+
+        train_ge = candidate_group_eval([cand_rows[i] for i in train_cid], train_scores) if args.candidate_eval_grouped else {}
+        val_ge = candidate_group_eval([cand_rows[i] for i in val_cid], val_scores) if args.candidate_eval_grouped else {}
+        test_ge = candidate_group_eval([cand_rows[i] for i in test_cid], test_scores) if args.candidate_eval_grouped else {}
+
+        # Random baseline
+        rng = random.Random(args.seed + 1)
+        random_scores = [rng.random() for _ in test_scores]
+        random_ge = candidate_group_eval([cand_rows[i] for i in test_cid], random_scores)
+
+        # V2L1 heuristic baseline (use v2l1_score directly)
+        v2l1_scores = [cand_rows[i].get("v2l1_score", 0.0) for i in test_cid]
+        v2l1_ge = candidate_group_eval([cand_rows[i] for i in test_cid], v2l1_scores) if args.candidate_score_feature == "v2l1" else {}
+
+        print(f"\n  === Candidate Scorer Evaluation ===")
+        print(f"  Test groups: {test_ge.get('group_count', 0)}")
+        print(f"  Group accuracy: {test_ge.get('group_accuracy', 0):.4f}")
+        print(f"  Mean selected rank: {test_ge.get('mean_selected_rank', 0):.2f}")
+        print(f"  Median selected rank: {test_ge.get('median_selected_rank', 0)}")
+        print(f"  MRR: {test_ge.get('mrr', 0):.4f}")
+        print(f"  Random baseline accuracy: {random_ge.get('group_accuracy', 0):.4f}")
+        if v2l1_ge:
+            print(f"  V2L1 heuristic accuracy: {v2l1_ge.get('group_accuracy', 0):.4f}")
+        print(f"  Illegal prediction rate: 0.0000 (structurally enforced)")
+
+        # Save config and metrics
+        config = {
+            "mode": "candidate_scorer",
+            "dataset": args.dataset,
+            "device": str(device),
+            "seed": args.seed,
+            "epochs": args.epochs,
+            "batch_size": min(args.batch_size * 4, 4096),
+            "lr": args.lr,
+            "model": "CandidateScorerMLP",
+            "candidate_score_feature": args.candidate_score_feature,
+            "candidate_loss": args.candidate_loss,
+            "candidate_pos_weight": pos_weight_val,
+            "candidate_feature_dim": cand_input_dim,
+            "candidate_rows": len(cand_rows),
+            "groups": len(groups),
+            "train_candidates": len(train_cid),
+            "val_candidates": len(val_cid),
+            "test_candidates": len(test_cid),
+        }
+        with open(out_dir / "config.json", "w") as f:
+            json.dump(config, f, indent=2)
+
+        metrics = {
+            "config": config,
+            "training_time_s": round(elapsed, 1),
+            "random_baseline_accuracy": random_ge.get("group_accuracy"),
+            "v2l1_heuristic_accuracy": v2l1_ge.get("group_accuracy") if v2l1_ge else None,
+            "test_group_accuracy": test_ge.get("group_accuracy"),
+            "test_mrr": test_ge.get("mrr"),
+            "test_mean_selected_rank": test_ge.get("mean_selected_rank"),
+            "test_median_selected_rank": test_ge.get("median_selected_rank"),
+            "val_group_accuracy": val_ge.get("group_accuracy"),
+            "train_group_accuracy": train_ge.get("group_accuracy"),
+        }
+        with open(out_dir / "metrics.json", "w") as f:
+            json.dump(metrics, f, indent=2)
+
+        # Report
+        report = f"""# Phase 7.2D Candidate Scorer Prototype Report
+
+## Mode
+Candidate scorer (binary per-candidate model)
+
+## Config
+- Dataset: `{args.dataset}`
+- Candidate rows: {len(cand_rows)}
+- Groups: {len(groups)}
+- Pos/Neg: {pos}/{neg} ({100*pos/max(len(cand_rows),1):.2f}%)
+- Candidate feature dim: {cand_input_dim}
+- Score feature: {args.candidate_score_feature}
+- Loss: {args.candidate_loss} (pos_weight={pos_weight_val:.2f})
+- Device: {device}
+- Epochs: {len(history)}/{args.epochs}
+
+## Training
+- Training time: {elapsed:.1f}s
+- Best val loss: {best_val_loss:.4f}
+
+## Candidate Scorer Metrics (Test)
+| Metric | Value |
+|--------|------:|
+| Group accuracy | {test_ge.get('group_accuracy', 'N/A'):.4f} |
+| Mean selected rank | {test_ge.get('mean_selected_rank', 'N/A')} |
+| Median selected rank | {test_ge.get('median_selected_rank', 'N/A')} |
+| MRR | {test_ge.get('mrr', 'N/A'):.4f} |
+| Random baseline | {random_ge.get('group_accuracy', 0):.4f} |
+"""
+        if v2l1_ge:
+            report += f"| V2L1 heuristic | {v2l1_ge.get('group_accuracy', 0):.4f} |\n"
+        report += """| Illegal prediction rate | 0.0000 (structurally enforced) |
+
+## Comparison
+- Phase 7.2B constrained: slot0=45.24%, slot1=50.12%
+- Candidate scorer works per-group over 15.5 avg candidates
+"""
+
+        with open(args.report, "w") as f:
+            f.write(report)
+        print(f"\nReport: {args.report}")
+        print(f"Test group accuracy: {test_ge.get('group_accuracy', 'N/A')}")
+        print(f"Random baseline: {random_ge.get('group_accuracy', 0):.4f}")
+        return
 
     # Build encoder (needs full vocab)
     encoder = FeatureEncoder(rows)
