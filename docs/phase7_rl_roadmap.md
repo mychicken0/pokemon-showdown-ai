@@ -128,13 +128,29 @@ interaction via self-attention over the candidate set.
 - Loss: masked listwise cross-entropy
 - Prediction: argmax over valid candidates (structurally 0% illegal)
 
-**Mandatory requirements**:
-- Candidate key normalization must preserve Terastallized variant identity.
-  (V4a `['move', 'tailwind', '0', 'terastallize']` must NOT collapse to
-  `['move', 'tailwind', '0', '']`. Either use a 4-element key or flag
-  terastallized variants explicitly.)
-- Dedup/Terastallized-variant tests must be added. The 91% multi-positive
-  group bug from 7.3A must be explicitly tested and handled.
+**Candidate ordering and permutation handling**:
+- The candidate set inside a group is conceptually unordered.
+- The model must not depend on arbitrary JSON/dataset order unless the
+  order is deterministic and documented.
+- For the TransformerEncoder prototype, candidate order must be
+  deterministic. Recommended initial order:
+  1. slot id (slot 0 before slot 1 for same-turn groups, though groups
+     are already split by slot — this is a safety preference)
+  2. legal candidate index as emitted by the local legal-candidate
+     builder (V4a list order from the server)
+  3. stable action identity key (for reproducible tie-breaking)
+- No learned positional encoding in the first prototype. Candidates are
+  treated as a set; attention should rely on candidate features alone.
+- Attention mask must handle padding.
+- If using DeepSets or Set Transformer in a later iteration, prefer
+  permutation-invariant pooling over order-dependent assumptions.
+- 7.3B should test whether predictions are stable under harmless
+  candidate-order permutations where candidate identity and labels are
+  preserved. A permutation-invariance test should be part of the eval
+  suite.
+
+**See also**: Candidate Identity and Key Migration (below), which covers
+Terastallized variant handling.
 
 **What stays the same**:
 - Same 207-dim candidate features (no new flat feature families)
@@ -164,8 +180,58 @@ Requires a review checkpoint before any commit.
 - Larger memory footprint on RX 6600 8GB → limit batch size, 1–2 layers
 - Terastallized variant identity is a new requirement; may need dataset or
   key encoding changes
-- If 7.3B also fails to beat 7.2E, pause architecture exploration and
-  consider data expansion or different approach
+- See fallback plan below if 7.3B lands between 50% and the minimum gate
+
+### Candidate Identity and Key Migration
+
+7.3A found that V4a/Terastallized move variants can collapse under the
+normalized candidate key function (`_candidate_key_from_legal`), creating
+91% of groups with multiple positive labels.
+
+**Migration rules**:
+- Do **not** silently change `_candidate_key_from_legal` in the committed
+  7.2E `CandidateScorerMLP` path. That function is used by both the dataset
+  builder and the existing scorer. Changing it retroactively invalidates
+  the committed baseline.
+- For 7.3B, introduce a separate candidate identity path if needed. The
+  identity should include enough fields to distinguish variants:
+  - action type (move / switch / pass)
+  - move id or switch species
+  - target (with sign preserved)
+  - candidate index or variant id within the legal list
+  - terastallized / V4a variant marker if available
+- The 7.3B identity path should be isolated from the 7.2E path. Existing
+  7.2E behavior must remain unchanged by default.
+- Required tests before any 7.3B training:
+  - duplicate legal candidates are detected
+  - Terastallized variants do not collapse
+  - exactly one positive candidate per valid group
+  - multiple-positive groups are blocked or safely deduped with full
+    reporting (counts printed, no silent drop)
+
+### Fallback plan if 7.3B lands between 50% and minimum gate
+
+If 7.3B achieves 50–54% group accuracy (below the 54.46% minimum gate
+but above the 41% v2l1 heuristic):
+
+- Keep 7.2E Config G as the current best.
+- Do not deploy 7.3B.
+- Do not use 7.3B as the production policy.
+- Analyze whether it improves specific weak categories:
+  - ally-targeted attacks
+  - switch regression compared to v2l1
+  - v2l1-rank-1 / model-rank->3 cases
+- If it improves a weak category but loses overall accuracy, classify
+  as **useful-but-mixed**.
+- Consider using it only as an analysis tool or teacher/ensemble candidate
+  in a later explicitly planned phase.
+- Do not ensemble automatically without a separate adoption review.
+
+If 7.3B fails below 50%, pause architecture exploration and evaluate
+the data-expansion parallel track (see below).
+
+See also: [Evaluation Gates](#10-evaluation-gates-consolidated) for the
+consolidated gate table.
 
 ## 6. Phase 7.4 — Policy + Value Head
 
@@ -188,14 +254,24 @@ No PPO. No self-play.
 
 **Metrics**:
 - Policy: group accuracy, MRR, median rank (must not regress materially)
-- Value: Brier score, calibration buckets, AUC vs final outcome
+- Value: Brier score, log loss, AUC (if both outcome classes present),
+  calibration by probability bucket
+- Baseline comparison to empirical train-split win-rate prior
 - No production integration
 
 **Acceptance gates**:
 - Policy does not regress materially vs the base policy
-- Value head beats simple win-rate prior (e.g., ~50% baseline)
+- Value head beats the **empirical train-split win-rate prior**, not a
+  naive 50% assumption.
+  - Prior reports showed 289 wins / 209 losses in one dataset slice
+    (~58% win rate). The dataset win rate varies by split.
+  - The value baseline must be computed from the actual training split
+    and evaluated on a held-out battle-aware test split.
 - No leakage (no post-action fields, no selected_score, no terminal fields)
 - Tests pass
+
+See also: [Evaluation Gates](#10-evaluation-gates-consolidated) for the
+consolidated gate table.
 
 ## 7. Phase 7.5 — Offline RL / PPO Warm-Start
 
@@ -231,6 +307,9 @@ No PPO. No self-play.
 - Reward sparsity — current dataset only has terminal win/loss.
 - Delayed/horizon credit assignment is hard with ~18K groups.
 - PPO may require careful hyperparameter tuning.
+
+See also: [Evaluation Gates](#10-evaluation-gates-consolidated) for the
+consolidated gate table.
 
 ## 8. Phase 7.6 — Local Self-Play RL
 
@@ -296,18 +375,59 @@ Showdown environment.
 
 ## 11. Artifact and Commit Policy
 
+Tracking categories:
+
+| Path | Tracked? | Committed? | Notes |
+|---|---|---|---|
+| `showdown_ai/` | Yes | Only at review checkpoints | Source/test code |
+| `tests/` | Yes | Only at review checkpoints | Test code |
+| `docs/` | Yes | After review | Roadmap and design docs |
+| `logs/` | No (gitignored) | Never | Local evidence and reports |
+| `artifacts/` | No (gitignored) | Never | Model weights, configs, metrics |
+| `*.jsonl` (datasets) | No (gitignored) | Never | Raw trajectory data |
+
+Specific rules:
 - Code changes are committed only at explicit review checkpoints.
-- Artifacts go under `artifacts/phase<X>_<name>/` (gitignored).
-- Logs/reports go under `logs/phase<X>_<name>/` (gitignored).
-- Model weights are NOT committed.
-- Datasets are NOT committed.
+- Model weights, datasets, prediction dumps, and raw trajectories are
+  never committed.
+- `logs/` is local evidence and remains untracked unless explicitly
+  requested.
+- `artifacts/` is local output and remains untracked.
+- `docs/` is tracked and may be committed after review (as done with this
+  roadmap).
 - Each phase ends with:
   - A final report (`.md`) in the phase's log directory.
   - `git diff --stat` showing tracked changes.
   - `git status --short` showing tree state.
   - No commit/push unless the phase is a commit checkpoint.
 
-## 12. Open Risks
+## 12. Parallel Track: Data Expansion
+
+More diverse local-only trajectory data may improve the 7.2E baseline
+directly without architecture changes. This is a parallel track to 7.3B,
+not a replacement.
+
+**Rules**:
+- Data expansion must remain local-only. No official server.
+- No long battle collection unless explicitly approved by the user.
+- Use latest safe opt-in scoring settings only if explicitly specified.
+- Keep 7.2E Config G as the baseline. The expanded dataset must not
+  degrade the baseline when the same architecture is retrained.
+- Data expansion should have its own phase, acceptance gates, and
+  final report.
+
+**Potential future phase name**: `PHASE7_DATA_EXPANSION_PLAN`
+
+**Decisions**:
+- Data expansion is not automatic. It requires an explicit plan and user
+  approval.
+- If 7.3B succeeds, data expansion is lower priority.
+- If 7.3B fails below the minimum gate, data expansion should be
+  evaluated before a second architecture attempt.
+
+## 13. Open Risks
+
+
 
 - **Dataset bias**: the current ~10K rows reflect the current bot policy, not
   optimal play. The model can only imitate what the bot chose.
@@ -331,7 +451,7 @@ Showdown environment.
 - **Evaluation vs reality**: offline metrics may not correlate with actual
   battle win rate.
 
-## 13. Recommended Next Phase
+## 14. Recommended Next Phase
 
 `PHASE7_3B_SET_ATTENTION_RANKER_PLAN_REVIEW`
 
