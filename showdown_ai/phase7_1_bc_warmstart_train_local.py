@@ -421,14 +421,15 @@ class CandidateScorerMLP(nn.Module):
     """Small MLP for per-candidate binary scoring.
     ponytail: one hidden layer, binary output.
     """
-    def __init__(self, input_dim: int, hidden: int = 128):
+    def __init__(self, input_dim: int, hidden: int = 128, dropout: float = 0.1):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(dropout),
             nn.Linear(hidden, hidden // 2),
             nn.ReLU(),
+            nn.Dropout(dropout / 2),
             nn.Linear(hidden // 2, 1),
         )
 
@@ -561,6 +562,12 @@ def main():
                         help="loss type for candidate scorer")
     parser.add_argument("--candidate-pos-weight", default="auto",
                         help="positive class weight: 'auto' or float")
+    parser.add_argument("--candidate-pos-weight-clip", type=float, default=20.0,
+                        help="maximum positive weight clip (default 20)")
+    parser.add_argument("--candidate-hidden", type=int, default=128,
+                        help="hidden dim for candidate scorer MLP")
+    parser.add_argument("--candidate-dropout", type=float, default=0.1,
+                        help="dropout rate for candidate scorer MLP")
     parser.add_argument("--candidate-eval-grouped", action="store_true",
                         help="evaluate candidate scorer by group argmax")
     args = parser.parse_args()
@@ -690,7 +697,7 @@ def main():
         neg_count = len(train_cid) - pos_count
         if args.candidate_pos_weight == "auto":
             pos_weight_val = neg_count / max(pos_count, 1)
-            pos_weight_val = min(pos_weight_val, 20.0)
+            pos_weight_val = min(pos_weight_val, args.candidate_pos_weight_clip)
         else:
             pos_weight_val = float(args.candidate_pos_weight)
         pos_weight_t = torch.tensor([pos_weight_val], dtype=torch.float).to(device)
@@ -716,7 +723,8 @@ def main():
         test_cl = DataLoader(test_cds, batch_size=min(args.batch_size * 4, 4096))
 
         # Model
-        model = CandidateScorerMLP(cand_input_dim, hidden=args.hidden // 2).to(device)
+        model = CandidateScorerMLP(cand_input_dim, hidden=args.candidate_hidden,
+                                    dropout=args.candidate_dropout).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=2
