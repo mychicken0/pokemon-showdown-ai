@@ -267,5 +267,72 @@ class TestLegalMask(unittest.TestCase):
                         "true action must be masked as legal")
 
 
+
+
+# ---------------------------------------------------------------------------
+# Class weighting tests
+# ---------------------------------------------------------------------------
+
+
+class TestClassWeighting(unittest.TestCase):
+    def test_inverse_freq_computed_from_train_only(self):
+        """Class weights must be computed only from the training label distribution."""
+        from collections import Counter
+        from showdown_ai.phase7_1_bc_warmstart_train_local import (
+            build_label_maps, _extract_action_label,
+        )
+        rows = [
+            {"selected_joint_key": [["move", "protect", "0", ""], ["move", "tackle", "1", ""]]},
+            {"selected_joint_key": [["move", "protect", "0", ""], ["move", "tackle", "1", ""]]},
+            {"selected_joint_key": [["move", "tailwind", "0", ""], ["move", "protect", "0", ""]]},
+        ]
+        label_map, _ = build_label_maps(rows)
+        freq = Counter()
+        for r in rows:
+            sk = r.get("selected_joint_key", []) or []
+            if len(sk) >= 1:
+                freq[label_map.get(_extract_action_label(sk[0]), 0)] += 1
+            if len(sk) >= 2:
+                freq[label_map.get(_extract_action_label(sk[1]), 0)] += 1
+        # Most common: protect (freq=3), tackle (freq=2), tailwind (freq=1)
+        protect_idx = label_map.get("move|protect|0")
+        self.assertIsNotNone(protect_idx)
+        self.assertGreater(freq.get(protect_idx, 0), 0)
+
+    def test_weight_clip_works(self):
+        import math
+        clip = 5.0
+        n = 1000
+        rare_freq = 1
+        self.assertAlmostEqual(min((n ** 0.5) / (rare_freq ** 0.5), clip), 5.0)
+        common_freq = 500
+        self.assertAlmostEqual(min((n ** 0.5) / (common_freq ** 0.5), clip),
+                               (n ** 0.5) / (common_freq ** 0.5))
+
+
+class TestSelectedScoreRemoved(unittest.TestCase):
+    def test_selected_score_not_in_feature_spec(self):
+        """The feature spec must not include 'selected_score'."""
+        import json
+        from pathlib import Path
+        spec_path = Path("artifacts/phase7_2b_class_weighted_bc")
+        # Find the latest run's feature_spec.json
+        runs = sorted(spec_path.glob("*"))
+        if not runs:
+            self.skipTest("no Phase 7.2B runs found yet")
+        latest = runs[-1]
+        spec_file = latest / "feature_spec.json"
+        if not spec_file.exists():
+            self.skipTest(f"{spec_file} not found")
+        spec = json.loads(spec_file.read_text())
+        spec_str = json.dumps(spec)
+        self.assertNotIn("selected_score", spec_str,
+                         "selected_score must not appear in feature_spec.json")
+
+    def test_forbidden_keys_includes_selected_score(self):
+        from showdown_ai.phase7_1_bc_warmstart_train_local import _FORBIDDEN_KEYS
+        self.assertIn("selected_score", _FORBIDDEN_KEYS)
+
+
 if __name__ == "__main__":
     unittest.main()

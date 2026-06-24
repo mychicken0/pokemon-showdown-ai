@@ -165,7 +165,6 @@ class FeatureEncoder:
         meta_feats = [
             1.0 if r.get("unknown_support_move_detected") else 0.0,
             1.0 if r.get("used_species_ability_inference") else 0.0,
-            float(r.get("selected_score") or 0.0) / 1000.0,
             1.0 if r.get("overkill_penalty_triggered") else 0.0,
             1.0 if r.get("focus_fire_triggered") else 0.0,
             1.0 if r.get("stale_target_avoided") else 0.0,
@@ -180,7 +179,7 @@ class FeatureEncoder:
                        "legal_action_keys_slot0": [], "legal_action_keys_slot1": [],
                        "unknown_support_move_detected": False,
                        "used_species_ability_inference": False,
-                       "selected_score": 0.0, "overkill_penalty_triggered": False,
+                       "overkill_penalty_triggered": False,
                        "focus_fire_triggered": False, "stale_target_avoided": False})
         return len(dummy)
 
@@ -395,6 +394,10 @@ def main():
     parser.add_argument("--legal-mask", action="store_true",
                         help="evaluate legal-action-constrained accuracy on test set "
                              "(no retraining, uses existing model if available)")
+    parser.add_argument("--class-weighting", choices=["none", "inverse_freq", "sqrt_inverse_freq"],
+                        default="none", help="class weighting mode for cross-entropy loss")
+    parser.add_argument("--class-weight-clip", type=float, default=5.0,
+                        help="max class weight for clipping")
     args = parser.parse_args()
 
     # Device
@@ -465,6 +468,33 @@ def main():
         train_start = time.time()
         # Skip training; go straight to evaluation
     else:
+        # Class weights (computed from training labels only)
+        class_weight_tensor = None
+        if args.class_weighting != "none" and num_classes > 1:
+            freq = Counter()
+            for r in train_rows:
+                sk = r.get("selected_joint_key", []) or []
+                if len(sk) >= 1:
+                    lbl0 = _extract_action_label(sk[0])
+                    freq[label_map.get(lbl0, 0)] += 1
+                if len(sk) >= 2:
+                    lbl1 = _extract_action_label(sk[1])
+                    freq[label_map.get(lbl1, 0)] += 1
+            weights = []
+            for c in range(num_classes):
+                f = freq.get(c, 0)
+                w = max(f, 1)
+                if args.class_weighting == "inverse_freq":
+                    w = sum(freq.values()) / max(w * num_classes, 1)
+                elif args.class_weighting == "sqrt_inverse_freq":
+                    w = (sum(freq.values()) ** 0.5) / (w ** 0.5)
+                w = min(w, args.class_weight_clip)
+                weights.append(w)
+            class_weight_tensor = torch.tensor(weights, dtype=torch.float).to(device)
+            print(f"Class weighting: {args.class_weighting}, clip={args.class_weight_clip}, "
+                  f"num_classes={num_classes}, non_zero_weight_classes="
+                  f"{sum(1 for w in weights if w != weights[0])}")
+
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=2
@@ -487,8 +517,9 @@ def main():
                 xb, y0b, y1b = xb.to(device), y0b.to(device), y1b.to(device)
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(xb)
-                loss0 = F.cross_entropy(logits, y0b)
-                loss1 = F.cross_entropy(logits, y1b)
+                loss_kw = {"weight": class_weight_tensor} if class_weight_tensor is not None else {}
+                loss0 = F.cross_entropy(logits, y0b, **loss_kw)
+                loss1 = F.cross_entropy(logits, y1b, **loss_kw)
                 loss = loss0 + loss1
                 loss.backward()
                 optimizer.step()
@@ -496,7 +527,7 @@ def main():
                 train_batches += 1
             train_loss /= max(train_batches, 1)
 
-            # Validation
+            # Validation (unweighted loss for fair comparison)
             model.eval()
             val_loss = 0.0
             val_batches = 0
@@ -688,6 +719,9 @@ def main():
         "val_battles": len(val_b),
         "test_battles": len(test_b),
         "epochs_trained": len(history),
+        "class_weighting": args.class_weighting,
+        "class_weight_clip": args.class_weight_clip,
+        "selected_score_in_features": False,
     }
     with open(out_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
