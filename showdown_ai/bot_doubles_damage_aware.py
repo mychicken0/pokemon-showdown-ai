@@ -6398,7 +6398,7 @@ class DoublesDamageAwarePlayer(Player):
         # own side). The raw protocol is the ground truth.
         # See logs/phase7_data_expansion_smoke20_v3_reevaluation/.
         if _is_same_side_single_target_damage_blocked(order):
-            return 0.0
+            return -1e9
 
         # Defensive mock safety initialization
         for attr in (

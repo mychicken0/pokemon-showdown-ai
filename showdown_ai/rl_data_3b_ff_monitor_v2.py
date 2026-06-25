@@ -133,6 +133,8 @@ def classify_damage_event_from_protocol(
                 return "CONFIRMED_ACTUAL_SINGLE_TARGET_FRIENDLY_FIRE"
             else:
                 return "SUBMITTED_TARGET_NOISE_NO_CONFIRMED_DAMAGE"
+        # Status/support move targeting self or ally is not FF
+        return "NOT_FRIENDLY_FIRE"
 
     # Different side: normal opponent-targeting move
     if not same_side:
