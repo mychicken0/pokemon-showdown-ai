@@ -242,5 +242,197 @@ class TestScopeCheck(unittest.TestCase):
         self.assertNotIn("test_51", r.stdout)
 
 
+# ---------------------------------------------------------------------------
+# P0 hotfix: validator must be fail-hard AND called before any battle starts.
+# ---------------------------------------------------------------------------
+
+OPP_TEAM_OK = audit_mod.OPP_TEAM  # committed L50 team
+
+
+def _our_team_ok_dict() -> dict:
+    return {
+        "team": [
+            {"species": f"Mon{i}", "ability": "Overgrow", "level": 50,
+             "moves": ["tackle"]} for i in range(6)
+        ]
+    }
+
+
+def _our_team_missing_level_dict() -> dict:
+    d = _our_team_ok_dict()
+    d["team"][0].pop("level")
+    return d
+
+
+def _our_team_level100_dict() -> dict:
+    d = _our_team_ok_dict()
+    for p in d["team"]:
+        p["level"] = 100
+    return d
+
+
+def _our_team_5_dict() -> dict:
+    d = _our_team_ok_dict()
+    d["team"] = d["team"][:5]
+    return d
+
+
+class TestValidateAllTeamsAcceptsCurrent(unittest.TestCase):
+    def test_accepts_current_committed_teams(self):
+        # Should not raise on the real committed files.
+        audit_mod._validate_all_teams(expected_level=50)
+
+    def test_accepts_level50(self):
+        d = _our_team_ok_dict()
+        with unittest.mock.patch("builtins.open",
+                                  unittest.mock.mock_open(read_data=json.dumps(d))):
+            with unittest.mock.patch("os.path.isfile", return_value=True):
+                audit_mod._validate_all_teams(expected_level=50)
+
+
+class TestValidateAllTeamsFailHard(unittest.TestCase):
+    def test_missing_our_team_json_raises(self):
+        with unittest.mock.patch("os.path.isfile", return_value=False):
+            with self.assertRaises(ValueError):
+                audit_mod._validate_all_teams(expected_level=50)
+
+    def test_malformed_our_team_json_raises(self):
+        with unittest.mock.patch("os.path.isfile", return_value=True):
+            with unittest.mock.patch("builtins.open",
+                                      unittest.mock.mock_open(read_data="{not json")):
+                with self.assertRaises(ValueError):
+                    audit_mod._validate_all_teams(expected_level=50)
+
+    def test_our_team_5_raises(self):
+        d = _our_team_5_dict()
+        with unittest.mock.patch("builtins.open",
+                                  unittest.mock.mock_open(read_data=json.dumps(d))):
+            with unittest.mock.patch("os.path.isfile", return_value=True):
+                with self.assertRaises(ValueError):
+                    audit_mod._validate_all_teams(expected_level=50)
+
+    def test_our_team_missing_level_raises(self):
+        d = _our_team_missing_level_dict()
+        with unittest.mock.patch("builtins.open",
+                                  unittest.mock.mock_open(read_data=json.dumps(d))):
+            with unittest.mock.patch("os.path.isfile", return_value=True):
+                with self.assertRaises(ValueError):
+                    audit_mod._validate_all_teams(expected_level=50)
+
+    def test_our_team_level100_raises(self):
+        d = _our_team_level100_dict()
+        with unittest.mock.patch("builtins.open",
+                                  unittest.mock.mock_open(read_data=json.dumps(d))):
+            with unittest.mock.patch("os.path.isfile", return_value=True):
+                with self.assertRaises(ValueError):
+                    audit_mod._validate_all_teams(expected_level=50)
+
+
+class TestRunSmokeCallsValidatorBeforeAnything(unittest.TestCase):
+    """P0 hotfix: validator MUST run before read/logger/battle loop."""
+
+    def _assert_validator_runs_before(self, call_sequence: list):
+        validator_idx = None
+        for i, name in enumerate(call_sequence):
+            if name == "validator":
+                validator_idx = i
+                break
+        self.assertIsNotNone(validator_idx, "validator not called")
+        for later in ("open_team", "json_to_showdown",
+                      "audit_logger", "raw_capture", "run_single_battle"):
+            if later in call_sequence:
+                self.assertLess(
+                    validator_idx, call_sequence.index(later),
+                    f"validator must run before {later} (got order {call_sequence})",
+                )
+
+    def test_validator_called_in_run_smoke_before_io(self):
+        # Inspect source text: confirm validator call appears before
+        # the with-open(OUR_TEAM_JSON) block, json_to_showdown call,
+        # DoublesDecisionAuditLogger construction, and the battle loop.
+        import inspect
+        src = inspect.getsource(audit_mod.run_smoke)
+        # locate positions
+        positions = {
+            "validator": src.find("_validate_all_teams(expected_level=50)"),
+            "open_team": src.find("with open(OUR_TEAM_JSON) as f"),
+            "json_to_showdown": src.find("our_team_showdown = json_to_showdown"),
+            "audit_logger": src.find("DoublesDecisionAuditLogger("),
+            "battle_loop": src.find("for idx in range(1, battles + 1)"),
+        }
+        for k, v in positions.items():
+            self.assertGreaterEqual(v, 0, f"{k} not found in run_smoke source")
+        order = sorted(positions.items(), key=lambda kv: kv[1])
+        names_in_order = [k for k, _ in order]
+        self.assertEqual(names_in_order[0], "validator")
+
+    def test_run_smoke_does_not_start_battle_if_validator_raises(self):
+        """If _validate_all_teams raises, no battle loop or logger runs."""
+        call_sequence = []
+
+        def fake_validator(expected_level=50):
+            call_sequence.append("validator")
+            raise ValueError("forced fail")
+
+        # Patch everything that would be a side effect to record order.
+        def fake_open(*a, **k):
+            call_sequence.append("open_team")
+            class _F:
+                def __enter__(self_inner):
+                    call_sequence.append("open_team_enter")
+                    return self_inner
+                def __exit__(self_inner, *a):
+                    return False
+            return _F()
+
+        def fake_json_to_showdown(d):
+            call_sequence.append("json_to_showdown")
+            return ""
+
+        def fake_audit_logger(**k):
+            call_sequence.append("audit_logger")
+            class _L:
+                def set_current_battle_meta(self_inner, **k):
+                    pass
+            return _L()
+
+        def fake_run_single_battle(*a, **k):
+            call_sequence.append("run_single_battle")
+            return {"result": "won"}
+
+        async def fake_check():
+            call_sequence.append("check_localhost")
+            return True
+
+        with unittest.mock.patch.object(audit_mod, "_validate_all_teams", fake_validator), \
+             unittest.mock.patch.object(audit_mod, "json_to_showdown", fake_json_to_showdown), \
+             unittest.mock.patch("builtins.open", fake_open), \
+             unittest.mock.patch.object(audit_mod, "DoublesDecisionAuditLogger", fake_audit_logger), \
+             unittest.mock.patch.object(audit_mod, "run_single_battle", fake_run_single_battle), \
+             unittest.mock.patch.object(audit_mod, "check_localhost_healthy", fake_check):
+            import asyncio
+            with self.assertRaises(ValueError):
+                asyncio.run(audit_mod.run_smoke(battles=1, output_path="/tmp/x.jsonl"))
+
+        # validator must run; no downstream side effects fired.
+        self.assertIn("validator", call_sequence)
+        self.assertLess(
+            call_sequence.index("validator"),
+            len(call_sequence),
+        )
+        for forbidden in ("open_team", "json_to_showdown", "audit_logger",
+                          "run_single_battle"):
+            self.assertNotIn(forbidden, call_sequence)
+
+    def test_path_resolved_from_repo_root(self):
+        """OUR_TEAM JSON path must use REPO_ROOT, not CWD-relative."""
+        import inspect
+        src = inspect.getsource(audit_mod._validate_all_teams)
+        # must reference REPO_ROOT
+        self.assertIn("REPO_ROOT", src)
+        # must NOT use a bare os.path.join without REPO_ROOT as first arg
+        self.assertIn("os.path.join(\n        REPO_ROOT", src)
+
+
 if __name__ == "__main__":
     unittest.main()

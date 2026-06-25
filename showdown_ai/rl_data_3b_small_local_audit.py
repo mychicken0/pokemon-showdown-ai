@@ -247,31 +247,49 @@ def _validate_team_levels(team_text: str, run_name: str = "default", expected_le
 
 
 def _validate_all_teams(expected_level: int = 50) -> None:
-    """Validate all teams used in data expansion."""
+    """Validate all teams used in data expansion.
+
+    Fail-hard validator. Raises ``ValueError`` on:
+
+    * ``OPP_TEAM`` missing ``Level:`` lines, non-50 levels, or wrong count.
+    * OUR_TEAM JSON file missing, unreadable, malformed, missing ``team`` key,
+      wrong Pokemon count, missing ``level`` field, or non-50 levels.
+
+    This function never silently returns on a read/parse failure. The
+    OUR_TEAM path is resolved relative to ``REPO_ROOT`` (not CWD) so the
+    validator works regardless of where the script is invoked from.
+    """
     import json as _json
     _validate_team_levels(OPP_TEAM, "OPP_TEAM (hardcoded)", expected_level=expected_level)
-    # Validate OUR_TEAM by reading the JSON file and checking
-    # every Pokemon has the expected level.
-    _our_team_json_path = os.path.join("data", "curated_teams", "custom", "wt2_audit_team_v1.json")
-    if os.path.exists(_our_team_json_path):
-        try:
-            with open(_our_team_json_path) as _f:
-                _data = _json.load(_f)
-        except Exception:
-            return  # silently skip if file is unavailable (test environments)
-        _team = _data.get("team", [])
-        _errors = []
-        for _i, _p in enumerate(_team):
-            _species = _p.get("species", f"pokemon_{_i}")
-            _lv = _p.get("level")
-            if _lv is None:
-                _errors.append(f"{_species}: missing level in JSON")
-            elif _lv != expected_level:
-                _errors.append(f"{_species}: level {_lv}, expected {expected_level}")
-        if len(_team) != 6:
-            _errors.append(f"OUR_TEAM has {len(_team)} Pokemon, expected 6")
-        if _errors:
-            raise ValueError("OUR_TEAM validation failed:\n" + "\n".join(f"  - {e}" for e in _errors))
+    _our_team_json_path = os.path.join(
+        REPO_ROOT, "data", "curated_teams", "custom", "wt2_audit_team_v1.json"
+    )
+    if not os.path.isfile(_our_team_json_path):
+        raise ValueError(f"OUR_TEAM JSON missing: {_our_team_json_path}")
+    try:
+        with open(_our_team_json_path) as _f:
+            _data = _json.load(_f)
+    except (OSError, ValueError) as _e:
+        raise ValueError(
+            f"OUR_TEAM JSON unreadable/malformed at {_our_team_json_path}: {_e}"
+        ) from _e
+    if not isinstance(_data, dict) or "team" not in _data:
+        raise ValueError(
+            f"OUR_TEAM JSON at {_our_team_json_path} missing 'team' key"
+        )
+    _team = _data.get("team", [])
+    _errors = []
+    if len(_team) != 6:
+        _errors.append(f"OUR_TEAM has {len(_team)} Pokemon, expected 6")
+    for _i, _p in enumerate(_team):
+        _species = _p.get("species", f"pokemon_{_i}")
+        _lv = _p.get("level")
+        if _lv is None:
+            _errors.append(f"{_species}: missing level in JSON")
+        elif _lv != expected_level:
+            _errors.append(f"{_species}: level {_lv}, expected {expected_level}")
+    if _errors:
+        raise ValueError("OUR_TEAM validation failed:\n" + "\n".join(f"  - {e}" for e in _errors))
 class RawCaptureBot(DoublesDamageAwarePlayer):
     """DoublesDamageAwarePlayer that also captures raw
     Showdown protocol lines via the optional ``raw_callback``
@@ -508,6 +526,13 @@ async def run_smoke(
                 f"(got {battles})"
             ),
         }
+
+    # Phase 7 P0 hotfix: fail-hard team-level validation must run
+    # BEFORE any team read, json_to_showdown conversion, audit logger
+    # construction, raw capture wiring, or battle loop entry.
+    # If validation raises, no battle can start, no collection data
+    # is written, and the exception propagates cleanly.
+    _validate_all_teams(expected_level=50)
 
     with open(OUR_TEAM_JSON) as f:
         our_team_data = json.load(f)
