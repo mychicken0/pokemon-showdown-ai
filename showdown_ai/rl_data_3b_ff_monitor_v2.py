@@ -27,6 +27,8 @@ Classification rules (see audit requirements doc):
   NOT_FRIENDLY_FIRE
 """
 
+from typing import Optional
+
 # Canonical spread-move set. Use the move ID lowercase.
 SPREAD_MOVE_IDS = frozenset({
     "earthquake", "surf", "discharge", "heatwave", "lavaplume",
@@ -393,6 +395,10 @@ def stage2_gate_passes(summary: dict) -> bool:
       - opponent_confirmed_actual_friendly_fire_count > 0
       - bot_confirmed_actual_friendly_fire_count > 0
       - unknown_friendly_fire_suspect_count > 0
+      - priority_terrain_block_count > 0 (P0 policy gap)
+      - prankster_psychic_terrain_block_count > 0 (Prankster gap)
+      - unknown_prankster_psychic_terrain_suspect_count > 0
+        (suspicious Prankster pattern with no ability evidence)
 
     Does NOT fail for submitted_same_side_target_count > 0.
     """
@@ -404,4 +410,247 @@ def stage2_gate_passes(summary: dict) -> bool:
         return False
     if summary.get("unknown_friendly_fire_suspect_count", 0) > 0:
         return False
+    if summary.get("priority_terrain_block_count", 0) > 0:
+        return False
+    if summary.get("prankster_psychic_terrain_block_count", 0) > 0:
+        return False
+    if summary.get("unknown_prankster_psychic_terrain_suspect_count", 0) > 0:
+        return False
     return True
+
+
+# ponytail: small positive-priority move-id set used by the raw
+# protocol parser. Mirror of
+# ``bot_doubles_damage_aware._PSYCHIC_TERRAIN_PRIORITY_BLOCK_MOVE_IDS``
+# but kept independent so the audit module does not import the bot.
+_PRIORITY_BLOCK_MOVE_IDS = frozenset({
+    "fakeout",
+    "extremespeed",
+    "suckerpunch",
+    "aquajet",
+    "vacuumwave",
+    "thunderclap",
+    "quickguard",
+    "machpunch",
+    "bulletpunch",
+    "iceshard",
+    "shadowstrike",
+    "accelerock",
+})
+
+# ponytail: status move-id set for the raw Prankster Psychic Terrain
+# parser. Mirror of
+# ``bot_doubles_damage_aware._PRANKSTER_PSYCHIC_TERRAIN_STATUS_MOVE_IDS``
+# but kept independent.
+_PRANKSTER_PSYCHIC_TERRAIN_STATUS_MOVE_IDS = frozenset({
+    "taunt",
+    "encore",
+    "thunderwave",
+    "willowisp",
+    "disable",
+    "confuseray",
+    "yawn",
+    "spore",
+    "sleeppowder",
+    "stunspore",
+    "glare",
+    "nuzzle",
+    "toxic",
+    "poisongas",
+    "haze",
+    "swaggersubstitute",
+})
+
+
+def parse_priority_terrain_blocks_from_raw_protocol(
+    raw_dir: str,
+    known_prankster_users_by_battle: Optional[dict] = None,
+) -> dict:
+    """Walk ``raw_dir`` for ``*.jsonl`` battle files and return a
+    summary dict with the Psychic Terrain priority-block counts.
+
+    Detection rule:
+      A ``|-activate|<target>|move: Psychic Terrain`` line is a
+      Psychic Terrain priority block when the most recent
+      ``|move|...|<move>|...|`` line on the same battle selected
+      a positive-priority move (ordinary allowlist) or a
+      Prankster-boosted status move (Prankster allowlist).
+
+    Prankster status moves only count as a confirmed
+    ``POLICY_BUG_PRANKSTER_STATUS_IN_PSYCHIC_TERRAIN`` if the
+    user's Prankster ability is explicitly known for the same
+    battle. The optional ``known_prankster_users_by_battle`` is a
+    dict ``{battle_id: set([actor_ident, ...])}`` of actors whose
+    Prankster ability is explicitly known (e.g. from the bot's
+    own team metadata or a raw ``|-ability|...|Prankster|``
+    reveal). If the ability is not explicitly known, the event
+    is classified as
+    ``UNKNOWN_PRANKSTER_PRIORITY_NEEDS_ABILITY_EVIDENCE`` and
+    counted in
+    ``unknown_prankster_psychic_terrain_suspect_count``.
+
+    Returns dict with these fields:
+      - priority_terrain_block_count (int)
+      - fake_out_psychic_terrain_block_count (int)
+      - priority_psychic_terrain_block_count (int)
+      - prankster_psychic_terrain_block_count (int)
+      - unknown_prankster_psychic_terrain_suspect_count (int)
+      - priority_terrain_block_battles (int)
+      - failed_move_policy_bug_count (int) — alias for the gate
+      - priority_terrain_block_gate_pass (bool)
+      - failed_move_policy_gate_pass (bool)
+      - prankster_priority_block_gate_pass (bool)
+      - events (list of dict) — per-event record
+    """
+    import glob as _glob
+    import os as _os
+    out = {
+        "priority_terrain_block_count": 0,
+        "fake_out_psychic_terrain_block_count": 0,
+        "priority_psychic_terrain_block_count": 0,
+        "prankster_psychic_terrain_block_count": 0,
+        "unknown_prankster_psychic_terrain_suspect_count": 0,
+        "priority_terrain_block_battles": 0,
+        "failed_move_policy_bug_count": 0,
+        "priority_terrain_block_gate_pass": True,
+        "failed_move_policy_gate_pass": True,
+        "prankster_priority_block_gate_pass": True,
+        "events": [],
+    }
+    if not raw_dir or not _os.path.isdir(raw_dir):
+        return out
+    known = known_prankster_users_by_battle or {}
+    battles_with_block = set()
+    for fp in sorted(_glob.glob(_os.path.join(raw_dir, "*.jsonl"))):
+        bname = _os.path.basename(fp)
+        # Per-battle: most recent priority-eligible move, plus the
+        # battle's known-Prankster set derived from raw
+        # ``|-ability|...|Prankster|`` reveals.
+        last_priority_move = None  # dict {actor, target, move, kind, status}
+        known_prankster_actors = set(known.get(bname, set()))
+        try:
+            with open(fp) as f:
+                for ln in f:
+                    try:
+                        rec = __import__("json").loads(ln)
+                    except Exception:
+                        continue
+                    line = rec.get("line", "")
+                    if line.startswith("|turn|"):
+                        last_priority_move = None
+                        continue
+                    # Track Prankster reveals via ``|-ability|``.
+                    # Format: |-ability|<actor>|<ability>
+                    if line.startswith("|-ability|") and "Prankster" in line:
+                        parts = line.split("|")
+                        if len(parts) >= 4:
+                            known_prankster_actors.add(parts[2])
+                        continue
+                    # Some protocols use |detailschange|...|Prankster
+                    if (
+                        line.startswith("|detailschange|")
+                        and "Prankster" in line
+                    ):
+                        parts = line.split("|")
+                        if len(parts) >= 3:
+                            # actor ident is parts[2]
+                            known_prankster_actors.add(parts[2])
+                        continue
+                    if line.startswith("|move|"):
+                        parts = line.split("|")
+                        if len(parts) >= 5:
+                            move_id = parts[3].lower()
+                            move_id_compact = move_id.replace(" ", "").replace(
+                                "-", ""
+                            )
+                            if (
+                                move_id in _PRIORITY_BLOCK_MOVE_IDS
+                                or move_id_compact in _PRIORITY_BLOCK_MOVE_IDS
+                            ):
+                                last_priority_move = {
+                                    "actor": parts[2],
+                                    "target": parts[4],
+                                    "move": parts[3],
+                                    "kind": "ordinary",
+                                }
+                            elif move_id_compact in _PRANKSTER_PSYCHIC_TERRAIN_STATUS_MOVE_IDS:
+                                last_priority_move = {
+                                    "actor": parts[2],
+                                    "target": parts[4],
+                                    "move": parts[3],
+                                    "kind": "prankster_status",
+                                }
+                        continue
+                    if (
+                        line.startswith("|-activate|")
+                        and "move: Psychic Terrain" in line
+                    ):
+                        parts = line.split("|")
+                        target = parts[2] if len(parts) > 2 else ""
+                        if last_priority_move is not None:
+                            move_norm = (
+                                last_priority_move["move"]
+                                .lower()
+                                .replace(" ", "")
+                                .replace("-", "")
+                            )
+                            kind = last_priority_move.get("kind", "ordinary")
+                            is_prankster_block = kind == "prankster_status"
+                            actor = last_priority_move["actor"]
+                            ability_known = actor in known_prankster_actors
+
+                            if is_prankster_block:
+                                if ability_known:
+                                    cls = "POLICY_BUG_PRANKSTER_STATUS_IN_PSYCHIC_TERRAIN"
+                                else:
+                                    cls = "UNKNOWN_PRANKSTER_PRIORITY_NEEDS_ABILITY_EVIDENCE"
+                            else:
+                                cls = (
+                                    "POLICY_BUG_FAKE_OUT_IN_PSYCHIC_TERRAIN"
+                                    if move_norm == "fakeout"
+                                    else "POLICY_BUG_PRIORITY_BLOCKED_BY_PSYCHIC_TERRAIN"
+                                )
+
+                            out["priority_terrain_block_count"] += 1
+                            out["failed_move_policy_bug_count"] += 1
+                            if move_norm == "fakeout":
+                                out["fake_out_psychic_terrain_block_count"] += 1
+                            elif is_prankster_block:
+                                if ability_known:
+                                    out["prankster_psychic_terrain_block_count"] += 1
+                                else:
+                                    out[
+                                        "unknown_prankster_psychic_terrain_suspect_count"
+                                    ] += 1
+                            else:
+                                out["priority_psychic_terrain_block_count"] += 1
+                            battles_with_block.add(bname)
+                            event_record = {
+                                "battle": bname,
+                                "actor": actor,
+                                "target": target,
+                                "move": last_priority_move["move"],
+                                "classification": cls,
+                                "ability_known": ability_known,
+                                "kind": kind,
+                                "raw_line": line.strip()[:200],
+                            }
+                            out["events"].append(event_record)
+                            # Reset so the same priority move is not
+                            # counted twice if a single |-activate|
+                            # arrives later for a different reason.
+                            last_priority_move = None
+        except Exception:
+            continue
+    out["priority_terrain_block_battles"] = len(battles_with_block)
+    out["priority_terrain_block_gate_pass"] = (
+        out["priority_terrain_block_count"] == 0
+    )
+    out["failed_move_policy_gate_pass"] = (
+        out["failed_move_policy_bug_count"] == 0
+    )
+    out["prankster_priority_block_gate_pass"] = (
+        out["prankster_psychic_terrain_block_count"] == 0
+        and out["unknown_prankster_psychic_terrain_suspect_count"] == 0
+    )
+    return out

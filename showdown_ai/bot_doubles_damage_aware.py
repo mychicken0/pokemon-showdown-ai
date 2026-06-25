@@ -120,6 +120,244 @@ def _is_fake_out_first_turn_only(order: Any, battle: Any, active_idx: int) -> bo
     return True  # not first turn or cannot confirm first turn -> block
 
 
+# ponytail: explicit positive-priority move-id allowlist used by the
+# Psychic Terrain priority block. Keep this small and deterministic;
+# do not infer Prankster, Gale Wings, or ability-based priority from
+# species. If a move id is not in this set, this helper falls back to
+# the move's own ``priority`` attribute when available.
+_PSYCHIC_TERRAIN_PRIORITY_BLOCK_MOVE_IDS = frozenset({
+    "fakeout",
+    "extremespeed",
+    "suckerpunch",
+    "aquajet",
+    "vacuumwave",
+    "thunderclap",
+    "machpunch",
+    "bulletpunch",
+    "iceshard",
+    "shadowstrike",
+    "accelerock",
+})
+
+
+# ponytail: status move-id allowlist for explicit Prankster Psychic
+# Terrain blocks. These moves have base priority 0 and only become
+# priority if the user is explicitly known to have Prankster. We
+# deliberately keep the list narrow: only moves that are pure status
+# and have a meaningful opponent-side blocking effect. Self-side
+# support moves (Tailwind, Light Screen, Reflect, Aurora Veil,
+# Helping Hand, Coaching, Recover, Roost) are NOT in this set
+# because they target self/ally and are filtered by the
+# ``move_target >= 0`` rule.
+_PRANKSTER_PSYCHIC_TERRAIN_STATUS_MOVE_IDS = frozenset({
+    "taunt",
+    "encore",
+    "thunderwave",
+    "willowisp",
+    "disable",
+    "confuseray",
+    "yawn",
+    "spore",
+    "sleeppowder",
+    "stunspore",
+    "glare",
+    "nuzzle",
+    "toxic",
+    "poisongas",
+    "haze",
+    "swaggersubstitute",
+})
+
+
+def _is_priority_blocked_by_psychic_terrain(
+    order: Any, battle: Any, active_idx: int,
+    prankster_user: Any = None,
+) -> bool:
+    """Return True if a positive-priority opponent-targeting move
+    should be hard-blocked because Psychic Terrain is active and
+    the target is an opposing active Pokemon whose groundedness
+    is not explicitly known.
+
+    Conservative rule: if Psychic Terrain is active and the move
+    is positive-priority (per the move's own ``priority`` attribute
+    or the explicit allowlist above, OR the move is a status move
+    on the explicit Prankster allowlist and the user is
+    *explicitly* known to be Prankster) and the target is an
+    opponent (move_target >= 0), prefer blocking rather than
+    allowing a known fail.
+
+    Returns False (not blocked) when:
+      - non-move order (switch, pass, mega, tera)
+      - move has no positive priority and is not a confirmed-
+        Prankster status move
+      - Psychic Terrain is not active
+      - target is self or ally (move_target < 0)
+      - target is an explicitly ungrounded Pokemon whose item is
+        visibly ``airballoon`` or whose types confirm Flying
+        (poke-env's ``types`` property reflects known types only)
+      - battle state cannot be read
+      - move is a status move but the user's ability is not
+        explicitly Prankster (do not infer from species)
+
+    Does NOT infer:
+      - Levitate from species (we do not read species->ability
+        unless poke-env already exposes it)
+      - Air Balloon from species (only reads ``target.item``)
+      - Prankster from species (only reads active_pokemon[].ability
+        when poke-env has it, or the explicit ``prankster_user``
+        test-only kwarg)
+      - Gale Wings or any other ability-based priority
+
+    See logs/phase7_env_revalidation_smoke_policy_gap_and_team_pool_audit/
+    for the original audit that motivated this rule. See
+    logs/phase7_policy_gap_psychic_terrain_priority_block_fix/ for
+    the implementation report and
+    logs/phase7_policy_gap_psychic_terrain_priority_block_and_prankster_review/
+    for the Prankster extension review.
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    if not hasattr(inner, "id"):
+        return False  # switch, pass, mega, tera
+    try:
+        mid = str(getattr(inner, "id", "")).lower()
+    except Exception:
+        return False
+    if not mid:
+        return False
+
+    # Target must be opponent: move_target >= 0 in poke-env's
+    # convention (negative = self/ally).
+    target = getattr(order, "move_target", 0)
+    if target < 0:
+        return False  # self/ally targeting; not relevant here
+
+    # Detect Psychic Terrain in battle state.
+    psychic_terrain = False
+    fields = getattr(battle, "fields", None) if battle is not None else None
+    if fields:
+        try:
+            for f in fields:
+                f_str = f.name.lower() if hasattr(f, "name") else str(f).lower()
+                f_str = f_str.replace("_", "").replace(" ", "")
+                if "psychicterrain" in f_str:
+                    psychic_terrain = True
+                    break
+        except Exception:
+            psychic_terrain = False
+    if not psychic_terrain:
+        return False
+
+    # Determine if the move is positive-priority. Use the move's
+    # own ``priority`` attribute when present, otherwise fall back
+    # to the explicit allowlist. Also handle the explicit-Prankster
+    # status-move path.
+    priority = 0
+    try:
+        priority = int(getattr(inner, "priority", 0) or 0)
+    except Exception:
+        priority = 0
+
+    # Path A: ordinary positive-priority move (via attribute or
+    # explicit allowlist).
+    ordinary_priority = priority > 0 or mid in _PSYCHIC_TERRAIN_PRIORITY_BLOCK_MOVE_IDS
+
+    # Path B: explicit-Prankster status move. We require:
+    #   - move is a status move (best-effort category check)
+    #   - move is in the explicit Prankster status allowlist
+    #   - user ability is explicitly known to be Prankster
+    # We never infer Prankster from species. The user is considered
+    # Prankster if any of these are true:
+    #   - the test-only ``prankster_user`` kwarg is truthy
+    #   - ``active_pokemon[active_idx].ability`` is the literal
+    #     string ``"prankster"``
+    prankster_priority = False
+    if not ordinary_priority and mid in _PRANKSTER_PSYCHIC_TERRAIN_STATUS_MOVE_IDS:
+        # best-effort category check: poke-env exposes
+        # ``move.category`` as an enum (PHYSICAL/SPECIAL/STATUS)
+        # or as a string. STATUS moves are status. We do not infer
+        # category from move id; if category cannot be determined,
+        # we do not treat the move as a status move.
+        is_status_move = False
+        try:
+            cat = getattr(inner, "category", None)
+            if cat is not None:
+                cat_name = (
+                    cat.name.upper()
+                    if hasattr(cat, "name")
+                    else str(cat).upper()
+                )
+                if cat_name == "STATUS":
+                    is_status_move = True
+        except Exception:
+            is_status_move = False
+        # Fallback: if the inner has no ``category`` attribute at
+        # all, treat as not-a-status-move (do not guess).
+        if is_status_move:
+            user_ability = ""
+            if prankster_user is True:
+                user_ability = "prankster"
+            else:
+                active_list = getattr(battle, "active_pokemon", None) if battle is not None else None
+                if active_list is not None:
+                    try:
+                        mon = active_list[active_idx]
+                    except (IndexError, TypeError):
+                        mon = None
+                    if mon is not None:
+                        try:
+                            user_ability = str(getattr(mon, "ability", "") or "").lower()
+                        except Exception:
+                            user_ability = ""
+            if user_ability == "prankster":
+                prankster_priority = True
+                priority = 1  # treat as priority for the target-groundedness check below
+
+    if not ordinary_priority and not prankster_priority:
+        return False
+    if priority <= 0 and ordinary_priority:
+        # id is in the ordinary allowlist -> treat as positive priority
+        priority = 1
+    if priority <= 0:
+        return False
+
+    # Resolve the target Pokemon from battle state. We only allow
+    # the priority move through if the target is *explicitly* an
+    # ungrounded Pokemon (visible item == "airballoon" or known
+    # Flying type in poke-env's types). We never infer Levitate
+    # or species-based groundedness.
+    target_ungrounded_explicit = False
+    if battle is not None and isinstance(target, int) and 0 <= target < 2:
+        opp_list = getattr(battle, "opponent_active_pokemon", None)
+        if opp_list and 0 <= target < len(opp_list):
+            tgt = opp_list[target]
+            if tgt is not None:
+                # Explicit Air Balloon from battle state
+                try:
+                    item = getattr(tgt, "item", None)
+                    if item is not None and str(item).lower() in (
+                        "airballoon", "air_balloon"
+                    ):
+                        target_ungrounded_explicit = True
+                except Exception:
+                    pass
+                # Explicit Flying type from poke-env types
+                if not target_ungrounded_explicit:
+                    try:
+                        types = getattr(tgt, "types", None)
+                        if types and "Flying" in list(types):
+                            target_ungrounded_explicit = True
+                    except Exception:
+                        pass
+
+    if target_ungrounded_explicit:
+        return False
+
+    # All other cases: block.
+    return True
+
+
 def _is_attack_action_under_expected_faint(order):
     """Phase BEHAVIOR-12: check if an action is a
     non-Protect, non-switch, non-pass action.
@@ -6441,6 +6679,16 @@ class DoublesDamageAwarePlayer(Player):
         # selections waste the turn and contaminate training data.
         # See logs/phase7_data_expansion_hard_pause_full_environment_audit/.
         if _is_fake_out_first_turn_only(order, battle, active_idx):
+            return -1e9
+
+        # Phase 7 P0 policy-gap fix: hard-block positive-priority
+        # opponent-targeting moves when Psychic Terrain is active
+        # and the target is not explicitly known to be ungrounded.
+        # 28 priority-blocked events (Fake Out into Psychic Terrain)
+        # were confirmed across 16/20 battles of the revalidation
+        # smoke. See
+        # logs/phase7_env_revalidation_smoke_policy_gap_and_team_pool_audit/.
+        if _is_priority_blocked_by_psychic_terrain(order, battle, active_idx):
             return -1e9
 
         # Defensive mock safety initialization
