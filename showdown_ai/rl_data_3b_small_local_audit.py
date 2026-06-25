@@ -68,6 +68,31 @@ from bot_doubles_damage_aware import DoublesDamageAwarePlayer
 from doubles_decision_audit_logger import DoublesDecisionAuditLogger
 from rl_data_3b_raw_protocol_capture import RawProtocolCapture
 
+# ponytail: optional team-pool mode. Imported lazily so
+# test environments without it still work; see
+# ``PHASE7_TEAM_POOL_VALIDATION_AND_RANDOM_PAIR_SAMPLER_FIX``.
+try:
+    from rl_data_3b_team_pool import (
+        load_team_pool as _tp_load_team_pool,
+        assert_pool_ready as _tp_assert_pool_ready,
+        sample_team_pair as _tp_sample_team_pair,
+        validate_sampled_pair as _tp_validate_sampled_pair,
+        json_team_to_showdown as _tp_json_team_to_showdown,
+        pair_metadata_report as _tp_pair_metadata_report,
+        pool_summary_report as _tp_pool_summary_report,
+    )
+
+    class _TEAM_POOL:
+        load_team_pool = staticmethod(_tp_load_team_pool)
+        assert_pool_ready = staticmethod(_tp_assert_pool_ready)
+        sample_team_pair = staticmethod(_tp_sample_team_pair)
+        validate_sampled_pair = staticmethod(_tp_validate_sampled_pair)
+        json_team_to_showdown = staticmethod(_tp_json_team_to_showdown)
+        pair_metadata_report = staticmethod(_tp_pair_metadata_report)
+        pool_summary_report = staticmethod(_tp_pool_summary_report)
+except Exception:  # pragma: no cover - defensive
+    _TEAM_POOL = None
+
 # ---- Hard guards ----
 # Only local server. Never default to official.
 LOCAL_BASE = "RLData3b"
@@ -421,11 +446,14 @@ async def run_single_battle(
     audit_logger: DoublesDecisionAuditLogger,
     our_team_showdown: str,
     raw_capture: Optional[RawProtocolCapture] = None,
+    battle_meta: Optional[Dict[str, Any]] = None,
+    opp_team_showdown: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a single battle with the bot vs a random opp.
 
-    Returns a dict with battle_id, elapsed time, and
-    bot / opp names.
+    Returns a dict with battle_id, elapsed time, bot / opp
+    names, and any per-battle metadata (team IDs/hashes/
+    coverage from pool mode).
     """
     suffix = str(idx) + str(int(time.time() * 1000) % 100000)[-5:]
     bot_name = f"{LOCAL_BASE}Bot_{suffix}"[:18]
@@ -455,7 +483,7 @@ async def run_single_battle(
     opp = make_opponent(
         _OPPONENT_POLICY,
         opp_name,
-        team=OPP_TEAM,
+        team=opp_team_showdown if opp_team_showdown else OPP_TEAM,
         allow_unsafe_random=_ALLOW_UNSAFE_RANDOM,
     )
 
@@ -489,19 +517,27 @@ async def run_single_battle(
             pass
 
     elapsed = time.time() - start
-    return {
+    out = {
         "battle_idx": idx,
         "bot_name": bot_name,
         "opp_name": opp_name,
         "elapsed_s": elapsed,
         "bot_finished": bot.n_finished_battles,
     }
+    if battle_meta is not None:
+        out["battle_meta"] = battle_meta
+    return out
 
 
 async def run_smoke(
     battles: int,
     output_path: str,
     raw_protocol_dir: Optional[str] = None,
+    team_mode: str = "fixed",
+    team_pool_dirs: Optional[List[str]] = None,
+    team_pool_seed: int = 20260702,
+    team_pool_min_valid: int = 4,
+    allow_mirror_teams: bool = False,
 ) -> Dict[str, Any]:
     """Run the small audit smoke.
 
@@ -511,7 +547,17 @@ async def run_smoke(
     If ``raw_protocol_dir`` is provided, raw Showdown
     protocol lines are written to
     ``{raw_protocol_dir}/{battle_id}.jsonl`` per battle.
+
+    ``team_mode`` selects fixed-matchup (default, regression)
+    or pool (random sampling from a local JSON team pool).
     """
+    if team_mode not in ("fixed", "pool"):
+        return {
+            "error": (
+                f"unknown team_mode {team_mode!r}; "
+                f"must be 'fixed' or 'pool'"
+            ),
+        }
     if not check_localhost_healthy():
         return {
             "error": (
@@ -534,9 +580,71 @@ async def run_smoke(
     # is written, and the exception propagates cleanly.
     _validate_all_teams(expected_level=50)
 
-    with open(OUR_TEAM_JSON) as f:
-        our_team_data = json.load(f)
-    our_team_showdown = json_to_showdown(our_team_data)
+    # Pool mode: load and validate the local JSON team pool
+    # before any battle starts. Fail-hard on missing dir,
+    # insufficient valid teams, or import error.
+    pool = None
+    pool_summary: Dict[str, Any] = {}
+    if team_mode == "pool":
+        if _TEAM_POOL is None:
+            return {
+                "error": (
+                    "team_mode=pool requested but "
+                    "rl_data_3b_team_pool could not be "
+                    "imported. See PHASE7_TEAM_POOL_"
+                    "VALIDATION_AND_RANDOM_PAIR_SAMPLER_FIX."
+                ),
+            }
+        if not team_pool_dirs:
+            return {
+                "error": (
+                    "team_mode=pool requires --team-pool-dir"
+                ),
+            }
+        try:
+            pool = _TEAM_POOL.load_team_pool(
+                team_pool_dirs, expected_level=50
+            )
+            _TEAM_POOL.assert_pool_ready(
+                pool, min_valid=team_pool_min_valid
+            )
+        except ValueError as e:
+            return {
+                "error": (
+                    f"team pool validation failed: {e}"
+                ),
+            }
+        pool_summary = _TEAM_POOL.pool_summary_report(
+            pool=pool,
+            seed=team_pool_seed,
+            n_battles=battles,
+            allow_mirror=allow_mirror_teams,
+        )
+        print(
+            f"Pool mode: {pool['valid']} valid teams, "
+            f"{pool['invalid']} invalid, "
+            f"seed={team_pool_seed}, "
+            f"mirror={allow_mirror_teams}",
+            flush=True,
+        )
+        # The fixed OUR_TEAM_JSON is not used in pool mode.
+        # We still load the OPP_TEAM for fallback safety, but
+        # the actual sample is per-battle.
+    else:
+        # fixed mode: load our team once as before.
+        with open(OUR_TEAM_JSON) as f:
+            our_team_data = json.load(f)
+        our_team_showdown = json_to_showdown(our_team_data)
+        pool_summary = {
+            "team_mode": "fixed",
+            "team_pool_dirs": [],
+            "team_pool_seed": team_pool_seed,
+            "team_pool_valid_count": 1,
+            "team_pool_invalid_count": 0,
+            "team_pool_min_valid": 1,
+            "allow_mirror_teams": allow_mirror_teams,
+            "sampled_team_pair_count": battles,
+        }
 
     # The audit logger writes to ``output_path`` (one
     # line per battle record). The bot's choose_move
@@ -569,8 +677,67 @@ async def run_smoke(
             flush=True,
         )
     battle_results: List[Dict[str, Any]] = []
+    pair_meta_records: List[Dict[str, Any]] = []
     for idx in range(1, battles + 1):
         try:
+            # Pool mode: per-battle sample + validate pair.
+            if team_mode == "pool":
+                pair = _TEAM_POOL.sample_team_pair(
+                    pool=pool,
+                    seed=team_pool_seed,
+                    battle_idx=idx,
+                    allow_mirror=allow_mirror_teams,
+                )
+                validation = _TEAM_POOL.validate_sampled_pair(
+                    pair
+                )
+                if not (
+                    validation["bot_team_validation_pass"]
+                    and validation["opp_team_validation_pass"]
+                ):
+                    return {
+                        "error": (
+                            f"battle {idx} sampled team failed "
+                            f"validation: bot="
+                            f"{validation['bot_team_validation_class']} "
+                            f"opp={validation['opp_team_validation_class']}"
+                        ),
+                    }
+                our_team_showdown = (
+                    _TEAM_POOL.json_team_to_showdown(
+                        pair["bot"]["team_dict"]
+                    )
+                )
+                opp_team_showdown = (
+                    _TEAM_POOL.json_team_to_showdown(
+                        pair["opp"]["team_dict"]
+                    )
+                )
+                battle_meta = _TEAM_POOL.pair_metadata_report(
+                    pair=pair, validation=validation
+                )
+                # ponytail: ensure the emitted text has
+                # explicit Level: 50 for every mon. The
+                # helper always emits Level; this guard
+                # rejects any drift.
+                if "Level: 50" not in our_team_showdown:
+                    return {
+                        "error": (
+                            f"battle {idx} bot team showdown "
+                            f"missing explicit Level: 50"
+                        ),
+                    }
+                if "Level: 50" not in opp_team_showdown:
+                    return {
+                        "error": (
+                            f"battle {idx} opp team showdown "
+                            f"missing explicit Level: 50"
+                        ),
+                    }
+                pair_meta_records.append(battle_meta)
+            else:
+                battle_meta = None
+                opp_team_showdown = None
             capture = None
             if raw_protocol_dir is not None:
                 capture = RawProtocolCapture(
@@ -578,8 +745,13 @@ async def run_smoke(
                     out_dir=raw_protocol_dir,
                 )
             r = await run_single_battle(
-                idx, battles, audit_logger, our_team_showdown,
+                idx, battles, audit_logger,
+                our_team_showdown,
                 raw_capture=capture,
+                battle_meta=battle_meta,
+                opp_team_showdown=(
+                    opp_team_showdown if team_mode == "pool" else None
+                ),
             )
             battle_results.append(r)
             print(
@@ -600,6 +772,8 @@ async def run_smoke(
         "battle_results": battle_results,
         "audit_path": output_path,
         "raw_protocol_dir": raw_protocol_dir,
+        "team_pool_summary": pool_summary,
+        "pair_meta_records": pair_meta_records,
     }
 
 
@@ -661,6 +835,66 @@ def main():
             "Directory must be under logs/."
         ),
     )
+    # ponytail: team-pool mode CLI. Default is fixed (the
+    # existing regression matchup). Pool mode draws a
+    # random team pair from local JSON pools each battle.
+    # Pool mode is fail-hard: missing dir, missing module,
+    # or fewer than --team-pool-min-valid valid teams
+    # returns a clean error before any battle starts.
+    parser.add_argument(
+        "--team-mode",
+        choices=("fixed", "pool"),
+        default="fixed",
+        help=(
+            "fixed (default, regression-only) or pool "
+            "(random sampling from --team-pool-dir)."
+        ),
+    )
+    parser.add_argument(
+        "--team-pool-dir",
+        action="append",
+        default=[],
+        help=(
+            "Local JSON team-pool directory. May be passed "
+            "multiple times. Required when --team-mode pool."
+        ),
+    )
+    parser.add_argument(
+        "--team-pool-seed",
+        type=int,
+        default=20260702,
+        help=(
+            "Deterministic seed for random team pair sampling "
+            "(default 20260702)."
+        ),
+    )
+    parser.add_argument(
+        "--team-pool-min-valid",
+        type=int,
+        default=4,
+        help=(
+            "Minimum number of valid teams in the pool. "
+            "Pool mode fails hard if fewer are found "
+            "(default 4)."
+        ),
+    )
+    parser.add_argument(
+        "--allow-mirror-teams",
+        action="store_true",
+        help=(
+            "Allow the same team to be sampled on both sides. "
+            "Default: reject mirror pairs."
+        ),
+    )
+    parser.add_argument(
+        "--team-pool-report",
+        default=None,
+        help=(
+            "Optional path (under logs/) to write a JSON "
+            "summary of the loaded pool + per-battle pair "
+            "metadata. Default: not written."
+        ),
+    )
     args = parser.parse_args()
 
     if args.opponent_policy == "random" and not args.allow_unsafe_random:
@@ -718,16 +952,73 @@ def main():
             args.n_battles,
             output_path,
             raw_protocol_dir=raw_protocol_dir,
+            team_mode=args.team_mode,
+            team_pool_dirs=args.team_pool_dir or None,
+            team_pool_seed=args.team_pool_seed,
+            team_pool_min_valid=args.team_pool_min_valid,
+            allow_mirror_teams=args.allow_mirror_teams,
         )
     )
     if result.get("error"):
         print(f"ERROR: {result['error']}")
         sys.exit(1)
+    # Optional pool report write.
+    if args.team_pool_report:
+        report_path = os.path.abspath(args.team_pool_report)
+        if not report_path.startswith(
+            os.path.join(REPO_ROOT, "logs")
+        ):
+            print(
+                f"ERROR: --team-pool-report must be under "
+                f"logs/ (got {report_path})"
+            )
+            sys.exit(1)
+        if _TEAM_POOL is None:
+            print(
+                "ERROR: --team-pool-report requires "
+                "rl_data_3b_team_pool import."
+            )
+            sys.exit(1)
+        os.makedirs(os.path.dirname(report_path), exist_ok=True)
+        # If pool was not loaded (fixed mode), build a
+        # minimal report that records the mode only.
+        if result.get("team_pool_summary"):
+            pool_report = {
+                "team_mode": result["team_pool_summary"].get(
+                    "team_mode"
+                ),
+                "summary": result["team_pool_summary"],
+                "per_battle": result.get("pair_meta_records", []),
+            }
+        else:
+            pool_report = {
+                "team_mode": "fixed",
+                "summary": {
+                    "team_mode": "fixed",
+                    "team_pool_dirs": [],
+                    "team_pool_valid_count": 1,
+                    "team_pool_invalid_count": 0,
+                    "sampled_team_pair_count": args.n_battles,
+                },
+                "per_battle": [],
+            }
+        with open(report_path, "w") as f:
+            json.dump(pool_report, f, indent=2)
+        print(f"  team pool report: {report_path}")
     print()
     print("=" * 60)
     print("RL-DATA-3b-small smoke summary")
     print("=" * 60)
     print(f"  audit path: {result['audit_path']}")
+    print(f"  team mode: {args.team_mode}")
+    if args.team_mode == "pool":
+        s = result.get("team_pool_summary", {})
+        print(
+            f"  team pool: {s.get('team_pool_valid_count', 0)} "
+            f"valid / {s.get('team_pool_invalid_count', 0)} invalid, "
+            f"seed={s.get('team_pool_seed')}, "
+            f"mirror={s.get('allow_mirror_teams')}"
+        )
     print(f"  opponent policy: {_OPPONENT_POLICY}")
     if _OPPONENT_POLICY == "random":
         print("  WARNING: unsafe random opponent is in use; do not")
