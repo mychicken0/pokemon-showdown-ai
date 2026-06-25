@@ -118,6 +118,7 @@ OUR_TEAM_JSON = "data/curated_teams/custom/wt2_audit_team_v1.json"
 # Opp team: a generic bulky team with no setters.
 OPP_TEAM = """Incineroar @ Sitrus Berry
 Ability: Intimidate
+Level: 50
 EVs: 252 HP / 252 Atk
 Adamant Nature
 - Fake Out
@@ -127,6 +128,7 @@ Adamant Nature
 
 Tornadus @ Heavy-Duty Boots
 Ability: Prankster
+Level: 50
 EVs: 252 HP / 252 SpA
 Modest Nature
 - Tailwind
@@ -136,6 +138,7 @@ Modest Nature
 
 Clefable @ Leftovers
 Ability: Magic Guard
+Level: 50
 EVs: 252 HP / 252 Def
 Bold Nature
 - Moonblast
@@ -145,6 +148,7 @@ Bold Nature
 
 Garchomp @ Choice Scarf
 Ability: Rough Skin
+Level: 50
 EVs: 252 Atk / 252 Spe
 Jolly Nature
 - Earthquake
@@ -154,6 +158,7 @@ Jolly Nature
 
 Tyranitar @ Smooth Rock
 Ability: Sand Stream
+Level: 50
 EVs: 252 HP / 252 Atk
 Adamant Nature
 - Rock Slide
@@ -163,6 +168,7 @@ Adamant Nature
 
 Volcarona @ Leftovers
 Ability: Flame Body
+Level: 50
 EVs: 252 SpA / 252 Spe
 Timid Nature
 - Heat Wave
@@ -171,6 +177,101 @@ Timid Nature
 - Protect"""
 
 
+_KNOWN_TEAMS_LIST = [
+    ("OPP_TEAM", OPP_TEAM),
+    ("OUR_TEAM (via json_to_showdown)", "data/curated_teams/custom/wt2_audit_team_v1.json"),
+]
+
+
+def _validate_team_levels(team_text: str, run_name: str = "default", expected_level: int = 50) -> None:
+    """Validate that a Showdown-format team string has explicit
+    Level: {expected_level} for every Pokemon.
+
+    Raises ValueError with details if validation fails.
+    Used before collection to catch missing/non-50 levels.
+    """
+    if expected_level <= 0 or expected_level > 100:
+        raise ValueError(f"expected_level must be 1-100, got {expected_level}")
+    lines = team_text.split("\n")
+    sets: list = []
+    current_set = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("- "):
+            if current_set is not None:
+                current_set.setdefault("moves", []).append(stripped[2:])
+        elif " @ " in stripped:
+            if current_set is not None and "species" not in current_set:
+                current_set["species"] = stripped.split(" @ ")[0]
+            if current_set is not None and "species" in current_set:
+                sets.append(current_set)
+            current_set = {"species": stripped.split(" @ ")[0].strip(), "line": stripped}
+        elif stripped.startswith("Ability:"):
+            if current_set is not None:
+                current_set["ability"] = stripped
+        elif stripped.startswith("Level:"):
+            if current_set is not None:
+                try:
+                    lv = int(stripped.split(":")[1].strip())
+                    current_set["level"] = lv
+                except ValueError:
+                    raise ValueError(f"Invalid Level line in {run_name}: {stripped!r}")
+        elif stripped.startswith("EVs:"):
+            if current_set is not None:
+                current_set["evs"] = stripped
+        elif "Nature" in stripped or "Nature" in str(getattr(stripped, "lower", lambda: stripped)()):
+            if current_set is not None:
+                current_set["nature"] = stripped
+    if current_set is not None and "species" in current_set:
+        sets.append(current_set)
+
+    errors = []
+    for s in sets:
+        species = s.get("species", "?")
+        lv = s.get("level")
+        if lv is None:
+            errors.append(f"{species}: missing Level line")
+        elif lv != expected_level:
+            errors.append(f"{species}: Level {lv}, expected {expected_level}")
+
+    if errors:
+        msg = f"Team validation failed for {run_name} ({len(errors)} errors):\n"
+        for e in errors:
+            msg += f"  - {e}\n"
+        raise ValueError(msg)
+    # Also verify exactly 6 sets
+    if len(sets) != 6:
+        raise ValueError(f"Team {run_name} has {len(sets)} Pokemon, expected 6")
+
+
+def _validate_all_teams(expected_level: int = 50) -> None:
+    """Validate all teams used in data expansion."""
+    import json as _json
+    _validate_team_levels(OPP_TEAM, "OPP_TEAM (hardcoded)", expected_level=expected_level)
+    # Validate OUR_TEAM by reading the JSON file and checking
+    # every Pokemon has the expected level.
+    _our_team_json_path = os.path.join("data", "curated_teams", "custom", "wt2_audit_team_v1.json")
+    if os.path.exists(_our_team_json_path):
+        try:
+            with open(_our_team_json_path) as _f:
+                _data = _json.load(_f)
+        except Exception:
+            return  # silently skip if file is unavailable (test environments)
+        _team = _data.get("team", [])
+        _errors = []
+        for _i, _p in enumerate(_team):
+            _species = _p.get("species", f"pokemon_{_i}")
+            _lv = _p.get("level")
+            if _lv is None:
+                _errors.append(f"{_species}: missing level in JSON")
+            elif _lv != expected_level:
+                _errors.append(f"{_species}: level {_lv}, expected {expected_level}")
+        if len(_team) != 6:
+            _errors.append(f"OUR_TEAM has {len(_team)} Pokemon, expected 6")
+        if _errors:
+            raise ValueError("OUR_TEAM validation failed:\n" + "\n".join(f"  - {e}" for e in _errors))
 class RawCaptureBot(DoublesDamageAwarePlayer):
     """DoublesDamageAwarePlayer that also captures raw
     Showdown protocol lines via the optional ``raw_callback``

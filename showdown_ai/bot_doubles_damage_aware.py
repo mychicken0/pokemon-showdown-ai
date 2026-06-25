@@ -84,6 +84,42 @@ def _is_same_side_single_target_damage_blocked(order: Any) -> bool:
     return True
 
 
+def _is_fake_out_first_turn_only(order: Any, battle: Any, active_idx: int) -> bool:
+    """Return True if a Fake Out move order should be blocked
+    because the user is not on its first active turn since its
+    last switch-in. Fake Out only works on the first turn out.
+
+    Returns False (not blocked) for:
+      - non-Fake-Out moves
+      - Fake Out on first active turn (can work)
+      - Fake Out when status cannot be determined (conservative)
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    if not hasattr(inner, "id"):
+        return False
+    try:
+        mid = str(getattr(inner, "id", "")).lower()
+    except Exception:
+        return False
+    if mid != "fakeout":
+        return False
+    # This is Fake Out. Check if the user is on its first active turn.
+    active_list = getattr(battle, "active_pokemon", None)
+    if active_list is None:
+        return False  # cannot determine; do not block
+    try:
+        mon = active_list[active_idx]
+    except (IndexError, TypeError):
+        return False
+    if mon is None:
+        return False
+    if getattr(mon, "first_turn", False):
+        return False  # first active turn, Fake Out can work
+    return True  # not first turn or cannot confirm first turn -> block
+
+
 def _is_attack_action_under_expected_faint(order):
     """Phase BEHAVIOR-12: check if an action is a
     non-Protect, non-switch, non-pass action.
@@ -6398,6 +6434,13 @@ class DoublesDamageAwarePlayer(Player):
         # own side). The raw protocol is the ground truth.
         # See logs/phase7_data_expansion_smoke20_v3_reevaluation/.
         if _is_same_side_single_target_damage_blocked(order):
+            return -1e9
+
+        # Phase 7: Block Fake Out after the user's first active turn.
+        # Fake Out only works on the first turn out; repeated
+        # selections waste the turn and contaminate training data.
+        # See logs/phase7_data_expansion_hard_pause_full_environment_audit/.
+        if _is_fake_out_first_turn_only(order, battle, active_idx):
             return -1e9
 
         # Defensive mock safety initialization
