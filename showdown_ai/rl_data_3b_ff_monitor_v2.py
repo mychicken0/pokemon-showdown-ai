@@ -532,11 +532,12 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                         if len(parts) < 5:
                             continue
                         actor = parts[2]
-                        move_id = parts[3].lower().replace(" ", "")
+                        move_id = parts[3].lower().replace(" ", "").replace("'", "").replace("-", "")
                         if move_id not in {
                             "protect", "detect", "spikyshield",
                             "kingsshield", "obstruct", "maxguard",
-                            "silktrap", "quickguard",
+                            "silktrap", "banefulbunker",
+                            "burningbulwark",
                         }:
                             # Any non-Protect move by the same
                             # actor resets the streak and the
@@ -726,28 +727,18 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                             cur_move = None
                             cur_target = None
                             continue
-                        # Skip spread moves: their "no effect"
-                        # is on a single target but the move
-                        # can still hit other targets.
-                        if move_id in {
-                            "earthquake", "surf", "discharge",
-                            "heatwave", "lavaplume", "eruption",
-                            "waterspout", "dazzlinggleam",
-                            "magnitude", "bulldoze", "explosion",
-                            "selfdestruct", "muddywater",
-                            "sludgewave", "diamondstorm",
-                            "rockslide", "icywind", "snarl",
-                            "incinerate", "hypervoice",
-                            "boomburst", "overdrive",
-                            "clangingscales",
-                            "precipiceblades", "originpulse",
-                            "glaciate", "blizzard",
-                            "breakingswipe", "makeitrain",
-                        }:
-                            cur_actor = None
-                            cur_move = None
-                            cur_target = None
-                            continue
+                        # Spread moves are NOT skipped: the
+                        # |-immune| lines for each target
+                        # drive the no-effect counting. A
+                        # spread move into 2 Flying targets
+                        # produces 2 |-immune| events, both
+                        # for the same actor but different
+                        # targets. Each is counted as a
+                        # no-effect event for that
+                        # (actor, target) pair. The
+                        # "repeated" check then flags
+                        # repeated no-effect into the same
+                        # (actor, target).
                         cur_actor = parts[2]
                         cur_move = move_id
                         cur_target = parts[4] if parts[4] else ""
@@ -757,6 +748,22 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                         or "doesn't affect" in line
                     ):
                         if cur_actor is None or cur_move is None:
+                            continue
+                        # Phase 7 fix: if the current move
+                        # is a Protect-like self-protection
+                        # move, the |-immune| is an
+                        # opponent attack blocked by our
+                        # Protect, not a damaging type-
+                        # immunity no-effect. Skip it.
+                        if cur_move in {
+                            "protect", "detect", "spikyshield",
+                            "kingsshield", "obstruct", "maxguard",
+                            "silktrap", "banefulbunker",
+                            "burningbulwark",
+                        }:
+                            cur_actor = None
+                            cur_move = None
+                            cur_target = None
                             continue
                         out["no_effect_move_count"] += 1
                         out["known_immunity_no_effect_count"] += 1

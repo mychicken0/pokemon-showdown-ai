@@ -28,8 +28,10 @@ from doubles_decision_audit_logger import DoublesDecisionAuditLogger
 
 try:
     from . import action_trace
+    from . import protect_like_and_type_immunity as _plati
 except ImportError:
     import action_trace
+    import protect_like_and_type_immunity as _plati
 
 
 
@@ -432,29 +434,28 @@ def _is_no_effect_attack_blocked(
     # Skip status moves
     if move_id in _NO_EFFECT_STATUS_MOVE_IDS:
         return False
-    # Spread moves are excluded because they can still
-    # hit a non-immune adjacent ally/opponent. The
-    # selection target may be immune but the action
-    # itself is not entirely no-effect.
-    if move_id in (
-        "earthquake", "surf", "discharge", "heatwave",
-        "lavaplume", "eruption", "waterspout",
-        "dazzlinggleam", "magnitude", "bulldoze",
-        "explosion", "selfdestruct", "muddywater",
-        "sludgewave", "diamondstorm", "rockslide",
-        "icywind", "snarl", "incinerate", "hypervoice",
-        "boomburst", "overdrive", "clangingscales",
-        "precipiceblades", "originpulse", "glaciate",
-        "blizzard", "breakingswipe", "makeitrain",
-    ):
-        return False
     target = getattr(order, "move_target", 0)
     if not isinstance(target, int) or target < 0:
         return False  # self/ally target, not relevant
     if battle is None:
         return False
     opp_list = getattr(battle, "opponent_active_pokemon", None)
-    if not opp_list or not (0 <= target < len(opp_list)):
+    if not opp_list:
+        return False
+    # Spread moves: block only if ALL valid opponent
+    # targets are type-immune. If any target can be
+    # affected, the action is not entirely no-effect and
+    # the move is not hard-blocked. This closes the
+    # Ground-into-Flying gap that the prior version had.
+    if _plati.is_spread_damaging_move(move_id):
+        try:
+            blocked, _reason = _plati.is_damaging_no_effect_blocked(
+                move_id, target, list(opp_list), is_type_immune, battle
+            )
+        except Exception:
+            return False
+        return bool(blocked)
+    if not (0 <= target < len(opp_list)):
         return False
     tgt = opp_list[target]
     if tgt is None:
@@ -486,10 +487,9 @@ def _is_no_effect_attack_blocked(
 # of truth) but kept independent for module-level
 # availability. ``detect`` is included because it shares
 # the same consecutive-use semantics in the protocol.
-_PROTECT_LIKE_MOVE_IDS_SPAM = frozenset({
-    "protect", "detect", "spikyshield", "kingsshield",
-    "obstruct", "maxguard", "silktrap", "quickguard",
-})
+_PROTECT_LIKE_MOVE_IDS_SPAM = frozenset(
+    sorted(_plati.PROTECT_LIKE_MOVE_IDS)
+)
 
 
 def _is_repeated_protect_spam(
@@ -622,14 +622,35 @@ def _is_repeated_protect_spam(
     if rec["last_turn"] >= 0 and current_turn - rec["last_turn"] > 1:
         rec["streak"] = 0
         rec["last_failed"] = False
-    new_streak = rec["streak"] + 1
-    rec["streak"] = new_streak
-    rec["last_turn"] = current_turn
-    rec["last_ident"] = ident
-    state[key] = rec
-    # Hard-block threshold: 3rd+ consecutive Protect, OR a
-    # 2nd+ consecutive Protect whose previous attempt
-    # already failed.
+        # Also clear the turn guard so the new turn starts fresh.
+        state["_turn_guard"] = set()
+    # Phase 7 first-call-per-turn guard: the production
+    # path calls this helper many times per choose_move
+    # (pre-compute pass for both slots + 2 counterfactual
+    # re-computes). Without a guard, the streak counter
+    # grows by the number of Protect candidates per
+    # turn, crossing the 3rd-consecutive threshold by
+    # scoring alone. The guard ensures state mutation
+    # happens at most once per (battle, turn, slot, ident).
+    turn_key = (battle_tag, current_turn, active_idx, ident)
+    already_processed = state.get("_turn_guard", set())
+    first_call_this_turn = turn_key not in already_processed
+    if first_call_this_turn:
+        already_processed = set(already_processed)
+        already_processed.add(turn_key)
+        state["_turn_guard"] = already_processed
+        # Increment the streak exactly once for this turn.
+        new_streak = rec["streak"] + 1
+        rec["streak"] = new_streak
+        rec["last_turn"] = current_turn
+        rec["last_ident"] = ident
+        state[key] = rec
+    else:
+        # Subsequent calls in the same turn: do not
+        # increment the streak. Use the current value.
+        new_streak = rec["streak"]
+    # Hard-block threshold: 3rd+ consecutive Protect-like,
+    # OR a 2nd+ whose previous attempt already failed.
     if new_streak >= 3:
         return True
     if new_streak >= 2 and rec.get("last_failed"):
@@ -3403,7 +3424,22 @@ class DoublesDamageAwarePlayer(Player):
 
             score_1 = slot_0_scores.get(id(first), 0.0) if first else 0.0
             score_2 = slot_1_scores.get(id(second), 0.0) if second else 0.0
-            joint_score = score_1 + score_2
+
+            # Phase 7 production-path fix: hard-block
+            # short-circuit. Any joint containing a slot
+            # with a score below HARD_BLOCK_SCORE_THRESHOLD
+            # is impossible to select. This closes the
+            # "all joints bad" corner case where the
+            # canonical selector would otherwise pick a
+            # hard-blocked Protect-like or type-immune
+            # action. The sentinel -1e18 is below every
+            # legitimate score (which are >= 0 for legal
+            # non-blocked actions) and below the threshold.
+            if (score_1 <= HARD_BLOCK_SCORE_THRESHOLD
+                    or score_2 <= HARD_BLOCK_SCORE_THRESHOLD):
+                joint_score = -1e18
+            else:
+                joint_score = score_1 + score_2
 
             first_blocked = (
                 _direct_absorb_blocked.get(id(first), False) if first else False
@@ -10543,6 +10579,39 @@ class DoublesDamageAwarePlayer(Player):
         )
         _joint_order_count = len(scored_joint_orders)
         best_joint, best_score, best_score_1, best_score_2 = scored_joint_orders[0]
+
+        # Phase 7 canonical trace coverage: record every
+        # joint from the canonical _compute_joint_scores call.
+        # The counterfactual trace (inside
+        # _select_best_joint_order) only captures re-computes;
+        # this call covers the canonical path that actually
+        # determines the selected order.
+        if action_trace.is_action_trace_enabled():
+            for j_idx, (j_order, j_score, j_s1, j_s2) in enumerate(
+                scored_joint_orders
+            ):
+                j_first = j_order.first_order
+                j_second = j_order.second_order
+                j_hard_block = (
+                    (j_s1 <= HARD_BLOCK_SCORE_THRESHOLD)
+                    or (j_s2 <= HARD_BLOCK_SCORE_THRESHOLD)
+                )
+                action_trace.record_joint(
+                    battle,
+                    j_idx,
+                    j_first,
+                    j_second,
+                    float(j_s1),
+                    float(j_s2),
+                    float(j_score),
+                    float(j_s1 + j_s2),
+                    float(j_score),
+                    joint_has_hard_block=j_hard_block,
+                    joint_selected=(j_idx == 0),
+                    selection_rank=j_idx,
+                    call_depth=0,
+                    counterfactual="canonical",
+                )
         if _timing_enabled:
             _t_joint_scoring = (time.time() - _t_js_start) * 1000
 

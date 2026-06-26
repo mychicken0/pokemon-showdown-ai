@@ -501,17 +501,44 @@ class TestNoEffectHardBlock(unittest.TestCase):
             )
 
     def test_spread_move_not_overblocked(self):
-        target = self._mon("p2a: Garchomp", types=("Dragon", "Ground"))
-        battle = self._battle(target)
+        # Spread move with TWO targets where ONE is immune
+        # and ONE is not: the move is not entirely no-effect
+        # and must NOT be hard-blocked.
+        target0 = self._mon("p2a: Garchomp", types=("Dragon", "Ground"))
+        target1 = self._mon("p2b: Charizard", types=("Fire", "Flying"))
+        battle = self._battle(target0, target1)
         order = _Order(
             inner=_Move("earthquake", "physical", "ground", priority=0),
             move_target=0,
         )
-        # Even with is_type_immune returning True for one
-        # target, spread moves are not overblocked.
+        # is_type_immune returns True for target0 (immune)
+        # and False for target1 (not immune). The spread
+        # move can still hit target1, so the action is
+        # not entirely no-effect.
+        def fake_imm(move, attacker, target, **kwargs):
+            if target is target0:
+                return (True, "test_immunity")
+            return (False, "")
+        with mock.patch.object(bot, "is_type_immune",
+                               side_effect=fake_imm):
+            self.assertFalse(
+                _is_no_effect_attack_blocked(order, battle, 0)
+            )
+
+    def test_spread_move_all_immune_blocked(self):
+        # Spread move with TWO targets where BOTH are immune:
+        # the move is entirely no-effect and MUST be
+        # hard-blocked.
+        target0 = self._mon("p2a: Salamence", types=("Dragon", "Flying"))
+        target1 = self._mon("p2b: Charizard", types=("Fire", "Flying"))
+        battle = self._battle(target0, target1)
+        order = _Order(
+            inner=_Move("earthquake", "physical", "ground", priority=0),
+            move_target=0,
+        )
         with mock.patch.object(bot, "is_type_immune",
                                return_value=(True, "test_immunity")):
-            self.assertFalse(
+            self.assertTrue(
                 _is_no_effect_attack_blocked(order, battle, 0)
             )
 
@@ -713,14 +740,22 @@ class TestNoEffectParser(unittest.TestCase):
         self.assertEqual(out["no_effect_move_count"], 0)
         self.assertEqual(out["no_effect_policy_bug_count"], 0)
 
-    def test_spread_move_immune_not_counted(self):
+    def test_spread_move_immune_counted(self):
+        # Phase 7 fix: spread move |-immune| IS counted as
+        # a no-effect event for the specific (actor, target)
+        # pair. The previous version skipped spread moves
+        # entirely, which let Earthquake-into-Flying slip
+        # through. The per-(actor, target) repeat check
+        # then flags repeated no-effect into the same
+        # target.
         self._write([
             "|turn|14",
             "|move|p1a: Garchomp|Earthquake|p2a: Tornadus",
             "|-immune|p2a: Tornadus",
         ])
         out = parse_no_effect_attacks_from_raw_protocol(self.tmpdir)
-        self.assertEqual(out["no_effect_move_count"], 0)
+        self.assertEqual(out["no_effect_move_count"], 1)
+        self.assertEqual(out["known_immunity_no_effect_count"], 1)
 
 
 class TestStage2GateWithNoEffect(unittest.TestCase):
