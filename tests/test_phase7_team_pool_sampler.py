@@ -386,16 +386,26 @@ class TestRunSmokeIntegration(unittest.TestCase):
         # Directly call run_smoke with team_mode="pool" and a
         # non-existent pool dir; expect clean error return,
         # no battle started.
+        #
+        # The production run_smoke runs
+        # check_localhost_healthy() before any pool logic, so
+        # we mock it to True so the test reaches the pool
+        # validation branch. We do not require a real
+        # localhost server in unit tests.
         import asyncio
+        from unittest import mock
         import showdown_ai.rl_data_3b_small_local_audit as audit_mod
-        result = asyncio.run(
-            audit_mod.run_smoke(
-                battles=1,
-                output_path="logs/_should_not_exist.jsonl",
-                team_mode="pool",
-                team_pool_dirs=["/nonexistent/pool/dir"],
+        with mock.patch.object(
+            audit_mod, "check_localhost_healthy", return_value=True
+        ):
+            result = asyncio.run(
+                audit_mod.run_smoke(
+                    battles=1,
+                    output_path="logs/_should_not_exist.jsonl",
+                    team_mode="pool",
+                    team_pool_dirs=["/nonexistent/pool/dir"],
+                )
             )
-        )
         self.assertIn("error", result)
         self.assertIn("pool dir not found", result["error"])
 
@@ -442,16 +452,24 @@ class TestRunSmokeIntegration(unittest.TestCase):
     def test_32_pool_mode_does_not_silently_fallback_to_fixed(self):
         # team_mode="pool" with no --team-pool-dir must return
         # a clear error, not silently use fixed.
+        #
+        # Mock check_localhost_healthy so the test reaches
+        # the pool-missing-args branch without requiring a
+        # real localhost server.
         import asyncio
+        from unittest import mock
         import showdown_ai.rl_data_3b_small_local_audit as audit_mod
-        result = asyncio.run(
-            audit_mod.run_smoke(
-                battles=1,
-                output_path="logs/_should_not_exist.jsonl",
-                team_mode="pool",
-                team_pool_dirs=None,
+        with mock.patch.object(
+            audit_mod, "check_localhost_healthy", return_value=True
+        ):
+            result = asyncio.run(
+                audit_mod.run_smoke(
+                    battles=1,
+                    output_path="logs/_should_not_exist.jsonl",
+                    team_mode="pool",
+                    team_pool_dirs=None,
+                )
             )
-        )
         self.assertIn("error", result)
         self.assertIn("--team-pool-dir", result["error"])
 
