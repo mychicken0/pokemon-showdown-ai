@@ -358,6 +358,233 @@ def _is_priority_blocked_by_psychic_terrain(
     return True
 
 
+# ponytail: Protect-like move-id set used by the
+# ``_is_repeated_protect_spam`` helper. Mirrors the
+# ``_PROTECT_LIKE_MOVE_IDS_B12`` set above (single source
+# of truth) but kept independent for module-level
+# availability. ``detect`` is included because it shares
+# the same consecutive-use semantics in the protocol.
+_PROTECT_LIKE_MOVE_IDS_SPAM = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "obstruct", "maxguard", "silktrap", "quickguard",
+})
+
+
+def _is_repeated_protect_spam(
+    order: Any,
+    battle: Any,
+    active_idx: int,
+    state: Any,
+) -> bool:
+    """Return True when the same active Pokemon is about to
+    click a Protect-like move while the per-(battle, slot,
+    pokemon) streak state already shows a previous Protect
+    on the immediately prior active turn, with no
+    intervening switch.
+
+    The first Protect is allowed; the second consecutive
+    Protect is allowed (caller applies a heavy penalty via
+    ``_is_second_consecutive_protect``); the third and any
+    further consecutive Protect hard-blocks with ``-1e9``.
+
+    ``state`` is a caller-managed dict keyed by
+    ``(battle_tag, active_idx, pokemon_ident)`` whose values
+    are dicts with:
+
+    * ``last_turn`` (int): the last turn this pokemon was the
+      active for this slot and selected Protect. ``-1`` if
+      never used Protect as the active.
+    * ``streak`` (int): current consecutive-Protect streak
+      length (1 = first Protect just used; 2 = second
+      consecutive; ...).
+    * ``last_ident`` (str): the pokemon ident at the last
+      streak update, so a switch (which changes the ident)
+      is detected by comparing against the current
+      ``active_pokemon[active_idx].ident``.
+    * ``last_failed`` (bool): True if the previous Protect
+      attempt in this streak already failed (server-side
+      ``|-fail|``). A second consecutive Protect whose
+      previous attempt failed is also hard-blocked.
+
+    The helper only mutates ``state`` via a single
+    in-place update when the order is a Protect-like
+    action. Non-Protect actions do not write to ``state``;
+    a switch changes the active ident and the helper
+    detects that and resets the streak.
+
+    The helper does NOT look at species, ability, or item.
+    It does NOT change scoring for non-Protect moves. It
+    does NOT add lookahead. It does NOT change support
+    scoring. It does NOT change Anti-Trick-Room. It does
+    NOT change Wide Guard / Follow Me / Rage Powder
+    scoring.
+    """
+    if state is None:
+        return False
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    if not hasattr(inner, "id"):
+        return False
+    mid = str(getattr(inner, "id", "")).lower()
+    if mid not in _PROTECT_LIKE_MOVE_IDS_SPAM:
+        return False
+    active_list = (
+        getattr(battle, "active_pokemon", None)
+        if battle is not None
+        else None
+    )
+    if active_list is None:
+        return False
+    try:
+        mon = active_list[active_idx]
+    except (IndexError, TypeError):
+        return False
+    if mon is None:
+        return False
+    ident = (
+        getattr(mon, "ident", None)
+        or getattr(mon, "name", None)
+        or getattr(mon, "species", None)
+        or ""
+    )
+    battle_tag = (
+        getattr(battle, "battle_tag", "")
+        if battle is not None
+        else ""
+    )
+    current_turn = (
+        getattr(battle, "turn", 0) if battle is not None else 0
+    )
+    key = (battle_tag, active_idx, ident)
+    rec = state.get(key)
+    if rec is None or rec.get("last_ident") != ident:
+        rec = {
+            "last_turn": -1,
+            "streak": 0,
+            "last_ident": ident,
+            "last_failed": False,
+        }
+    # If the gap between turns is more than 1 (e.g. the
+    # pokemon was inactive for >1 turn), reset the streak.
+    if rec["last_turn"] >= 0 and current_turn - rec["last_turn"] > 1:
+        rec["streak"] = 0
+        rec["last_failed"] = False
+    new_streak = rec["streak"] + 1
+    rec["streak"] = new_streak
+    rec["last_turn"] = current_turn
+    rec["last_ident"] = ident
+    state[key] = rec
+    # Hard-block threshold: 3rd+ consecutive Protect, OR a
+    # 2nd+ consecutive Protect whose previous attempt
+    # already failed.
+    if new_streak >= 3:
+        return True
+    if new_streak >= 2 and rec.get("last_failed"):
+        return True
+    return False
+
+
+def _is_second_consecutive_protect(
+    order: Any,
+    battle: Any,
+    active_idx: int,
+    state: Any,
+) -> bool:
+    """Return True if the order is a Protect-like action and
+    the same active pokemon already clicked Protect on the
+    immediately prior turn (no switch, no intervening
+    non-Protect action). Used to apply a heavy penalty
+    without absolute block.
+    """
+    if state is None:
+        return False
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    if not hasattr(inner, "id"):
+        return False
+    mid = str(getattr(inner, "id", "")).lower()
+    if mid not in _PROTECT_LIKE_MOVE_IDS_SPAM:
+        return False
+    active_list = (
+        getattr(battle, "active_pokemon", None)
+        if battle is not None
+        else None
+    )
+    if active_list is None:
+        return False
+    try:
+        mon = active_list[active_idx]
+    except (IndexError, TypeError):
+        return False
+    if mon is None:
+        return False
+    ident = (
+        getattr(mon, "ident", None)
+        or getattr(mon, "name", None)
+        or getattr(mon, "species", None)
+        or ""
+    )
+    battle_tag = (
+        getattr(battle, "battle_tag", "")
+        if battle is not None
+        else ""
+    )
+    current_turn = (
+        getattr(battle, "turn", 0) if battle is not None else 0
+    )
+    key = (battle_tag, active_idx, ident)
+    rec = state.get(key)
+    if rec is None or rec.get("last_ident") != ident:
+        return False
+    if rec.get("last_turn", -1) < 0:
+        return False
+    if current_turn - rec["last_turn"] != 1:
+        return False
+    return rec.get("streak", 0) >= 1
+
+
+def _record_protect_failed(
+    battle: Any, active_idx: int, state: Any
+) -> None:
+    """Mark the most recent Protect for this (battle, slot,
+    pokemon) as failed. Callers invoke this when a
+    ``|-fail|`` line is observed for a Protect move in the
+    same turn."""
+    if state is None:
+        return
+    active_list = (
+        getattr(battle, "active_pokemon", None)
+        if battle is not None
+        else None
+    )
+    if active_list is None:
+        return
+    try:
+        mon = active_list[active_idx]
+    except (IndexError, TypeError):
+        return
+    if mon is None:
+        return
+    ident = (
+        getattr(mon, "ident", None)
+        or getattr(mon, "name", None)
+        or getattr(mon, "species", None)
+        or ""
+    )
+    battle_tag = (
+        getattr(battle, "battle_tag", "")
+        if battle is not None
+        else ""
+    )
+    key = (battle_tag, active_idx, ident)
+    rec = state.get(key)
+    if rec is None:
+        return
+    rec["last_failed"] = True
+
+
 def _is_attack_action_under_expected_faint(order):
     """Phase BEHAVIOR-12: check if an action is a
     non-Protect, non-switch, non-pass action.
@@ -6691,6 +6918,24 @@ class DoublesDamageAwarePlayer(Player):
         if _is_priority_blocked_by_psychic_terrain(order, battle, active_idx):
             return -1e9
 
+        # Phase 7 P0 policy-gap fix: hard-block repeated
+        # low-value Protect spam. The revalidation smoke
+        # produced 5 (battle, actor) pairs with >=10
+        # consecutive Protect turns and 76 (battle, actor)
+        # pairs with at least one failed Protect, including
+        # 147 repeated-failed-Protect events. The fix
+        # applies a heavy penalty to the 2nd consecutive
+        # Protect and a hard ``-1e9`` block to the 3rd+
+        # consecutive Protect (or any 2nd+ whose previous
+        # attempt already failed). See
+        # logs/phase7_protect_spam_policy_and_gate_audit_or_fix/.
+        if not hasattr(self, "_protect_streak_state"):
+            self._protect_streak_state = {}
+        if _is_repeated_protect_spam(
+            order, battle, active_idx, self._protect_streak_state
+        ):
+            return -1e9
+
         # Defensive mock safety initialization
         for attr in (
             "_ability_hard_block_avoided",
@@ -7128,6 +7373,17 @@ class DoublesDamageAwarePlayer(Player):
                             )
                         if target_mon == dangerous_opp:
                             score += 50.0
+
+            # Phase 7 P0 policy-gap fix: 2nd consecutive
+            # Protect for the same active Pokemon gets a
+            # heavy pre-clamp penalty. The 3rd+ consecutive
+            # Protect is hard-blocked by
+            # ``_is_repeated_protect_spam`` above. See
+            # logs/phase7_protect_spam_policy_and_gate_audit_or_fix/.
+            if _is_second_consecutive_protect(
+                order, battle, active_idx, self._protect_streak_state
+            ):
+                score -= 200.0
 
             return max(score, 0.0) + _wt3_pending_bonus + _support_pending_bonus
 
