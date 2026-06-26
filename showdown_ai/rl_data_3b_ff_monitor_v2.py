@@ -401,11 +401,11 @@ def stage2_gate_passes(summary: dict) -> bool:
         (suspicious Prankster pattern with no ability evidence)
       - protect_policy_bug_count > 0 (Protect spam P0 gap)
       - repeated_protect_fail_count > 0
-      - max_consecutive_protect_streak > 8 (defensive upper
-        bound for genuinely stalled-out games; 5+ is
-        always policy-bug worthy; we keep 8 as a hard
-        upper limit to avoid labeling every last-protect-
-        in-late-game scenario as spam)
+      - max_consecutive_protect_streak > 8
+      - no_effect_policy_bug_count > 0 (no-effect / immunity
+        attack policy gap; PHASE7_PRODUCTION_HARD_BLOCK_*
+        investigation)
+      - repeated_no_effect_move_count > 0
 
     Does NOT fail for submitted_same_side_target_count > 0.
     """
@@ -429,6 +429,10 @@ def stage2_gate_passes(summary: dict) -> bool:
         return False
     if summary.get("max_consecutive_protect_streak", 0) > 8:
         return False
+    if summary.get("no_effect_policy_bug_count", 0) > 0:
+        return False
+    if summary.get("repeated_no_effect_move_count", 0) > 0:
+        return False
     return True
 
 
@@ -450,7 +454,10 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         prior turn; otherwise reset streak to 1.
       - A ``|-fail|`` line in the same turn as the actor's
         most recent Protect attempt marks the attempt as
-        failed. Repeated failed attempts are policy bugs.
+        failed. The first fail is NOT a repeated-fail; the
+        second and subsequent consecutive fails are.
+        A non-fail event between Protect moves resets the
+        fail counter.
       - A ``|switch|`` line for the same actor resets the
         streak (new active pokemon).
 
@@ -490,9 +497,10 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         streak = 0
         last_turn = -1
         last_actor = None
+        # Track whether the most recent Protect attempt
+        # for ``last_actor`` failed. Reset on any new Protect
+        # attempt or any non-Protect move by the same actor.
         last_failed = False
-        last_failed_turn = -1
-        repeated_fails = 0
         max_streak_local = 0
         try:
             with open(fp) as f:
@@ -531,11 +539,11 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                             "silktrap", "quickguard",
                         }:
                             # Any non-Protect move by the same
-                            # actor resets the streak.
+                            # actor resets the streak and the
+                            # fail counter.
                             if actor == last_actor:
                                 streak = 0
                                 last_failed = False
-                                last_failed_turn = -1
                             continue
                         out["protect_move_count"] += 1
                         if actor == last_actor and streak >= 1:
@@ -543,8 +551,9 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                         else:
                             streak = 1
                         last_actor = actor
+                        # New Protect attempt: reset the
+                        # per-attempt fail flag for this actor.
                         last_failed = False
-                        last_failed_turn = -1
                         if streak >= 2:
                             out["consecutive_protect_attempt_count"] += 1
                         if streak >= 3:
@@ -563,24 +572,28 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                     if line.startswith("|-fail|"):
                         # Server-side fail in the same turn as
                         # the most recent Protect attempt.
-                        if last_actor is not None and (
-                            last_failed_turn == -1
-                            or last_turn == last_failed_turn
-                        ):
-                            out["protect_fail_count"] += 1
-                            if streak >= 2:
-                                out["repeated_protect_fail_count"] += 1
-                                out["protect_policy_bug_count"] += 1
-                                spam_battles.add(bname)
-                                out["events"].append({
-                                    "battle": bname,
-                                    "actor": last_actor,
-                                    "turn": last_turn,
-                                    "streak": streak,
-                                    "classification": "POLICY_BUG_REPEATED_FAILED_PROTECT",
-                                })
-                            last_failed = True
-                            last_failed_turn = last_turn
+                        # A non-Protect fail is ignored.
+                        if last_actor is None:
+                            continue
+                        out["protect_fail_count"] += 1
+                        if streak >= 2:
+                            # 2nd+ consecutive Protect attempt
+                            # also failed: this is a repeated
+                            # fail. The first fail of a streak
+                            # (streak=1) is not repeated; the
+                            # second and later are.
+                            out["repeated_protect_fail_count"] += 1
+                            out["protect_policy_bug_count"] += 1
+                            spam_battles.add(bname)
+                            out["events"].append({
+                                "battle": bname,
+                                "actor": last_actor,
+                                "turn": last_turn,
+                                "streak": streak,
+                                "classification": "POLICY_BUG_REPEATED_FAILED_PROTECT",
+                            })
+                        # Mark the current attempt as failed.
+                        last_failed = True
                         continue
         except Exception:
             continue
@@ -594,6 +607,195 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
     )
     out["protect_spam_battles"] = len(spam_battles)
     out["protect_spam_gate_pass"] = out["protect_policy_bug_count"] == 0
+    return out
+
+
+# ponytail: status-move / spread-move / move-id sets used by
+# the no-effect parser to filter which failing moves
+# count as type-immunity policy bugs.
+_NO_EFFECT_STATUS_MOVE_IDS_PARSER = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "obstruct", "maxguard", "silktrap", "quickguard",
+    "wideguard", "endure", "substitute", "taunt",
+    "encore", "thunderwave", "willowisp", "toxic",
+    "spore", "sleeppowder", "stunspore", "yawn",
+    "haze", "confuseray", "disable", "swagger",
+    "rest", "sleeptalk", "recover", "roost",
+    "softboiled", "morningsun", "moonlight",
+    "milkdrink", "slackoff", "wish", "lifedew",
+    "tailwind", "trickroom", "sunnyday", "raindance",
+    "sandstorm", "snowscape", "grassyterrain",
+    "electricterrain", "psychicterrain", "mistyterrain",
+    "helpinghand", "coaching", "healpulse",
+})
+
+
+def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
+    """Walk ``raw_dir`` for ``*.jsonl`` battle files and
+    detect repeated no-effect attacking moves.
+
+    Detection rule (per battle, per actor + target):
+
+      - Track the most recent ``|move|actor|move|target|``
+        line. A subsequent ``|-immune|<target>`` or
+        ``It doesn't affect <target>`` line in the same
+        turn is associated with the most recent move.
+      - Status moves are excluded (they are not "no-effect
+        type immunity" attacks).
+      - Spread moves are excluded (a spread hit on a
+        single immune target can still affect the other
+        targets).
+      - A non-Protect, non-immune-line event between the
+        move and the next immune line resets the most-
+        recent move tracker.
+      - Repeated (>=2) consecutive no-effect moves by the
+        same actor into the same target constitute a
+        policy bug.
+      - Opponent attacks into the bot's Protect are NOT
+        counted as Protect failure (we don't increment
+        here; that's the protect parser's job).
+
+    Returns dict with these fields:
+      - no_effect_move_count
+      - known_immunity_no_effect_count
+      - repeated_no_effect_move_count
+      - no_effect_policy_bug_count
+      - no_effect_policy_gate_pass
+      - no_effect_policy_battles
+      - events (list of per-(battle, actor, target) dicts)
+    """
+    import glob as _glob
+    import os as _os
+    out = {
+        "no_effect_move_count": 0,
+        "known_immunity_no_effect_count": 0,
+        "repeated_no_effect_move_count": 0,
+        "no_effect_policy_bug_count": 0,
+        "no_effect_policy_gate_pass": True,
+        "no_effect_policy_battles": 0,
+        "events": [],
+    }
+    if not raw_dir or not _os.path.isdir(raw_dir):
+        return out
+    spam_battles = set()
+    for fp in sorted(_glob.glob(_os.path.join(raw_dir, "*.jsonl"))):
+        bname = _os.path.basename(fp)
+        turn = 0
+        # Most recent (actor, move, target) on this turn.
+        cur_actor = None
+        cur_move = None
+        cur_target = None
+        # Per-(actor, target) consecutive no-effect count
+        # tracked ACROSS turns. A non-no-effect event for the
+        # same key resets the count; a turn gap > 1 also
+        # resets.
+        consecutive_key = None
+        consecutive_count = 0
+        last_no_effect_turn = -1
+        try:
+            with open(fp) as f:
+                for ln in f:
+                    try:
+                        rec = __import__("json").loads(ln)
+                    except Exception:
+                        continue
+                    line = rec.get("line", "")
+                    if line.startswith("|turn|"):
+                        try:
+                            turn = int(line.split("|")[2])
+                        except Exception:
+                            turn = 0
+                        # New turn: reset the current-move
+                        # tracker. We do NOT reset the
+                        # consecutive_key / count because a
+                        # bot that tries the same no-effect
+                        # move on turn 14 and again on turn 19
+                        # is just as broken.
+                        cur_actor = None
+                        cur_move = None
+                        cur_target = None
+                        continue
+                    if line.startswith("|move|"):
+                        parts = line.split("|")
+                        if len(parts) < 5:
+                            continue
+                        move_id = parts[3].lower().replace(" ", "")
+                        # Skip status / setup moves.
+                        if move_id in _NO_EFFECT_STATUS_MOVE_IDS_PARSER:
+                            cur_actor = None
+                            cur_move = None
+                            cur_target = None
+                            continue
+                        # Skip spread moves: their "no effect"
+                        # is on a single target but the move
+                        # can still hit other targets.
+                        if move_id in {
+                            "earthquake", "surf", "discharge",
+                            "heatwave", "lavaplume", "eruption",
+                            "waterspout", "dazzlinggleam",
+                            "magnitude", "bulldoze", "explosion",
+                            "selfdestruct", "muddywater",
+                            "sludgewave", "diamondstorm",
+                            "rockslide", "icywind", "snarl",
+                            "incinerate", "hypervoice",
+                            "boomburst", "overdrive",
+                            "clangingscales",
+                            "precipiceblades", "originpulse",
+                            "glaciate", "blizzard",
+                            "breakingswipe", "makeitrain",
+                        }:
+                            cur_actor = None
+                            cur_move = None
+                            cur_target = None
+                            continue
+                        cur_actor = parts[2]
+                        cur_move = move_id
+                        cur_target = parts[4] if parts[4] else ""
+                        continue
+                    if (
+                        "|-immune|" in line
+                        or "doesn't affect" in line
+                    ):
+                        if cur_actor is None or cur_move is None:
+                            continue
+                        out["no_effect_move_count"] += 1
+                        out["known_immunity_no_effect_count"] += 1
+                        key = (cur_actor, cur_target)
+                        # "Repeated" = any 2+ no-effect events
+                        # for the same (actor, target) in
+                        # the same battle. We don't require
+                        # consecutive turns because a
+                        # bot that tries Electric into
+                        # Ground on turn 14 and again on
+                        # turn 19 is just as broken as
+                        # turn 14 and 15.
+                        if consecutive_key == key:
+                            consecutive_count += 1
+                        else:
+                            consecutive_key = key
+                            consecutive_count = 1
+                        last_no_effect_turn = turn
+                        if consecutive_count >= 2:
+                            out["repeated_no_effect_move_count"] += 1
+                            out["no_effect_policy_bug_count"] += 1
+                            spam_battles.add(bname)
+                            out["events"].append({
+                                "battle": bname,
+                                "actor": cur_actor,
+                                "target": cur_target,
+                                "move": cur_move,
+                                "turn": turn,
+                                "consecutive_count": consecutive_count,
+                                "classification": "POLICY_BUG_REPEATED_NO_EFFECT",
+                            })
+                        cur_actor = None
+                        cur_move = None
+                        cur_target = None
+                        continue
+        except Exception:
+            continue
+    out["no_effect_policy_battles"] = len(spam_battles)
+    out["no_effect_policy_gate_pass"] = out["no_effect_policy_bug_count"] == 0
     return out
 
 

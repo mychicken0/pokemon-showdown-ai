@@ -358,6 +358,123 @@ def _is_priority_blocked_by_psychic_terrain(
     return True
 
 
+# ponytail: hard-block score threshold. Any per-slot
+# score strictly below this constant is treated as
+# hard-blocked by the joint selector
+# (``select_best_joint_from_score_maps``). See
+# ``_is_no_effect_attack_blocked`` for the no-effect
+# hard-block helper.
+HARD_BLOCK_SCORE_THRESHOLD = -1e8
+
+
+# ponytail: status move-id set that we should never
+# treat as a damaging no-effect attack. Used to filter
+# the no-effect classifier so that status moves
+# failing to land are not flagged as type-immunity
+# policy bugs.
+_NO_EFFECT_STATUS_MOVE_IDS = frozenset({
+    "protect", "detect", "spikyshield", "kingsshield",
+    "obstruct", "maxguard", "silktrap", "quickguard",
+    "wideguard", "endure", "substitute", "taunt",
+    "encore", "thunderwave", "willowisp", "toxic",
+    "spore", "sleeppowder", "stunspore", "yawn",
+    "haze", "confuseray", "disable", "swagger",
+    "rest", "sleeptalk", "recover", "roost",
+    "softboiled", "morningsun", "moonlight",
+    "milkdrink", "slackoff", "wish", "lifedew",
+    "tailwind", "trickroom", "sunnyday", "raindance",
+    "sandstorm", "snowscape", "grassyterrain",
+    "electricterrain", "psychicterrain", "mistyterrain",
+    "helpinghand", "coaching", "healpulse",
+})
+
+
+def _is_no_effect_attack_blocked(
+    order: Any,
+    battle: Any,
+    active_idx: int,
+) -> bool:
+    """Return True when the order is an attacking move
+    that is known to have 0 effectiveness against its
+    selected target from battle-visible state.
+
+    Conservative policy:
+    - Damaging moves only (status moves are not flagged
+      even if they would "fail" — the parser/gate handles
+      that separately).
+    - Use the existing ``is_type_immune`` helper which
+      consults poke-env's known type list and the typed-
+      ability block. We do NOT infer Levitate, Magic Bounce,
+      Prankster, or any ability from species.
+    - Unknown target type or unknown ability does not
+      block; the helper returns False.
+
+    Returns True (hard-block) when the move is a damaging
+    move targeting a known-typed opponent with 0
+    effectiveness. Returns False otherwise.
+    """
+    inner = getattr(order, "order", None)
+    if inner is None:
+        return False
+    if not hasattr(inner, "id"):
+        return False
+    try:
+        move_id = str(getattr(inner, "id", "")).lower()
+    except Exception:
+        return False
+    if not move_id:
+        return False
+    # Skip status moves
+    if move_id in _NO_EFFECT_STATUS_MOVE_IDS:
+        return False
+    # Spread moves are excluded because they can still
+    # hit a non-immune adjacent ally/opponent. The
+    # selection target may be immune but the action
+    # itself is not entirely no-effect.
+    if move_id in (
+        "earthquake", "surf", "discharge", "heatwave",
+        "lavaplume", "eruption", "waterspout",
+        "dazzlinggleam", "magnitude", "bulldoze",
+        "explosion", "selfdestruct", "muddywater",
+        "sludgewave", "diamondstorm", "rockslide",
+        "icywind", "snarl", "incinerate", "hypervoice",
+        "boomburst", "overdrive", "clangingscales",
+        "precipiceblades", "originpulse", "glaciate",
+        "blizzard", "breakingswipe", "makeitrain",
+    ):
+        return False
+    target = getattr(order, "move_target", 0)
+    if not isinstance(target, int) or target < 0:
+        return False  # self/ally target, not relevant
+    if battle is None:
+        return False
+    opp_list = getattr(battle, "opponent_active_pokemon", None)
+    if not opp_list or not (0 <= target < len(opp_list)):
+        return False
+    tgt = opp_list[target]
+    if tgt is None:
+        return False
+    # Resolve the target's type list. poke-env exposes
+    # ``types`` (tuple of strings) on the active Pokemon.
+    try:
+        t_types = list(getattr(tgt, "types") or ())
+    except Exception:
+        t_types = []
+    if not t_types:
+        # Unknown typing: do not guess. Do not block.
+        return False
+    # Use the existing is_type_immune helper, which
+    # already does poke-env lookups and shared-engine
+    # type chart + ability resolution.
+    try:
+        immune, _reason = is_type_immune(
+            inner, None, tgt, battle=battle
+        )
+    except Exception:
+        return False
+    return bool(immune)
+
+
 # ponytail: Protect-like move-id set used by the
 # ``_is_repeated_protect_spam`` helper. Mirrors the
 # ``_PROTECT_LIKE_MOVE_IDS_B12`` set above (single source
@@ -428,6 +545,36 @@ def _is_repeated_protect_spam(
         return False
     mid = str(getattr(inner, "id", "")).lower()
     if mid not in _PROTECT_LIKE_MOVE_IDS_SPAM:
+        # Non-Protect action: reset the streak for this
+        # (battle, slot, pokemon) so the next Protect attempt
+        # starts a fresh streak.
+        active_list_n = (
+            getattr(battle, "active_pokemon", None)
+            if battle is not None
+            else None
+        )
+        if active_list_n is not None:
+            try:
+                mon_n = active_list_n[active_idx]
+            except (IndexError, TypeError):
+                mon_n = None
+            if mon_n is not None:
+                ident_n = (
+                    getattr(mon_n, "ident", None)
+                    or getattr(mon_n, "name", None)
+                    or getattr(mon_n, "species", None)
+                    or ""
+                )
+                battle_tag_n = (
+                    getattr(battle, "battle_tag", "")
+                    if battle is not None
+                    else ""
+                )
+                key_n = (battle_tag_n, active_idx, ident_n)
+                rec_n = state.get(key_n)
+                if rec_n is not None:
+                    rec_n["streak"] = 0
+                    rec_n["last_failed"] = False
         return False
     active_list = (
         getattr(battle, "active_pokemon", None)
@@ -2632,6 +2779,23 @@ def select_best_joint_from_score_maps(
         s2 = slot_1_scores.get(id(second), 0.0) if second else 0.0
         js = s1 + s2
 
+        # Phase 7 production-path hard-block integrity:
+        # a per-slot score below HARD_BLOCK_SCORE_THRESHOLD
+        # means the action was hard-blocked by a known safety
+        # rule (Psychic Terrain priority, repeated Protect,
+        # no-effect/immunity). The joint selection must
+        # NEVER pick a hard-blocked slot if any non-blocked
+        # legal alternative exists. We mark this joint as
+        # invalid and let the safest non-blocked alternative
+        # be chosen instead. If all joints are hard-blocked,
+        # the existing safety_block_joint_penalty fallback
+        # below applies. See
+        # logs/phase7_production_hard_block_integrity_investigation_and_fix/.
+        hard_blocked = (
+            (first is not None and s1 < HARD_BLOCK_SCORE_THRESHOLD)
+            or (second is not None and s2 < HARD_BLOCK_SCORE_THRESHOLD)
+        )
+
         blocked = any(
             [
                 da.get(id(first), False) if first else False,
@@ -2645,6 +2809,12 @@ def select_best_joint_from_score_maps(
             ]
         )
 
+        if hard_blocked:
+            # Skip this joint entirely; the per-slot -1e9
+            # hard-block cannot be overridden by the joint
+            # penalty.
+            scored.append((joint_order, -1e18, s1, s2))
+            continue
         if blocked:
             from dataclasses import dataclass
 
@@ -6934,6 +7104,21 @@ class DoublesDamageAwarePlayer(Player):
         if _is_repeated_protect_spam(
             order, battle, active_idx, self._protect_streak_state
         ):
+            return -1e9
+
+        # Phase 7 production-path hard-block: known
+        # no-effect attacking moves (e.g. Electric into
+        # known Ground target) are hard-blocked via -1e9
+        # so that the joint selector (which respects
+        # scores below HARD_BLOCK_SCORE_THRESHOLD) cannot
+        # pick them when any non-blocked legal action
+        # exists. The helper uses poke-env's known type
+        # list and the existing ``is_type_immune`` helper.
+        # We never infer Levitate, Magic Bounce, Prankster,
+        # or any ability from species. Status moves and
+        # spread moves are excluded. See
+        # logs/phase7_production_hard_block_integrity_investigation_and_fix/.
+        if _is_no_effect_attack_blocked(order, battle, active_idx):
             return -1e9
 
         # Defensive mock safety initialization
