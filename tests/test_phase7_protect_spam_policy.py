@@ -94,22 +94,32 @@ class TestFirstProtectAllowed(unittest.TestCase):
     def test_third_consecutive_protect_blocked(self):
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        _is_repeated_protect_spam(_protect_order(), battle, 0, state)
-        _is_repeated_protect_spam(_protect_order(), battle, 0, state)
-        self.assertTrue(
-            _is_repeated_protect_spam(_protect_order(), battle, 0, state)
-        )
+        for t in (1, 2, 3):
+            battle.turn = t
+            is_blocked = _is_repeated_protect_spam(
+                _protect_order(), battle, 0, state
+            )
+            if t < 3:
+                self.assertFalse(
+                    is_blocked, f"turn {t} should NOT be blocked"
+                )
+            else:
+                self.assertTrue(
+                    is_blocked, f"turn {t} should be blocked"
+                )
 
 
 class TestConsecutiveFailedProtect(unittest.TestCase):
     def test_failed_protect_blocks_next(self):
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        # First Protect
+        # First Protect on turn 1
+        battle.turn = 1
         _is_repeated_protect_spam(_protect_order(), battle, 0, state)
         # Mark it as failed (server-side |-fail|)
         _record_protect_failed(battle, 0, state)
-        # Second consecutive Protect: blocked because previous failed.
+        # Second consecutive Protect on a new turn: blocked.
+        battle.turn = 2
         self.assertTrue(
             _is_repeated_protect_spam(_protect_order(), battle, 0, state)
         )
