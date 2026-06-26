@@ -6,6 +6,7 @@ no battles, no GPU.
 import json
 import os
 import unittest
+from unittest import mock
 import sys
 from typing import Any
 
@@ -284,46 +285,46 @@ class TestValidateAllTeamsAcceptsCurrent(unittest.TestCase):
 
     def test_accepts_level50(self):
         d = _our_team_ok_dict()
-        with unittest.mock.patch("builtins.open",
-                                  unittest.mock.mock_open(read_data=json.dumps(d))):
-            with unittest.mock.patch("os.path.isfile", return_value=True):
+        with mock.patch("builtins.open",
+                                  mock.mock_open(read_data=json.dumps(d))):
+            with mock.patch("os.path.isfile", return_value=True):
                 audit_mod._validate_all_teams(expected_level=50)
 
 
 class TestValidateAllTeamsFailHard(unittest.TestCase):
     def test_missing_our_team_json_raises(self):
-        with unittest.mock.patch("os.path.isfile", return_value=False):
+        with mock.patch("os.path.isfile", return_value=False):
             with self.assertRaises(ValueError):
                 audit_mod._validate_all_teams(expected_level=50)
 
     def test_malformed_our_team_json_raises(self):
-        with unittest.mock.patch("os.path.isfile", return_value=True):
-            with unittest.mock.patch("builtins.open",
-                                      unittest.mock.mock_open(read_data="{not json")):
+        with mock.patch("os.path.isfile", return_value=True):
+            with mock.patch("builtins.open",
+                                      mock.mock_open(read_data="{not json")):
                 with self.assertRaises(ValueError):
                     audit_mod._validate_all_teams(expected_level=50)
 
     def test_our_team_5_raises(self):
         d = _our_team_5_dict()
-        with unittest.mock.patch("builtins.open",
-                                  unittest.mock.mock_open(read_data=json.dumps(d))):
-            with unittest.mock.patch("os.path.isfile", return_value=True):
+        with mock.patch("builtins.open",
+                                  mock.mock_open(read_data=json.dumps(d))):
+            with mock.patch("os.path.isfile", return_value=True):
                 with self.assertRaises(ValueError):
                     audit_mod._validate_all_teams(expected_level=50)
 
     def test_our_team_missing_level_raises(self):
         d = _our_team_missing_level_dict()
-        with unittest.mock.patch("builtins.open",
-                                  unittest.mock.mock_open(read_data=json.dumps(d))):
-            with unittest.mock.patch("os.path.isfile", return_value=True):
+        with mock.patch("builtins.open",
+                                  mock.mock_open(read_data=json.dumps(d))):
+            with mock.patch("os.path.isfile", return_value=True):
                 with self.assertRaises(ValueError):
                     audit_mod._validate_all_teams(expected_level=50)
 
     def test_our_team_level100_raises(self):
         d = _our_team_level100_dict()
-        with unittest.mock.patch("builtins.open",
-                                  unittest.mock.mock_open(read_data=json.dumps(d))):
-            with unittest.mock.patch("os.path.isfile", return_value=True):
+        with mock.patch("builtins.open",
+                                  mock.mock_open(read_data=json.dumps(d))):
+            with mock.patch("os.path.isfile", return_value=True):
                 with self.assertRaises(ValueError):
                     audit_mod._validate_all_teams(expected_level=50)
 
@@ -404,12 +405,12 @@ class TestRunSmokeCallsValidatorBeforeAnything(unittest.TestCase):
             call_sequence.append("check_localhost")
             return True
 
-        with unittest.mock.patch.object(audit_mod, "_validate_all_teams", fake_validator), \
-             unittest.mock.patch.object(audit_mod, "json_to_showdown", fake_json_to_showdown), \
-             unittest.mock.patch("builtins.open", fake_open), \
-             unittest.mock.patch.object(audit_mod, "DoublesDecisionAuditLogger", fake_audit_logger), \
-             unittest.mock.patch.object(audit_mod, "run_single_battle", fake_run_single_battle), \
-             unittest.mock.patch.object(audit_mod, "check_localhost_healthy", fake_check):
+        with mock.patch.object(audit_mod, "_validate_all_teams", fake_validator), \
+             mock.patch.object(audit_mod, "json_to_showdown", fake_json_to_showdown), \
+             mock.patch("builtins.open", fake_open), \
+             mock.patch.object(audit_mod, "DoublesDecisionAuditLogger", fake_audit_logger), \
+             mock.patch.object(audit_mod, "run_single_battle", fake_run_single_battle), \
+             mock.patch.object(audit_mod, "check_localhost_healthy", fake_check):
             import asyncio
             with self.assertRaises(ValueError):
                 asyncio.run(audit_mod.run_smoke(battles=1, output_path="/tmp/x.jsonl"))
