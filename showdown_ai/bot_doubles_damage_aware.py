@@ -26,6 +26,11 @@ import random_set_model
 from doubles_battle_logger import DoublesBattleLogger
 from doubles_decision_audit_logger import DoublesDecisionAuditLogger
 
+try:
+    from . import action_trace
+except ImportError:
+    import action_trace
+
 
 
 
@@ -7104,6 +7109,10 @@ class DoublesDamageAwarePlayer(Player):
         if _is_repeated_protect_spam(
             order, battle, active_idx, self._protect_streak_state
         ):
+            action_trace.record_candidate(
+                battle, active_idx, order, -1e9,
+                hard_block_reason="repeated_protect",
+            )
             return -1e9
 
         # Phase 7 production-path hard-block: known
@@ -9525,6 +9534,32 @@ class DoublesDamageAwarePlayer(Player):
                 _support_target_blocked=_support_target_blocked,
                 _narrow_blocked=_narrow_blocked,
             )
+            if action_trace.is_action_trace_enabled():
+                for j_idx, (j_order, j_score, j_s1, j_s2) in enumerate(
+                    scored_joint_orders
+                ):
+                    j_first = j_order.first_order
+                    j_second = j_order.second_order
+                    j_hard_block = (
+                        (j_s1 <= HARD_BLOCK_SCORE_THRESHOLD)
+                        or (j_s2 <= HARD_BLOCK_SCORE_THRESHOLD)
+                    )
+                    action_trace.record_joint(
+                        battle,
+                        j_idx,
+                        j_first,
+                        j_second,
+                        float(j_s1),
+                        float(j_s2),
+                        float(j_score),
+                        float(j_s1 + j_s2),
+                        float(j_score),
+                        joint_has_hard_block=j_hard_block,
+                        joint_selected=(j_idx == 0),
+                        selection_rank=j_idx,
+                        call_depth=int(pure),
+                        counterfactual="pure" if pure else "canonical",
+                    )
             return scored_joint_orders[0]
         finally:
             self._active_config_override = old_override
@@ -15461,6 +15496,29 @@ class DoublesDamageAwarePlayer(Player):
                         valid_orders,
                     )
                 ),
+            )
+
+        if action_trace.is_action_trace_enabled():
+            _bf_first = getattr(best_joint, "first_order", None)
+            _bf_second = getattr(best_joint, "second_order", None)
+            _bf_first_hb = (
+                _bf_first is not None
+                and slot_0_scores.get(id(_bf_first), 0.0)
+                <= HARD_BLOCK_SCORE_THRESHOLD
+            )
+            _bf_second_hb = (
+                _bf_second is not None
+                and slot_1_scores.get(id(_bf_second), 0.0)
+                <= HARD_BLOCK_SCORE_THRESHOLD
+            )
+            action_trace.record_final_orders(
+                battle,
+                _bf_first,
+                _bf_second,
+                first_was_hard_blocked=_bf_first_hb,
+                second_was_hard_blocked=_bf_second_hb,
+                emergency_fallback_used=False,
+                fallback_reason="",
             )
 
         return best_joint
