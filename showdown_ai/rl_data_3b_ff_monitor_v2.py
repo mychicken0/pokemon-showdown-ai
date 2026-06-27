@@ -380,6 +380,11 @@ def make_empty_summary(raw_protocol_logs_present: bool = False) -> dict:
         "false_positive_end_of_turn_chip_count": 0,
         # Unknown (fail gate)
         "unknown_friendly_fire_suspect_count": 0,
+        # Productive-partial-spread no-effect
+        # diagnostics. NOT safety failures.
+        "productive_partial_spread_no_effect_false_positive_count": 0,
+        "spread_all_targets_immune_bug_count": 0,
+        "spread_partial_productive_immune_count": 0,
         # Metadata
         "raw_protocol_logs_present": bool(raw_protocol_logs_present),
         "friendly_fire_monitor_version": "v3_confirmed_damage",
@@ -401,13 +406,18 @@ def stage2_gate_passes(summary: dict) -> bool:
         (suspicious Prankster pattern with no ability evidence)
       - protect_policy_bug_count > 0 (Protect spam P0 gap)
       - repeated_protect_fail_count > 0
-      - max_consecutive_protect_streak > 8
+      - max_consecutive_protect_streak > 1 (PHASE7 strict
+        cooldown: no consecutive Protect-like attempts
+        allowed; the parser is the diagnostic view of
+        what the bot actually did)
       - no_effect_policy_bug_count > 0 (no-effect / immunity
         attack policy gap; PHASE7_PRODUCTION_HARD_BLOCK_*
         investigation)
       - repeated_no_effect_move_count > 0
 
-    Does NOT fail for submitted_same_side_target_count > 0.
+    Does NOT fail for submitted_same_side_target_count > 0
+    or for productive_partial_spread_no_effect_false_positive
+    events.
     """
     if not summary.get("raw_protocol_logs_present"):
         return False
@@ -427,7 +437,7 @@ def stage2_gate_passes(summary: dict) -> bool:
         return False
     if summary.get("repeated_protect_fail_count", 0) > 0:
         return False
-    if summary.get("max_consecutive_protect_streak", 0) > 8:
+    if summary.get("max_consecutive_protect_streak", 0) > 1:
         return False
     if summary.get("no_effect_policy_bug_count", 0) > 0:
         return False
@@ -563,9 +573,12 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                             "previous_failed": previous_failed,
                         }
                         is_bot = actor.startswith("p1")
+                        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+                        # any 2nd consecutive Protect-like
+                        # attempt by the bot is a policy
+                        # bug (was previously 3rd).
                         if is_bot and streak >= 2:
                             out["consecutive_protect_attempt_count"] += 1
-                        if is_bot and streak >= 3:
                             out["protect_policy_bug_count"] += 1
                             out["protect_like_third_attempt_bug_count"] += 1
                             if previous_still or previous_failed:
@@ -659,6 +672,12 @@ _NO_EFFECT_STATUS_MOVE_IDS_PARSER = frozenset({
     "sandstorm", "snowscape", "grassyterrain",
     "electricterrain", "psychicterrain", "mistyterrain",
     "helpinghand", "coaching", "healpulse",
+    # Stat-lowering status moves (no type immunity possible)
+    "faketears", "charm", "featherdance", "screech",
+    "growl", "tailwhip", "leer", "sandattack",
+    "stringshot", "smokescreen", "kinesis", "flash",
+    "cottonspore", "stunspore", "sweetkiss", "lovelykiss",
+    "nobleroar", "partingshot", "memento", "topsyturvy",
 })
 
 
@@ -674,9 +693,12 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         turn is associated with the most recent move.
       - Status moves are excluded (they are not "no-effect
         type immunity" attacks).
-      - Spread moves are excluded (a spread hit on a
-        single immune target can still affect the other
-        targets).
+      - Spread moves are NOT skipped; per-target accounting
+        is preserved. A productive partial spread (one
+        target immune AND at least one other target took
+        damage) is classified as a
+        ``productive_partial_spread_no_effect_false_positive``
+        and is NOT a real policy bug.
       - A non-Protect, non-immune-line event between the
         move and the next immune line resets the most-
         recent move tracker.
@@ -687,6 +709,19 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         counted as Protect failure (we don't increment
         here; that's the protect parser's job).
 
+    Productive-partial-spread handling:
+
+      For a spread move, the parser tracks the set of
+      opponents that took actual ``|-damage|`` for the same
+      move on the same turn. If a spread move produced at
+      least one ``|-immune|`` AND at least one ``|-damage|``
+      for a non-immune target on the same (battle, turn,
+      actor, move), the ``|-immune|`` events are classified
+      as
+      ``productive_partial_spread_no_effect_false_positive``
+      and the event is NOT counted as a real
+      ``no_effect_policy_bug`` for the gate.
+
     Returns dict with these fields:
       - no_effect_move_count
       - known_immunity_no_effect_count
@@ -694,6 +729,9 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
       - no_effect_policy_bug_count
       - no_effect_policy_gate_pass
       - no_effect_policy_battles
+      - productive_partial_spread_no_effect_false_positive_count
+      - spread_all_targets_immune_bug_count
+      - spread_partial_productive_immune_count
       - events (list of per-(battle, actor, target) dicts)
     """
     import glob as _glob
@@ -705,6 +743,9 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         "no_effect_policy_bug_count": 0,
         "no_effect_policy_gate_pass": True,
         "no_effect_policy_battles": 0,
+        "productive_partial_spread_no_effect_false_positive_count": 0,
+        "spread_all_targets_immune_bug_count": 0,
+        "spread_partial_productive_immune_count": 0,
         "events": [],
     }
     if not raw_dir or not _os.path.isdir(raw_dir):
@@ -712,6 +753,18 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
     spam_battles = set()
     for fp in sorted(_glob.glob(_os.path.join(raw_dir, "*.jsonl"))):
         bname = _os.path.basename(fp)
+        # Read all lines once so we can look ahead.
+        all_lines = []
+        try:
+            with open(fp) as f:
+                for ln in f:
+                    try:
+                        rec = __import__("json").loads(ln)
+                    except Exception:
+                        continue
+                    all_lines.append(rec.get("line", ""))
+        except Exception:
+            continue
         turn = 0
         # Most recent (actor, move, target) on this turn.
         cur_actor = None
@@ -725,6 +778,285 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         consecutive_count = 0
         last_no_effect_turn = -1
         try:
+            for idx, line in enumerate(all_lines):
+                if line.startswith("|turn|"):
+                    try:
+                        turn = int(line.split("|")[2])
+                    except Exception:
+                        turn = 0
+                    # New turn: reset the current-move
+                    # tracker. We do NOT reset the
+                    # consecutive_key / count because a
+                    # bot that tries the same no-effect
+                    # move on turn 14 and again on turn 19
+                    # is just as broken.
+                    cur_actor = None
+                    cur_move = None
+                    cur_target = None
+                    continue
+                if line.startswith("|move|"):
+                    parts = line.split("|")
+                    if len(parts) < 5:
+                        continue
+                    move_id = parts[3].lower().replace(" ", "")
+                    # Skip status / setup moves.
+                    if move_id in _NO_EFFECT_STATUS_MOVE_IDS_PARSER:
+                        cur_actor = None
+                        cur_move = None
+                        cur_target = None
+                        continue
+                    # Spread moves are NOT skipped: the
+                    # |-immune| lines for each target
+                    # drive the no-effect counting. A
+                    # spread move into 2 Flying targets
+                    # produces 2 |-immune| events, both
+                    # for the same actor but different
+                    # targets. Each is counted as a
+                    # no-effect event for that
+                    # (actor, target) pair. The
+                    # "repeated" check then flags
+                    # repeated no-effect into the same
+                    # (actor, target).
+                    cur_actor = parts[2]
+                    cur_move = move_id
+                    cur_target = parts[4] if parts[4] else ""
+                    continue
+                if (
+                    line.startswith("|-immune|")
+                    or "doesn't affect" in line
+                ):
+                    if cur_actor is None or cur_move is None:
+                        continue
+                    # Phase 7 fix: if the current move
+                    # is a Protect-like self-protection
+                    # move, the |-immune| is an
+                    # opponent attack blocked by our
+                    # Protect, not a damaging type-
+                    # immunity no-effect. Skip it.
+                    if cur_move in {
+                        "protect", "detect", "spikyshield",
+                        "kingsshield", "obstruct", "maxguard",
+                        "silktrap", "banefulbunker",
+                        "burningbulwark",
+                    }:
+                        cur_actor = None
+                        cur_move = None
+                        cur_target = None
+                        continue
+                    # Spread partial-productive handling:
+                    # if the same (actor, move, turn)
+                    # spread move produced at least one
+                    # clean damage line, then this
+                    # |-immune| is a partial productive
+                    # hit (the move productively hit at
+                    # least one target). It is a parser
+                    # false-positive, NOT a real bot
+                    # safety bug. We must lookahead
+                    # because the protocol emits
+                    # `|move| -> |-immune| -> |-damage|`
+                    # in that order: the damage comes
+                    # AFTER the immune for the same
+                    # turn, so we scan forward to the
+                    # next |move| or |turn| to check.
+                    is_spread_move = cur_move in SPREAD_MOVE_IDS
+                    productive_damage = False
+                    if is_spread_move:
+                        for j in range(
+                            idx + 1, len(all_lines)
+                        ):
+                            fl = all_lines[j]
+                            if fl.startswith(
+                                "|move|"
+                            ) or fl.startswith("|turn|"):
+                                break
+                            if not fl.startswith("|-damage|"):
+                                continue
+                            flags = []
+                            try:
+                                _parts = fl.split("|")
+                                flags = [
+                                    t for t in _parts
+                                    if t.startswith("[")
+                                ]
+                            except Exception:
+                                flags = []
+                            is_clean = True
+                            for f in flags:
+                                f_lc = f.lower()
+                                if f_lc.startswith("[from]"):
+                                    value = f[
+                                        len("[from]"):
+                                    ].strip()
+                                    if value.lower() in {
+                                        t.lower()
+                                        for t in WEATHER_CHIP_TOKENS
+                                    }:
+                                        is_clean = False
+                                        break
+                                    if value.lower() in {
+                                        t.lower()
+                                        for t in STATUS_FROM_TOKENS
+                                    }:
+                                        is_clean = False
+                                        break
+                                    if value in HAZARD_DAMAGE_TOKENS:
+                                        is_clean = False
+                                        break
+                                    if value in ITEM_DAMAGE_TOKENS:
+                                        is_clean = False
+                                        break
+                                    if value in ABILITY_DAMAGE_TOKENS:
+                                        is_clean = False
+                                        break
+                                    if value.lower() in {
+                                        m.lower()
+                                        for m in RECOIL_MOVES
+                                    }:
+                                        is_clean = False
+                                        break
+                                    continue
+                            if is_clean:
+                                productive_damage = True
+                                break
+                    if is_spread_move and productive_damage:
+                        out["productive_partial_spread_no_effect_false_positive_count"] += 1
+                        out["spread_partial_productive_immune_count"] += 1
+                        out["events"].append({
+                            "battle": bname,
+                            "actor": cur_actor,
+                            "target": cur_target,
+                            "move": cur_move,
+                            "turn": turn,
+                            "classification": "PRODUCTIVE_PARTIAL_SPREAD_NO_EFFECT_FALSE_POSITIVE",
+                        })
+                        cur_actor = None
+                        cur_move = None
+                        cur_target = None
+                        continue
+                    # Spread with ALL targets immune:
+                    # count as a real no-effect bug. Only
+                    # counts if there were no productive
+                    # damage lines for the same spread move
+                    # on the same turn. Also increments the
+                    # no_effect counters because the spread
+                    # move is entirely no-effect.
+                    if is_spread_move:
+                        out["spread_all_targets_immune_bug_count"] += 1
+                    out["no_effect_move_count"] += 1
+                    out["known_immunity_no_effect_count"] += 1
+                    key = (cur_actor, cur_target)
+                    # "Repeated" = any 2+ no-effect events
+                    # for the same (actor, target) in
+                    # the same battle. We don't require
+                    # consecutive turns because a
+                    # bot that tries Electric into
+                    # Ground on turn 14 and again on
+                    # turn 19 is just as broken as
+                    # turn 14 and 15.
+                    if consecutive_key == key:
+                        consecutive_count += 1
+                    else:
+                        consecutive_key = key
+                        consecutive_count = 1
+                    last_no_effect_turn = turn
+                    if consecutive_count >= 2:
+                        out["repeated_no_effect_move_count"] += 1
+                        out["no_effect_policy_bug_count"] += 1
+                        spam_battles.add(bname)
+                        out["events"].append({
+                            "battle": bname,
+                            "actor": cur_actor,
+                            "target": cur_target,
+                            "move": cur_move,
+                            "turn": turn,
+                            "consecutive_count": consecutive_count,
+                            "classification": "POLICY_BUG_REPEATED_NO_EFFECT",
+                        })
+                    cur_actor = None
+                    cur_move = None
+                    cur_target = None
+                    continue
+        except Exception:
+            continue
+    out["no_effect_policy_battles"] = len(spam_battles)
+    out["no_effect_policy_gate_pass"] = out["no_effect_policy_bug_count"] == 0
+    return out
+
+
+# ponytail: low-value positive-priority damaging moves
+# (Quick Attack, Aqua Jet, Mach Punch, Bullet Punch,
+# Ice Shard, Accelerock, Vacuum Wave, Shadow Sneak)
+# that the bot may select even when stronger moves are
+# available. We do NOT add a scoring fix here; we add a
+# diagnostic only. The user can later decide whether to
+# invest in a narrow scoring rule.
+_LOW_VALUE_PRIORITY_MOVE_IDS = frozenset({
+    "quickattack",
+    "aquajet",
+    "machpunch",
+    "bulletpunch",
+    "iceshard",
+    "accelerock",
+    "vacuumwave",
+    "shadowsneak",
+    "thunderclap",
+    "shadowstrike",
+})
+
+
+def parse_low_value_priority_from_raw_protocol(raw_dir: str) -> dict:
+    """Walk ``raw_dir`` for ``*.jsonl`` battle files and
+    count bot-side low-value positive-priority damaging
+    moves (Quick Attack / Aqua Jet / Mach Punch / etc.).
+
+    Diagnostic only. Does NOT change scoring and does NOT
+    fail any gate. The result is reported separately so
+    a future phase can decide whether to invest in a
+    narrow scoring rule for low-value priority spam.
+
+    Detection rule:
+
+      - For each ``|move|<actor>|<move>|<target>|`` line,
+        check if the move is in
+        ``_LOW_VALUE_PRIORITY_MOVE_IDS``.
+      - Count the move only for bot-side (p1) actors.
+      - Count it again only if the same actor selected the
+        same low-value priority move on the previous turn
+        (consecutive spam). Repeated spam across turns
+        is a stronger signal of bot policy weakness.
+      - Track per-battle counts.
+
+    Returns dict with these fields:
+      - low_value_priority_move_count (int)
+      - low_value_priority_consecutive_count (int)
+      - low_value_priority_repeated_count (int)
+      - low_value_priority_by_move_id (dict)
+      - low_value_priority_by_battle (dict)
+      - low_value_priority_battles (int)
+      - events (list of per-event dicts)
+      - low_value_priority_gate_pass (always True, see above)
+    """
+    import glob as _glob
+    import os as _os
+    out = {
+        "low_value_priority_move_count": 0,
+        "low_value_priority_consecutive_count": 0,
+        "low_value_priority_repeated_count": 0,
+        "low_value_priority_by_move_id": {},
+        "low_value_priority_by_battle": {},
+        "low_value_priority_battles": 0,
+        "events": [],
+        "low_value_priority_gate_pass": True,
+    }
+    if not raw_dir or not _os.path.isdir(raw_dir):
+        return out
+    spam_battles = set()
+    for fp in sorted(_glob.glob(_os.path.join(raw_dir, "*.jsonl"))):
+        bname = _os.path.basename(fp)
+        current_turn = 0
+        # Per-actor last low-value priority move and turn
+        last_lv_move = {}
+        try:
             with open(fp) as f:
                 for ln in f:
                     try:
@@ -734,106 +1066,79 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                     line = rec.get("line", "")
                     if line.startswith("|turn|"):
                         try:
-                            turn = int(line.split("|")[2])
+                            t = int(line.split("|")[2])
                         except Exception:
-                            turn = 0
-                        # New turn: reset the current-move
-                        # tracker. We do NOT reset the
-                        # consecutive_key / count because a
-                        # bot that tries the same no-effect
-                        # move on turn 14 and again on turn 19
-                        # is just as broken.
-                        cur_actor = None
-                        cur_move = None
-                        cur_target = None
+                            t = 0
+                        current_turn = t
                         continue
                     if line.startswith("|move|"):
                         parts = line.split("|")
                         if len(parts) < 5:
                             continue
-                        move_id = parts[3].lower().replace(" ", "")
-                        # Skip status / setup moves.
-                        if move_id in _NO_EFFECT_STATUS_MOVE_IDS_PARSER:
-                            cur_actor = None
-                            cur_move = None
-                            cur_target = None
+                        actor = parts[2]
+                        move_id = parts[3].lower().replace(" ", "").replace(
+                            "-", ""
+                        ).replace("'", "")
+                        if move_id not in _LOW_VALUE_PRIORITY_MOVE_IDS:
+                            last_lv_move.pop(actor, None)
                             continue
-                        # Spread moves are NOT skipped: the
-                        # |-immune| lines for each target
-                        # drive the no-effect counting. A
-                        # spread move into 2 Flying targets
-                        # produces 2 |-immune| events, both
-                        # for the same actor but different
-                        # targets. Each is counted as a
-                        # no-effect event for that
-                        # (actor, target) pair. The
-                        # "repeated" check then flags
-                        # repeated no-effect into the same
-                        # (actor, target).
-                        cur_actor = parts[2]
-                        cur_move = move_id
-                        cur_target = parts[4] if parts[4] else ""
-                        continue
-                    if (
-                        "|-immune|" in line
-                        or "doesn't affect" in line
-                    ):
-                        if cur_actor is None or cur_move is None:
+                        if not actor.startswith("p1"):
                             continue
-                        # Phase 7 fix: if the current move
-                        # is a Protect-like self-protection
-                        # move, the |-immune| is an
-                        # opponent attack blocked by our
-                        # Protect, not a damaging type-
-                        # immunity no-effect. Skip it.
-                        if cur_move in {
-                            "protect", "detect", "spikyshield",
-                            "kingsshield", "obstruct", "maxguard",
-                            "silktrap", "banefulbunker",
-                            "burningbulwark",
-                        }:
-                            cur_actor = None
-                            cur_move = None
-                            cur_target = None
-                            continue
-                        out["no_effect_move_count"] += 1
-                        out["known_immunity_no_effect_count"] += 1
-                        key = (cur_actor, cur_target)
-                        # "Repeated" = any 2+ no-effect events
-                        # for the same (actor, target) in
-                        # the same battle. We don't require
-                        # consecutive turns because a
-                        # bot that tries Electric into
-                        # Ground on turn 14 and again on
-                        # turn 19 is just as broken as
-                        # turn 14 and 15.
-                        if consecutive_key == key:
-                            consecutive_count += 1
-                        else:
-                            consecutive_key = key
-                            consecutive_count = 1
-                        last_no_effect_turn = turn
-                        if consecutive_count >= 2:
-                            out["repeated_no_effect_move_count"] += 1
-                            out["no_effect_policy_bug_count"] += 1
+                        out["low_value_priority_move_count"] += 1
+                        out["low_value_priority_by_move_id"][
+                            move_id
+                        ] = out["low_value_priority_by_move_id"].get(
+                            move_id, 0
+                        ) + 1
+                        out["low_value_priority_by_battle"][
+                            bname
+                        ] = out["low_value_priority_by_battle"].get(
+                            bname, 0
+                        ) + 1
+                        last = last_lv_move.get(actor)
+                        if (
+                            last is not None
+                            and last["move_id"] == move_id
+                            and current_turn - last["turn"] == 1
+                        ):
+                            out[
+                                "low_value_priority_consecutive_count"
+                            ] += 1
+                            if last.get("already_counted_consecutive"):
+                                out[
+                                    "low_value_priority_repeated_count"
+                                ] += 1
+                            # Mark the prior record as
+                            # already-counted-consecutive so
+                            # the NEXT turn (3rd in a row)
+                            # will see this flag and emit a
+                            # repeated event. Do NOT reset
+                            # the flag here: the new record
+                            # inherits the flag value.
+                            last_lv_move[actor] = {
+                                "move_id": move_id,
+                                "turn": current_turn,
+                                "already_counted_consecutive": True,
+                            }
                             spam_battles.add(bname)
                             out["events"].append({
                                 "battle": bname,
-                                "actor": cur_actor,
-                                "target": cur_target,
-                                "move": cur_move,
-                                "turn": turn,
-                                "consecutive_count": consecutive_count,
-                                "classification": "POLICY_BUG_REPEATED_NO_EFFECT",
+                                "actor": actor,
+                                "turn": current_turn,
+                                "move_id": move_id,
+                                "classification": (
+                                    "DIAGNOSTIC_LOW_VALUE_PRIORITY_SPAM"
+                                ),
                             })
-                        cur_actor = None
-                        cur_move = None
-                        cur_target = None
-                        continue
+                        else:
+                            last_lv_move[actor] = {
+                                "move_id": move_id,
+                                "turn": current_turn,
+                                "already_counted_consecutive": False,
+                            }
         except Exception:
             continue
-    out["no_effect_policy_battles"] = len(spam_battles)
-    out["no_effect_policy_gate_pass"] = out["no_effect_policy_bug_count"] == 0
+    out["low_value_priority_battles"] = len(spam_battles)
     return out
 
 

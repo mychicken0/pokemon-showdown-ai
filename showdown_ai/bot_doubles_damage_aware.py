@@ -533,7 +533,7 @@ def _is_repeated_protect_spam(
     (called from ``choose_move`` just before the final
     return).
 
-    Pure-read design rules:
+    Pure-read design rules (PHASE7_POLICY_SANITY_STRICT_COOLDOWN):
 
     * Non-Protect-like action: never blocked, state unchanged.
     * Battle boundary (new battle_tag): not blocked.
@@ -541,11 +541,11 @@ def _is_repeated_protect_spam(
     * Turn gap > 1: not blocked (streak broken by inactive
       turns).
     * First Protect-like attempt: not blocked.
-    * Second consecutive: not blocked (caller applies a
-      heavy penalty via ``_is_second_consecutive_protect``).
-    * Third+ consecutive: hard-blocked (return True).
-    * Second+ whose previous attempt already failed:
-      hard-blocked (return True).
+    * Second consecutive: hard-blocked (committed streak
+      ``>= 1`` means the previous attempt was Protect-like;
+      the next attempt is consecutive and must be blocked).
+    * Any attempt after a previous failed attempt:
+      hard-blocked.
 
     The helper does NOT look at species, ability, or item.
     It does NOT change scoring for non-Protect moves. It
@@ -603,15 +603,15 @@ def _is_repeated_protect_spam(
     if rec.get("last_turn", -1) >= 0 and current_turn - rec["last_turn"] > 1:
         return False
     streak = int(rec.get("streak", 0))
-    # Two committed attempts mean this candidate would be
-    # the third consecutive selected Protect-like attempt.
-    if streak >= 2:
+    # Strict cooldown: any committed streak >= 1 means the
+    # previous turn was a Protect-like move. The next
+    # attempt on the immediately consecutive turn is
+    # hard-blocked.
+    if streak >= 1:
         return True
-    if streak >= 1 and rec.get("last_failed"):
-        return True
-    # 2nd consecutive is not blocked here; the caller
-    # applies a heavy penalty via
-    # ``_is_second_consecutive_protect`` instead.
+    # Unreachable for Protect-like moves with streak=0
+    # because the early `rec is None / ident mismatch`
+    # branch already returned False. Kept for safety.
     return False
 
 
@@ -7239,7 +7239,7 @@ class DoublesDamageAwarePlayer(Player):
             _protect_reason = (
                 "protect_like_last_failed"
                 if _protect_rec.get("last_failed")
-                else "repeated_protect_like_third_attempt"
+                else "protect_like_consecutive_cooldown"
             )
             action_trace.record_candidate(
                 battle, active_idx, order, -1e9,

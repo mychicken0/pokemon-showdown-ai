@@ -114,6 +114,13 @@ def _commit_one(battle, slot_idx, state, order, turn=None):
 
 
 class TestFirstProtectAllowed(unittest.TestCase):
+    """PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN.
+
+    New policy: no immediate consecutive Protect-like
+    attempt by the same (battle, slot, pokemon). The 2nd
+    consecutive attempt is hard-blocked.
+    """
+
     def test_first_protect_not_blocked(self):
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
@@ -122,18 +129,19 @@ class TestFirstProtectAllowed(unittest.TestCase):
             _is_repeated_protect_spam(_protect_order(), battle, 0, state)
         )
 
-    def test_second_protect_not_blocked(self):
-        # Second consecutive Protect: not blocked (heavy
-        # penalty applied by caller). To get the streak to 2
-        # we must record once via the pure helper, then check
-        # the read-only guard.
+    def test_second_protect_blocked(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the 2nd consecutive Protect is now hard-blocked
+        # (was previously allowed under the old third-attempt
+        # gate).
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
         battle.turn = 1
         _commit_one(battle, 0, state, _protect_order(), turn=1)
         battle.turn = 2
-        self.assertFalse(
-            _is_repeated_protect_spam(_protect_order(), battle, 0, state)
+        self.assertTrue(
+            _is_repeated_protect_spam(_protect_order(), battle, 0, state),
+            "turn 2 should be blocked under strict cooldown",
         )
 
     def test_third_consecutive_protect_blocked(self):
@@ -630,7 +638,12 @@ class TestRawParserProtectSpam(unittest.TestCase):
         self.assertGreaterEqual(out["protect_policy_bug_count"], 1)
         self.assertFalse(out["protect_spam_gate_pass"])
 
-    def test_two_failed_attempts_do_not_fail_attempt_streak_gate(self):
+    def test_two_failed_attempts_are_consecutive_and_fail_gate(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # 2 consecutive Protects (whether successful or
+        # failed) are policy bugs under the strict
+        # cooldown. The bot should not have selected
+        # Protect twice in a row.
         self._write([
             "|turn|2",
             "|move|p1a: Volcarona|Protect|p1a: Volcarona",
@@ -641,10 +654,23 @@ class TestRawParserProtectSpam(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertGreaterEqual(out["protect_fail_count"], 1)
+        # repeated_protect_fail_count only counts when
+        # the previous attempt ALSO failed AND the streak
+        # is >= 3; we have streak=2 here so it's 0.
         self.assertEqual(out["repeated_protect_fail_count"], 0)
-        self.assertTrue(out["protect_spam_gate_pass"])
+        # But the consecutive protect count >= 1 and
+        # policy bug >= 1.
+        self.assertGreaterEqual(
+            out["consecutive_protect_attempt_count"], 1
+        )
+        self.assertGreaterEqual(out["protect_policy_bug_count"], 1)
+        self.assertFalse(out["protect_spam_gate_pass"])
 
-    def test_success_still_third_attempt_is_policy_bug(self):
+    def test_consecutive_protect_fails_gate(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # 2 consecutive Protects (still-gap) now
+        # produces 2 policy bug events: the 2nd and the
+        # 3rd. The still-gap (the 2nd) is one of them.
         self._write([
             "|turn|11",
             "|move|p1a: Bot|Protect|p1a: Bot",
@@ -656,9 +682,18 @@ class TestRawParserProtectSpam(unittest.TestCase):
             "|move|p1a: Bot|Protect|p1a: Bot",
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
-        self.assertEqual(out["max_consecutive_protect_like_attempt_streak"], 3)
-        self.assertEqual(out["protect_like_third_attempt_bug_count"], 1)
-        self.assertEqual(out["protect_like_still_gap_bug_count"], 1)
+        # 3 attempts in a row (2nd was a still, 3rd was a
+        # normal Protect). 2nd (streak=2) and 3rd (streak=3)
+        # are both policy bugs.
+        self.assertEqual(
+            out["max_consecutive_protect_like_attempt_streak"], 3
+        )
+        self.assertGreaterEqual(
+            out["protect_like_third_attempt_bug_count"], 2
+        )
+        self.assertGreaterEqual(
+            out["protect_like_still_gap_bug_count"], 1
+        )
         self.assertFalse(out["protect_spam_gate_pass"])
 
     def test_opponent_third_attempt_is_not_bot_policy_bug(self):
@@ -765,8 +800,11 @@ class TestStage2GateWithProtect(unittest.TestCase):
         self.assertFalse(stage2_gate_passes(s))
 
     def test_stage2_gate_fails_on_long_protect_streak(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the gate threshold is now > 1. A streak of 2
+        # already fails the gate.
         s = make_empty_summary(raw_protocol_logs_present=True)
-        s["max_consecutive_protect_streak"] = 9
+        s["max_consecutive_protect_streak"] = 2
         self.assertFalse(stage2_gate_passes(s))
 
     def test_stage2_gate_passes_on_clean_summary(self):

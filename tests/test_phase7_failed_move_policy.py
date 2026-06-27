@@ -280,7 +280,11 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
             score = player.score_action(self._protect(), 0, battle)
         self.assertEqual(score, -1e9)
 
-    def test_second_protect_not_blocked(self):
+    def test_second_protect_blocked(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the 2nd consecutive Protect is now hard-blocked
+        # (was previously allowed under the old third-attempt
+        # gate).
         battle = self._battle_with_active()
         state: Dict = {}
         ident = battle.active_pokemon[0].ident
@@ -288,37 +292,41 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         record_protect_like_attempt(
             state, battle.battle_tag, 0, ident, 1, "protect"
         )
-        # 2nd consecutive Protect: not blocked.
+        # 2nd consecutive Protect: blocked.
         battle.turn = 2
-        self.assertFalse(
+        self.assertTrue(
             _is_repeated_protect_spam(self._protect(), battle, 0, state)
         )
 
     def test_third_protect_hard_blocked(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # 1st and 2nd are checked, 2nd is already blocked
+        # under strict cooldown.
         battle = self._battle_with_active()
         state: Dict = {}
         ident = battle.active_pokemon[0].ident
-        for t in (1, 2, 3):
-            battle.turn = t
-            is_blocked = _is_repeated_protect_spam(
-                self._protect(), battle, 0, state
-            )
-            if t < 3:
-                self.assertFalse(
-                    is_blocked, f"turn {t} should NOT be blocked"
-                )
-            else:
-                self.assertTrue(
-                    is_blocked, f"turn {t} should be blocked"
-                )
-            if not is_blocked:
-                record_protect_like_attempt(
-                    state, battle.battle_tag, 0, ident, t, "protect"
-                )
+        # Turn 1: 1st attempt -> not blocked.
+        battle.turn = 1
+        is_blocked_t1 = _is_repeated_protect_spam(
+            self._protect(), battle, 0, state
+        )
+        self.assertFalse(is_blocked_t1, "turn 1 should NOT be blocked")
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 1, "protect"
+        )
+        # Turn 2: 2nd consecutive -> blocked.
+        battle.turn = 2
+        is_blocked_t2 = _is_repeated_protect_spam(
+            self._protect(), battle, 0, state
+        )
+        self.assertTrue(is_blocked_t2, "turn 2 should be blocked")
 
     def test_16_turn_whimsicott_streak(self):
         # Reproduce battle-9 p1b: Whimsicott t13-t28 pattern.
-        # Two active mons (p1a, p1b) so slot=1 is in range.
+        # Under strict cooldown, every 2nd consecutive
+        # attempt is blocked. The original test verified a
+        # 3-attempt pattern; we now expect a 2-attempt
+        # pattern.
         battle = _Battle(actives=[
             _Mon(ident="p1a: Garchomp", species="Garchomp",
                  types=("Dragon", "Ground")),
@@ -326,63 +334,72 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
                  types=("Grass", "Fairy")),
         ])
         state: Dict = {}
+        last_was_protect = False
         for turn in range(13, 29):
             battle.turn = turn
             is_blocked = _is_repeated_protect_spam(
                 self._protect(), battle, 1, state
             )
-            should_block = (turn - 13) % 3 == 2
+            # Under strict cooldown, block when the
+            # previous turn was a Protect. If the previous
+            # recorded turn was a non-Protect (tackle), the
+            # next Protect is allowed.
+            should_block = last_was_protect
             if not should_block:
                 self.assertFalse(
                     is_blocked,
-                    f"Whimsicott turn {turn} should NOT be blocked"
+                    f"Whimsicott turn {turn} should NOT be blocked",
                 )
             else:
                 self.assertTrue(
                     is_blocked,
-                    f"Whimsicott turn {turn} should be blocked"
+                    f"Whimsicott turn {turn} should be blocked",
                 )
             if not is_blocked:
                 record_protect_like_attempt(
                     state, battle.battle_tag, 1, "p1b: Whimsicott",
                     turn, "protect",
                 )
+                last_was_protect = True
             else:
+                # Bot picked a non-Protect move because the
+                # next Protect attempt is blocked.
                 record_protect_like_attempt(
                     state, battle.battle_tag, 1, "p1b: Whimsicott",
                     turn, "tackle",
                 )
+                last_was_protect = False
 
     def test_state_resets_after_non_protect_move(self):
         battle = self._battle_with_active()
         state: Dict = {}
         ident = battle.active_pokemon[0].ident
-        # 3 Protects across 3 turns -> 3rd is blocked
-        for t in (1, 2, 3):
-            battle.turn = t
-            record_protect_like_attempt(
-                state, battle.battle_tag, 0, ident, t, "protect"
-            )
-        # A non-Protect move on a NEW turn resets
-        battle.turn = 4
+        # 1 Protect on turn 1 -> recorded.
+        battle.turn = 1
         record_protect_like_attempt(
-            state, battle.battle_tag, 0, ident, 4, "tackle"
+            state, battle.battle_tag, 0, ident, 1, "protect"
         )
-        # Then 2 fresh Protect candidates should be allowed
-        # and committed.
-        for t in (5, 6):
-            battle.turn = t
-            self.assertFalse(
-                _is_repeated_protect_spam(self._protect(), battle, 0, state),
-                f"turn {t} should NOT be blocked",
-            )
-            record_protect_like_attempt(
-                state, battle.battle_tag, 0, ident, t, "protect"
-            )
-        # 3rd fresh Protect on a new turn should be blocked
-        battle.turn = 7
+        # Turn 2: 2nd consecutive would be blocked; bot
+        # picks a non-Protect (tackle) and the streak
+        # resets.
+        battle.turn = 2
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 2, "tackle"
+        )
+        # Turn 3: 1st fresh Protect -> allowed.
+        battle.turn = 3
+        self.assertFalse(
+            _is_repeated_protect_spam(self._protect(), battle, 0, state),
+            "turn 3 should NOT be blocked (fresh streak after tackle)",
+        )
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 3, "protect"
+        )
+        # Turn 4: 2nd consecutive -> blocked.
+        battle.turn = 4
         self.assertTrue(
-            _is_repeated_protect_spam(self._protect(), battle, 0, state)
+            _is_repeated_protect_spam(self._protect(), battle, 0, state),
+            "turn 4 should be blocked (2nd consecutive)",
         )
 
     def test_state_resets_after_switch(self):
@@ -701,7 +718,14 @@ class TestProtectParserFixes(unittest.TestCase):
         self.assertEqual(out["repeated_protect_fail_count"], 0)
         self.assertTrue(out["protect_spam_gate_pass"])
 
-    def test_two_consecutive_fails_are_two_allowed_attempts(self):
+    def test_two_consecutive_fails_are_consecutive_policy_bug(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # 2 consecutive Protect attempts (whether
+        # successful or failed) are policy bugs. The
+        # repeated_protect_fail_count is still 0 here
+        # because it only fires at streak >= 3 with a
+        # previous_failed=True; but the policy bug count
+        # is 1 (2nd attempt was consecutive).
         self._write([
             "|turn|2",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
@@ -713,13 +737,15 @@ class TestProtectParserFixes(unittest.TestCase):
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["protect_fail_count"], 2)
         self.assertEqual(out["repeated_protect_fail_count"], 0)
-        self.assertEqual(out["protect_policy_bug_count"], 0)
-        self.assertTrue(out["protect_spam_gate_pass"])
+        # 2nd consecutive attempt is a policy bug.
+        self.assertEqual(out["protect_policy_bug_count"], 1)
+        self.assertFalse(out["protect_spam_gate_pass"])
 
     def test_successful_protect_resets_fail_state(self):
         # A successful Protect followed by one [still]/fail
         # is one failure, not a repeated failure. A third
-        # selected attempt is still a policy bug.
+        # selected attempt is still a policy bug. Under
+        # strict cooldown, 2nd and 3rd are both policy bugs.
         self._write([
             "|turn|2",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
@@ -733,7 +759,10 @@ class TestProtectParserFixes(unittest.TestCase):
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["protect_fail_count"], 1)
         self.assertEqual(out["repeated_protect_fail_count"], 0)
-        self.assertEqual(out["protect_like_third_attempt_bug_count"], 1)
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the 2nd attempt (still-gap) AND the 3rd attempt
+        # are both policy bugs.
+        self.assertEqual(out["protect_like_third_attempt_bug_count"], 2)
         self.assertEqual(out["protect_like_still_gap_bug_count"], 1)
 
     def test_non_protect_fail_not_counted(self):

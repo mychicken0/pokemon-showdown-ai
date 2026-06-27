@@ -249,8 +249,8 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         battle = _Battle(actives=[_Mon()])
         action_trace.record_candidate(
             battle, 0, _protect_order(), -1e9,
-            hard_block_reason="repeated_protect_like_third_attempt",
-            committed_protect_streak=2,
+            hard_block_reason="protect_like_consecutive_cooldown",
+            committed_protect_streak=1,
             protect_last_failed=False,
         )
         summary = action_trace.get_summary()
@@ -275,8 +275,8 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         battle = _Battle(battle_tag="battle-42", turn=7, actives=[mon])
         action_trace.record_candidate(
             battle, 0, _protect_order(), -1e9,
-            hard_block_reason="repeated_protect_like_third_attempt",
-            committed_protect_streak=2,
+            hard_block_reason="protect_like_consecutive_cooldown",
+            committed_protect_streak=1,
             protect_last_failed=False,
         )
         records = action_trace.get_records()
@@ -293,10 +293,10 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         self.assertTrue(rec["is_hard_blocked"])
         self.assertEqual(
             rec["hard_block_reason"],
-            "repeated_protect_like_third_attempt",
+            "protect_like_consecutive_cooldown",
         )
         self.assertEqual(rec["protect_like_class"], "protect_like")
-        self.assertEqual(rec["committed_protect_streak"], 2)
+        self.assertEqual(rec["committed_protect_streak"], 1)
         self.assertFalse(rec["protect_last_failed"])
         self.assertEqual(rec["raw_score_before_policy"], -1e9)
 

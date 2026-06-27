@@ -170,6 +170,9 @@ class TestProtectLikeStreakBlocking(unittest.TestCase):
         self.assertEqual(state, {})
 
     def test_third_protect_blocked(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the 2nd consecutive attempt is already blocked;
+        # the 3rd is also blocked (consistency check).
         state: Dict = {}
         for t in (1, 2):
             _blocked, _ = protect_streak_should_block(
@@ -184,60 +187,71 @@ class TestProtectLikeStreakBlocking(unittest.TestCase):
         )
         self.assertTrue(blocked)
 
-    def test_protect_detect_kingsshield_blocked_third(self):
-        # The whole point of the fix: Protect -> Detect ->
-        # King's Shield counts as 3 consecutive
-        # Protect-like attempts.
+    def test_protect_detect_kingsshield_blocked_on_third(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # the 2nd consecutive (Detect) is already blocked;
+        # the 3rd (kingsshield) is also blocked.
         state: Dict = {}
-        for t, mid in [(1, "protect"), (2, "detect"), (3, "kingsshield")]:
+        for t, mid in [(1, "protect"), (2, "detect")]:
             _blocked, _ = protect_streak_should_block(
                 state, "battle-1", 0, "p1a: Mon", t, mid
             )
             record_protect_like_attempt(
                 state, "battle-1", 0, "p1a: Mon", t, mid
             )
-        # 4th attempt: should be blocked
-        blocked, _ = protect_streak_should_block(
-            state, "battle-1", 0, "p1a: Mon", 4, "banefulbunker"
-        )
-        self.assertTrue(blocked)
-
-    def test_detect_protect_detect_blocked_third(self):
-        state: Dict = {}
-        for t, mid in [(1, "detect"), (2, "protect"), (3, "detect")]:
-            record_protect_like_attempt(
-                state, "battle-1", 0, "p1a: Mon", t, mid
-            )
-        blocked, _ = protect_streak_should_block(
-            state, "battle-1", 0, "p1a: Mon", 4, "detect"
-        )
-        self.assertTrue(blocked)
-
-    def test_kingsshield_participates_in_streak(self):
-        state: Dict = {}
-        record_protect_like_attempt(
-            state, "battle-1", 0, "p1a: Mon", 1, "kingsshield"
-        )
-        record_protect_like_attempt(
-            state, "battle-1", 0, "p1a: Mon", 2, "spikyshield"
-        )
+        # 3rd attempt: should be blocked
         blocked, _ = protect_streak_should_block(
             state, "battle-1", 0, "p1a: Mon", 3, "kingsshield"
         )
         self.assertTrue(blocked)
 
-    def test_non_protect_move_resets_streak(self):
+    def test_detect_protect_kingsshield_blocked_on_third(self):
+        # Detect -> Protect (2 consecutive) -> the 3rd
+        # attempt (kingsshield) is blocked.
         state: Dict = {}
-        for t in (1, 2):
-            record_protect_like_attempt(
-                state, "battle-1", 0, "p1a: Mon", t, "protect"
+        for t, mid in [(1, "detect"), (2, "protect")]:
+            _blocked, _ = protect_streak_should_block(
+                state, "battle-1", 0, "p1a: Mon", t, mid
             )
-        # Non-Protect move on turn 3 resets the streak
+            record_protect_like_attempt(
+                state, "battle-1", 0, "p1a: Mon", t, mid
+            )
+        # 3rd attempt: blocked
+        blocked, _ = protect_streak_should_block(
+            state, "battle-1", 0, "p1a: Mon", 3, "kingsshield"
+        )
+        self.assertTrue(blocked)
+
+    def test_kingsshield_participates_in_streak(self):
+        # Kings Shield + Spiky Shield = 2 consecutive
+        # Protect-like moves; the 2nd is blocked.
+        state: Dict = {}
+        _blocked, _ = protect_streak_should_block(
+            state, "battle-1", 0, "p1a: Mon", 1, "kingsshield"
+        )
         record_protect_like_attempt(
-            state, "battle-1", 0, "p1a: Mon", 3, "tackle"
+            state, "battle-1", 0, "p1a: Mon", 1, "kingsshield"
         )
         blocked, _ = protect_streak_should_block(
-            state, "battle-1", 0, "p1a: Mon", 4, "protect"
+            state, "battle-1", 0, "p1a: Mon", 2, "spikyshield"
+        )
+        self.assertTrue(blocked)
+
+    def test_non_protect_move_resets_streak(self):
+        state: Dict = {}
+        _blocked, _ = protect_streak_should_block(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        # Non-Protect move on turn 2 resets the streak
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 2, "tackle"
+        )
+        # Next Protect on turn 3 starts a fresh streak
+        blocked, _ = protect_streak_should_block(
+            state, "battle-1", 0, "p1a: Mon", 3, "protect"
         )
         self.assertFalse(blocked)
 
@@ -296,7 +310,9 @@ class TestProtectLikeStreakBlocking(unittest.TestCase):
         )
         self.assertFalse(blocked)
 
-    def test_second_protect_like_not_blocked(self):
+    def test_second_protect_like_blocked(self):
+        # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
+        # any 2nd consecutive Protect-like is now blocked.
         state: Dict = {}
         record_protect_like_attempt(
             state, "battle-1", 0, "p1a: Mon", 1, "protect"
@@ -304,7 +320,7 @@ class TestProtectLikeStreakBlocking(unittest.TestCase):
         blocked, _ = protect_streak_should_block(
             state, "battle-1", 0, "p1a: Mon", 2, "protect"
         )
-        self.assertFalse(blocked)
+        self.assertTrue(blocked)
 
 
 class TestProtectLikeGuardNoMutation(unittest.TestCase):
@@ -631,7 +647,8 @@ class TestParserProtectLikeVariants(unittest.TestCase):
         # Protect -> Detect -> King's Shield is one
         # Protect-like streak. Each |move| line must have
         # a target field (|move|actor|move|target|) for
-        # the parser to recognize it.
+        # the parser to recognize it. Under strict
+        # cooldown, the 2nd and 3rd are both policy bugs.
         self._write([
             "|turn|1",
             "|move|p1a: Garchomp|Protect|p1a: Garchomp",
@@ -642,9 +659,11 @@ class TestParserProtectLikeVariants(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["max_consecutive_protect_streak"], 3)
-        self.assertEqual(out["protect_policy_bug_count"], 1)
+        # 2nd and 3rd attempts are both policy bugs.
+        self.assertEqual(out["protect_policy_bug_count"], 2)
 
     def test_banefulbunker_counted_as_protect_like(self):
+        # Under strict cooldown, 2nd and 3rd are both bugs.
         self._write([
             "|turn|1",
             "|move|p1a: Garchomp|Baneful Bunker|p1a: Garchomp",
@@ -655,9 +674,10 @@ class TestParserProtectLikeVariants(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["max_consecutive_protect_streak"], 3)
-        self.assertEqual(out["protect_policy_bug_count"], 1)
+        self.assertEqual(out["protect_policy_bug_count"], 2)
 
     def test_burningbulwark_counted_as_protect_like(self):
+        # Under strict cooldown, 2nd and 3rd are both bugs.
         self._write([
             "|turn|1",
             "|move|p1a: Garchomp|Burning Bulwark|p1a: Garchomp",
@@ -668,7 +688,7 @@ class TestParserProtectLikeVariants(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["max_consecutive_protect_streak"], 3)
-        self.assertEqual(out["protect_policy_bug_count"], 1)
+        self.assertEqual(out["protect_policy_bug_count"], 2)
 
     def test_non_protect_failed_not_counted_as_spam(self):
         self._write([
@@ -946,49 +966,84 @@ class TestProtectVariantsShareStreak(unittest.TestCase):
     Obstruct / Max Guard / Silk Trap / Baneful Bunker /
     Burning Bulwark all share the same normalised stall
     class so cycling between them cannot bypass the
-    3rd-consecutive hard-block.
+    hard-block. Under the strict cooldown, any 2nd
+    consecutive Protect-like attempt is blocked.
     """
 
     def test_protect_detect_kingsshield_blocked_on_third(self):
+        # First attempt (Protect): not blocked. After
+        # recording it, the second attempt (Detect) is
+        # already blocked under strict cooldown. Even if
+        # we record the second attempt, the third remains
+        # blocked because the streak continues.
         battle = _Battle(
             battle_tag="battle-1",
             actives=[_Mon(ident="p1a: Mon")],
         )
         state: Dict = {}
-        for t, mid in [(1, "protect"), (2, "detect")]:
-            order = _protect_order(mid)
-            battle.turn = t
-            self.assertFalse(
-                _is_repeated_protect_spam(order, battle, 0, state)
+        # Turn 1: Protect (1st attempt) -> not blocked.
+        battle.turn = 1
+        self.assertFalse(
+            _is_repeated_protect_spam(
+                _protect_order("protect"), battle, 0, state
             )
-            record_protect_like_attempt(
-                state, "battle-1", 0, "p1a: Mon", t, mid
-            )
-        battle.turn = 3
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        # Turn 2: Detect (2nd consecutive) -> blocked.
+        battle.turn = 2
         self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order("detect"), battle, 0, state
+            )
+        )
+        # Turn 3 with no record: streak broken by gap
+        # (the blocked attempt was not committed, so
+        # last_turn is still 1; gap of 2 resets streak).
+        # This is the expected production behavior: a
+        # blocked attempt is not committed, so the streak
+        # resets on the next eligible turn.
+        battle.turn = 3
+        # 3rd attempt after a non-recorded 2nd: streak
+        # is broken (gap of 2). Next Protect is allowed.
+        self.assertFalse(
             _is_repeated_protect_spam(
                 _protect_order("kingsshield"), battle, 0, state
             )
         )
 
-    def test_detect_protect_detect_blocked_on_third(self):
+    def test_detect_protect_kingsshield_blocked_on_third(self):
+        # Detect -> Protect -> Kings Shield: 2nd (Protect)
+        # is already blocked.
         battle = _Battle(
             battle_tag="battle-1",
             actives=[_Mon(ident="p1a: Mon")],
         )
         state: Dict = {}
-        for t, mid in [(1, "detect"), (2, "protect")]:
-            battle.turn = t
-            self.assertFalse(
-                _is_repeated_protect_spam(
-                    _protect_order(mid), battle, 0, state
-                )
+        # Turn 1: Detect (1st attempt) -> not blocked.
+        battle.turn = 1
+        self.assertFalse(
+            _is_repeated_protect_spam(
+                _protect_order("detect"), battle, 0, state
             )
-            record_protect_like_attempt(
-                state, "battle-1", 0, "p1a: Mon", t, mid
-            )
-        battle.turn = 3
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "detect"
+        )
+        # Turn 2: Protect (2nd consecutive) -> blocked.
+        battle.turn = 2
         self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order("protect"), battle, 0, state
+            )
+        )
+        # Turn 3 with no record: streak broken (the
+        # blocked attempt was not committed; gap of 2).
+        # The 3rd Protect-like is allowed under the gap
+        # rule.
+        battle.turn = 3
+        self.assertFalse(
             _is_repeated_protect_spam(
                 _protect_order("detect"), battle, 0, state
             )

@@ -17,6 +17,8 @@ from showdown_ai.rl_data_3b_ff_monitor_v2 import (
     ABILITY_DAMAGE_TOKENS,
     HAZARD_DAMAGE_TOKENS,
     classify_damage_event_from_protocol,
+    parse_no_effect_attacks_from_raw_protocol,
+    parse_low_value_priority_from_raw_protocol,
     parse_protocol_line,
     side_from_actor_id,
     get_required_summary_fields,
@@ -501,6 +503,559 @@ class TestRawProtocolCaptureFile(unittest.TestCase):
             self.assertFalse(cap.enabled)
             cap.feed("|turn|1")
             self.assertIsNone(cap.path())
+
+
+def _write_battle_jsonl(out_dir, name, lines):
+    """Helper: write a synthetic battle JSONL with the given
+    protocol lines (list of str). Each line is wrapped as
+    ``{"line": ..., "seq": i, "battle_id": name}`` to mirror
+    the real RawProtocolCapture format.
+    """
+    path = os.path.join(out_dir, f"{name}.jsonl")
+    with open(path, "w") as f:
+        for i, line in enumerate(lines):
+            f.write(
+                json.dumps({
+                    "line": line, "seq": i, "battle_id": name
+                }) + "\n"
+            )
+    return path
+
+
+class TestNoEffectProductivePartialSpread(unittest.TestCase):
+    """PHASE7_FIX_NO_EFFECT_PARSER_PRODUCTIVE_PARTIAL_SPREAD.
+
+    A spread damaging move (e.g. Earthquake) that productively
+    hits at least one target and produces an ``|-immune|`` for
+    another target must NOT be classified as a real no-effect
+    policy bug. It is a parser false-positive / tracked event.
+
+    Test rules:
+
+    1. Spread move hits 1 target, immune on 1 target -> not
+       a real no-effect bug; counted as
+       ``productive_partial_spread_no_effect_false_positive_count``.
+    2. Spread move all valid targets immune -> real no-effect
+       bug.
+    3. Single-target Electric into known Ground -> real
+       no-effect bug.
+    4. Attack into Protect -> not type-immunity no-effect.
+    5. Status failure -> not damaging no-effect bug.
+    6. Productive partial spread is reported separately as
+       parser false-positive / tracked event, not safety
+       failure.
+    7. Existing raw monitor tests still pass.
+    """
+
+    def test_earthquake_spread_partial_productive_immune(self):
+        """Earthquake hits p2a productively, immune to p2b.
+        Must be counted as
+        ``productive_partial_spread_no_effect_false_positive``
+        and NOT a ``no_effect_policy_bug``.
+
+        Note: real Showdown protocol emits
+        ``|move| -> |-immune| -> |-damage|`` for spread
+        moves, so the damage line comes AFTER the
+        immune line. The parser lookahead scans the
+        rest of the turn for clean damage lines.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                (
+                    "|move|p1a: Garchomp|Earthquake|p2a: Tyranitar"
+                ),
+                "|-immune|p2b: Tornadus",
+                "|-damage|p2a: Tyranitar|123/200",
+            ]
+            _write_battle_jsonl(tmp, "battle-spread-partial", lines)
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            1,
+        )
+        self.assertEqual(
+            s["spread_partial_productive_immune_count"], 1
+        )
+        self.assertEqual(
+            s["spread_all_targets_immune_bug_count"], 0
+        )
+        self.assertEqual(s["no_effect_policy_bug_count"], 0)
+        self.assertEqual(s["no_effect_move_count"], 0)
+        self.assertTrue(s["no_effect_policy_gate_pass"])
+        # The event is recorded with the productive-partial
+        # classification.
+        ev_classes = {
+            e.get("classification")
+            for e in s.get("events", [])
+        }
+        self.assertIn(
+            "PRODUCTIVE_PARTIAL_SPREAD_NO_EFFECT_FALSE_POSITIVE",
+            ev_classes,
+        )
+
+    def test_earthquake_spread_all_targets_immune_real_bug(self):
+        """Earthquake hits no one (both targets immune) -> real
+        no-effect bug. Counted as
+        ``spread_all_targets_immune_bug_count`` AND as
+        ``no_effect_policy_bug_count`` for repeated cases.
+
+        The pre-existing parser limitation resets the
+        current-move tracker after the first ``|-immune|``
+        per move line, so only the first immune line per
+        move is counted. The repeated same-target
+        condition still triggers the real-bug counter.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Garchomp|Earthquake|p2a: Tornadus",
+                "|-immune|p2a: Tornadus",
+                "|turn|2",
+                "|move|p1a: Garchomp|Earthquake|p2a: Tornadus",
+                "|-immune|p2a: Tornadus",
+            ]
+            _write_battle_jsonl(tmp, "battle-spread-all-immune", lines)
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        # 2 turns, 1 first-immune-per-turn = 2
+        # spread_all_targets_immune events.
+        self.assertEqual(s["spread_all_targets_immune_bug_count"], 2)
+        # Repeated same-target real bug.
+        self.assertGreaterEqual(s["no_effect_policy_bug_count"], 1)
+        self.assertFalse(s["no_effect_policy_gate_pass"])
+        # The productive-partial-spread logic does not
+        # affect this case (no |-damage| lines for the
+        # spread move).
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            0,
+        )
+
+    def test_single_target_electric_into_ground_real_bug(self):
+        """Single-target damaging move into a known-immune
+        target is a real no-effect bug, NOT a productive
+        partial spread. Not affected by the new partial-spread
+        logic.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Pikachu|Thunderbolt|p2a: Garchomp",
+                "|-immune|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Pikachu|Thunderbolt|p2a: Garchomp",
+                "|-immune|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-single-immune", lines
+            )
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        # Single-target: not a partial-spread.
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            0,
+        )
+        self.assertEqual(
+            s["spread_partial_productive_immune_count"], 0
+        )
+        self.assertEqual(
+            s["spread_all_targets_immune_bug_count"], 0
+        )
+        # Repeated same-target = real bug.
+        self.assertGreaterEqual(s["no_effect_policy_bug_count"], 1)
+
+    def test_attack_into_protect_not_type_immunity(self):
+        """Opponent attack into the bot's Protect produces an
+        ``|-immune|`` but it is the Protect parser's job, not
+        the type-immunity parser. The cur_move of the parser
+        is the attacker's move (Earthquake), not the
+        protected pokemon's Protect. To avoid the legacy
+        attack-into-Protect false-positive, the parser's
+        existing Protect-like filter applies only when the
+        |move| line itself was a Protect-like action. For an
+        attack-into-Protect case, the move line is the
+        attacker's move (e.g. Earthquake). This test
+        documents that the parser relies on the Protect
+        parser to handle the attacker-side path and does not
+        regress it: the no_effect_policy_gate continues to
+        pass for a single attack-into-protect event.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Incineroar|Protect",
+                "|turn|2",
+                "|move|p2a: Garchomp|Earthquake|p1a: Incineroar",
+                "|-immune|p1a: Incineroar",
+            ]
+            _write_battle_jsonl(tmp, "battle-protect-immune", lines)
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        # A single attack-into-Protect is one no-effect event
+        # but NOT a policy bug (no repeated same-target).
+        # The Protect-spam parser is responsible for the
+        # attacker side, not this one.
+        self.assertEqual(s["no_effect_policy_bug_count"], 0)
+        self.assertEqual(s["repeated_no_effect_move_count"], 0)
+        self.assertTrue(s["no_effect_policy_gate_pass"])
+        # The productive-partial-spread logic does not
+        # affect this case.
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            0,
+        )
+
+    def test_status_failure_not_damaging_no_effect(self):
+        """Status move into immune (e.g. Thunder Wave into
+        Ground) is not a damaging no-effect event. Must NOT
+        be counted.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Jolteon|Thunder Wave|p2a: Garchomp",
+                "|-immune|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(tmp, "battle-status-immune", lines)
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        self.assertEqual(s["no_effect_policy_bug_count"], 0)
+        self.assertEqual(s["no_effect_move_count"], 0)
+        self.assertTrue(s["no_effect_policy_gate_pass"])
+
+    def test_productive_partial_spread_recorded_separately(self):
+        """The productive partial spread event is recorded in
+        ``events`` with the correct classification and NOT
+        counted in ``no_effect_policy_bug_count``.
+
+        Real protocol order: ``|move| -> |-immune| ->
+        |-damage|``.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Garchomp|Earthquake|p2a: Tyranitar",
+                "|-immune|p2b: Tornadus",
+                "|-damage|p2a: Tyranitar|150/200",
+                "|turn|2",
+                "|move|p1a: Garchomp|Rock Slide|p2a: Tyranitar",
+                "|-immune|p2b: Tornadus",
+                "|-damage|p2a: Tyranitar|120/200",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-spread-events", lines
+            )
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        # Two productive partial spread events.
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            2,
+        )
+        self.assertEqual(s["no_effect_policy_bug_count"], 0)
+        self.assertTrue(s["no_effect_policy_gate_pass"])
+        # Events list has the productive-partial classification.
+        ev_classes = [
+            e.get("classification")
+            for e in s.get("events", [])
+        ]
+        self.assertEqual(
+            ev_classes.count(
+                "PRODUCTIVE_PARTIAL_SPREAD_NO_EFFECT_FALSE_POSITIVE"
+            ),
+            2,
+        )
+        self.assertNotIn(
+            "POLICY_BUG_REPEATED_NO_EFFECT", ev_classes
+        )
+
+    def test_existing_raw_monitor_tests_still_pass(self):
+        """Backward compat: the existing ff-monitor raw tests
+        must still pass with the new partial-spread logic.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            # Pure spread move into a single opponent with
+            # no immune line: should produce 0 no-effect
+            # events.
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Garchomp|Earthquake|p2a: Tyranitar",
+                "|-damage|p2a: Tyranitar|123/200",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-spread-clean", lines
+            )
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        self.assertEqual(s["no_effect_move_count"], 0)
+        self.assertEqual(
+            s["productive_partial_spread_no_effect_false_positive_count"],
+            0,
+        )
+        self.assertTrue(s["no_effect_policy_gate_pass"])
+
+
+class TestNoEffectProductivePartialSpread_ExistingCompat(unittest.TestCase):
+    """Verify that legacy repeated-no-effect detection (single
+    target) still triggers correctly.
+    """
+
+    def test_repeated_single_target_ground_immunity(self):
+        """Two consecutive Thunderbolt into Garchomp produce
+        a real no-effect policy bug.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Jolteon|Thunderbolt|p2a: Garchomp",
+                "|-immune|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Jolteon|Thunderbolt|p2a: Garchomp",
+                "|-immune|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-repeated-immune", lines
+            )
+            s = parse_no_effect_attacks_from_raw_protocol(tmp)
+        self.assertEqual(s["no_effect_move_count"], 2)
+        self.assertEqual(
+            s["known_immunity_no_effect_count"], 2
+        )
+        self.assertGreaterEqual(
+            s["repeated_no_effect_move_count"], 1
+        )
+        self.assertGreaterEqual(
+            s["no_effect_policy_bug_count"], 1
+        )
+        self.assertFalse(s["no_effect_policy_gate_pass"])
+
+
+class TestLowValuePriorityDiagnostic(unittest.TestCase):
+    """PHASE7_POLICY_SANITY_PRIORITY_SPAM_DIAGNOSTIC.
+
+    Diagnostic-only parser for low-value positive-priority
+    damaging moves (Quick Attack, Aqua Jet, Mach Punch,
+    etc.). Does not change scoring and does not fail any
+    gate.
+    """
+
+    def test_no_low_value_priority_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Incineroar|Fake Out|p2a: Tyranitar",
+                "|turn|2",
+                "|move|p1a: Incineroar|Flare Blitz|p2a: Tyranitar",
+            ]
+            _write_battle_jsonl(tmp, "battle-clean", lines)
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 0)
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 0
+        )
+        self.assertEqual(
+            s["low_value_priority_repeated_count"], 0
+        )
+        self.assertEqual(s["low_value_priority_battles"], 0)
+        self.assertTrue(s["low_value_priority_gate_pass"])
+
+    def test_single_quick_attack_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(tmp, "battle-qa-once", lines)
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        # 1 Quick Attack: counted as a low-value move but
+        # NOT as consecutive (no prior turn to compare).
+        self.assertEqual(s["low_value_priority_move_count"], 1)
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 0
+        )
+        self.assertEqual(s["low_value_priority_battles"], 0)
+        self.assertEqual(
+            s["low_value_priority_by_move_id"].get("quickattack"), 1
+        )
+
+    def test_consecutive_quick_attack_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-qa-consecutive", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        # 2 Quick Attacks in a row: 1 consecutive event.
+        self.assertEqual(s["low_value_priority_move_count"], 2)
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 1
+        )
+        self.assertEqual(s["low_value_priority_battles"], 1)
+        self.assertEqual(
+            s["low_value_priority_by_battle"].get(
+                "battle-qa-consecutive.jsonl"
+            ),
+            2,
+        )
+
+    def test_repeated_quick_attack_counted(self):
+        # 3 consecutive Quick Attacks: 1 consecutive
+        # event on turn 2 + 1 repeated event on turn 3.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+                "|turn|3",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-qa-repeated", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 3)
+        # 2 consecutive events (turn 2 and turn 3).
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 2
+        )
+        # 1 repeated event (turn 3 is the 2nd consecutive).
+        self.assertEqual(
+            s["low_value_priority_repeated_count"], 1
+        )
+
+    def test_opponent_quick_attack_not_counted(self):
+        # Opponent Quick Attack is reported on all-sides
+        # but our parser only counts p1 (bot-side).
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p2a: Opp|Quick Attack|p1a: Bot",
+                "|turn|2",
+                "|move|p2a: Opp|Quick Attack|p1a: Bot",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-opp-qa", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 0)
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 0
+        )
+
+    def test_non_priority_move_resets_streak(self):
+        # Quick Attack, then Tackle, then Quick Attack
+        # again -> 1 consecutive (turn 2) is blocked
+        # by the tackle on turn 2. The 2nd Quick Attack
+        # on turn 3 is fresh.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Sylveon|Tackle|p2a: Garchomp",
+                "|turn|3",
+                "|move|p1a: Sylveon|Quick Attack|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-qa-with-tackle", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 2)
+        # Tackle reset the streak; the 2nd Quick Attack
+        # is a fresh move and not consecutive.
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 0
+        )
+
+    def test_aqua_jet_mach_punch_counted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Feraligatr|Aqua Jet|p2a: Dragonite",
+                "|turn|2",
+                "|move|p1a: Conkeldurr|Mach Punch|p2a: Tyranitar",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-multiple-moves", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 2)
+        self.assertEqual(
+            s["low_value_priority_by_move_id"].get("aquajet"), 1
+        )
+        self.assertEqual(
+            s["low_value_priority_by_move_id"].get("machpunch"), 1
+        )
+
+    def test_suckerpunch_not_low_value(self):
+        # Suckerpunch is a high-value priority move and
+        # is NOT in the low-value set. The parser should
+        # not count it.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Bisharp|Sucker Punch|p2a: Garchomp",
+                "|turn|2",
+                "|move|p1a: Bisharp|Sucker Punch|p2a: Garchomp",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-suckerpunch", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 0)
+        self.assertEqual(
+            s["low_value_priority_consecutive_count"], 0
+        )
+
+    def test_fakeout_not_low_value(self):
+        # Fakeout is a first-turn priority move and is
+        # not in the low-value set.
+        with tempfile.TemporaryDirectory() as tmp:
+            lines = [
+                "|player|p1|bot|",
+                "|player|p2|opp|",
+                "|turn|1",
+                "|move|p1a: Incineroar|Fake Out|p2a: Tyranitar",
+            ]
+            _write_battle_jsonl(
+                tmp, "battle-fakeout", lines
+            )
+            s = parse_low_value_priority_from_raw_protocol(tmp)
+        self.assertEqual(s["low_value_priority_move_count"], 0)
 
 
 class TestProductionBotUntouched(unittest.TestCase):

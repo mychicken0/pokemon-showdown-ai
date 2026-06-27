@@ -152,7 +152,7 @@ def protect_streak_should_block(
     call. This eliminates the "scoring call mutates state
     many times per turn" bug.
 
-    Rules:
+    Rules (PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN):
 
     * Non-Protect-like move: not hard-blocked.
     * Battle boundary (new battle_tag): not hard-blocked.
@@ -160,10 +160,10 @@ def protect_streak_should_block(
     * Turn gap > 1: not hard-blocked (streak broken by
       inactive turns).
     * First Protect-like attempt: not hard-blocked.
-    * Second consecutive: not hard-blocked (heavy penalty
-      applied by caller).
-    * Third+ consecutive: hard-blocked.
-    * Second+ whose previous attempt already failed:
+    * Second consecutive: hard-blocked (committed streak
+      ``>= 1`` means the previous attempt was Protect-like;
+      the next attempt is consecutive and must be blocked).
+    * Any attempt after a previous failed attempt:
       hard-blocked.
 
     ``should_record_observation`` is True if the caller
@@ -181,11 +181,11 @@ def protect_streak_should_block(
         return False, True  # streak broken; record fresh attempt
     if rec["streak"] == 0:
         return False, True  # first attempt; record but not blocked
-    if rec["streak"] >= 2:
-        return True, True  # 3rd+ consecutive
-    if rec["streak"] >= 1 and rec.get("last_failed"):
-        return True, True  # 2nd+ after a failed attempt
-    return False, True  # 2nd consecutive; not blocked, heavy penalty
+    # Strict cooldown: any committed streak >= 1 means the
+    # next consecutive Protect-like attempt is blocked.
+    if rec["streak"] >= 1:
+        return True, True  # 2nd+ consecutive -> hard-block
+    return False, True  # unreachable, kept for symmetry
 
 
 def record_protect_like_attempt(
