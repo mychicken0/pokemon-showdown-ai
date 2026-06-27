@@ -10,6 +10,7 @@ final selected order via
 from ``choose_move``). The tests below exercise both the
 read-only check and the commit helper.
 """
+import poke_env_test_cleanup  # noqa: F401
 import json
 import os
 import unittest
@@ -138,10 +139,10 @@ class TestFirstProtectAllowed(unittest.TestCase):
     def test_third_consecutive_protect_blocked(self):
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        for t in (1, 2, 3):
+        for t in (1, 2):
             _commit_one(battle, 0, state, _protect_order(), turn=t)
-        # Now the streak is 3. The read-only guard should
-        # block the next Protect attempt.
+        # Two committed attempts mean the next candidate is
+        # the third attempt and must be blocked pre-submit.
         battle.turn = 3
         is_blocked = _is_repeated_protect_spam(
             _protect_order(), battle, 0, state
@@ -283,10 +284,11 @@ class TestReadOnlyGuardIsIdempotent(unittest.TestCase):
     def test_repeated_calls_with_commit_block_on_third(self):
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        for t in (1, 2, 3):
+        for t in (1, 2):
             _commit_one(battle, 0, state, _protect_order(), turn=t)
+        battle.turn = 3
         # Even after 20 read-only helper calls, the third
-        # consecutive Protect is blocked.
+        # consecutive Protect candidate stays blocked.
         for _ in range(20):
             self.assertTrue(
                 _is_repeated_protect_spam(
@@ -314,7 +316,7 @@ class TestReadOnlyGuardIsIdempotent(unittest.TestCase):
                     _non_protect_order("tackle"), battle, 0, state
                 )
             )
-            self.assertFalse(
+            self.assertTrue(
                 _is_repeated_protect_spam(
                     _protect_order(), battle, 0, state
                 )
@@ -323,20 +325,8 @@ class TestReadOnlyGuardIsIdempotent(unittest.TestCase):
         # per-candidate evaluation).
         rec = state.get((battle.battle_tag, 0, "p1a: TestMon"))
         self.assertEqual(rec["streak"], 2)
-        # Now commit a Protect selection for turn 3. This
-        # is the 3rd consecutive Protect and must be
-        # blocked by the next read-only check.
-        best = _Joint(first=_protect_order(), second=None)
-        _commit_protect_selection_for_selected_orders(
-            battle, best, state
-        )
-        rec = state.get((battle.battle_tag, 0, "p1a: TestMon"))
-        self.assertEqual(rec["streak"], 3)
-        self.assertTrue(
-            _is_repeated_protect_spam(
-                _protect_order(), battle, 0, state
-            )
-        )
+        # The blocked third candidate is never committed.
+        self.assertEqual(rec["streak"], 2)
 
 
 class TestCommitOncePerFinalSelection(unittest.TestCase):
@@ -467,16 +457,16 @@ class TestCommitOncePerFinalSelection(unittest.TestCase):
         self.assertEqual(state, {})
 
     def test_commit_full_lifecycle_three_consecutive_protect_blocked(self):
-        # End-to-end: 3 consecutive commits -> 3rd is blocked.
+        # End-to-end: two commits -> third candidate blocked.
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        for t in (1, 2, 3):
+        for t in (1, 2):
             best = _Joint(first=_protect_order(), second=None)
             battle.turn = t
             _commit_protect_selection_for_selected_orders(
                 battle, best, state
             )
-        # At turn 3, streak should be 3 and the guard blocks.
+        battle.turn = 3
         self.assertTrue(
             _is_repeated_protect_spam(_protect_order(), battle, 0, state)
         )
@@ -486,7 +476,7 @@ class TestCommitOncePerFinalSelection(unittest.TestCase):
         # consecutive Protect-like attempts.
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        for t, mid in [(1, "protect"), (2, "detect"), (3, "kingsshield")]:
+        for t, mid in [(1, "protect"), (2, "detect")]:
             order = _Order(
                 inner=_Move(mid, "status", "self", priority=4),
                 move_target=-1,
@@ -497,11 +487,11 @@ class TestCommitOncePerFinalSelection(unittest.TestCase):
                 battle, best, state
             )
         battle.turn = 3
-        # 4th consecutive: must be blocked.
+        # King's Shield is the third Protect-like attempt.
         self.assertTrue(
             _is_repeated_protect_spam(
                 _Order(
-                    inner=_Move("banefulbunker", "status", "self", priority=4),
+                    inner=_Move("kingsshield", "status", "self", priority=4),
                     move_target=-1,
                 ),
                 battle, 0, state,
@@ -640,7 +630,7 @@ class TestRawParserProtectSpam(unittest.TestCase):
         self.assertGreaterEqual(out["protect_policy_bug_count"], 1)
         self.assertFalse(out["protect_spam_gate_pass"])
 
-    def test_consecutive_failed_protect_fails_gate(self):
+    def test_two_failed_attempts_do_not_fail_attempt_streak_gate(self):
         self._write([
             "|turn|2",
             "|move|p1a: Volcarona|Protect|p1a: Volcarona",
@@ -651,8 +641,46 @@ class TestRawParserProtectSpam(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertGreaterEqual(out["protect_fail_count"], 1)
-        self.assertGreaterEqual(out["repeated_protect_fail_count"], 1)
+        self.assertEqual(out["repeated_protect_fail_count"], 0)
+        self.assertTrue(out["protect_spam_gate_pass"])
+
+    def test_success_still_third_attempt_is_policy_bug(self):
+        self._write([
+            "|turn|11",
+            "|move|p1a: Bot|Protect|p1a: Bot",
+            "|-singleturn|p1a: Bot|Protect",
+            "|turn|12",
+            "|move|p1a: Bot|Protect||[still]",
+            "|-fail|p1a: Bot",
+            "|turn|13",
+            "|move|p1a: Bot|Protect|p1a: Bot",
+        ])
+        out = parse_protect_spam_from_raw_protocol(self.tmpdir)
+        self.assertEqual(out["max_consecutive_protect_like_attempt_streak"], 3)
+        self.assertEqual(out["protect_like_third_attempt_bug_count"], 1)
+        self.assertEqual(out["protect_like_still_gap_bug_count"], 1)
         self.assertFalse(out["protect_spam_gate_pass"])
+
+    def test_opponent_third_attempt_is_not_bot_policy_bug(self):
+        self._write([
+            "|turn|1", "|move|p2a: Opp|Protect|p2a: Opp",
+            "|turn|2", "|move|p2a: Opp|Detect|p2a: Opp",
+            "|turn|3", "|move|p2a: Opp|King's Shield|p2a: Opp",
+        ])
+        out = parse_protect_spam_from_raw_protocol(self.tmpdir)
+        self.assertEqual(out["protect_policy_bug_count"], 0)
+        self.assertEqual(out["max_consecutive_protect_like_attempt_streak"], 0)
+        self.assertTrue(out["protect_spam_gate_pass"])
+
+    def test_wide_and_quick_guard_do_not_form_self_protect_streak(self):
+        self._write([
+            "|turn|1", "|move|p1a: Bot|Wide Guard|p1a: Bot",
+            "|turn|2", "|move|p1a: Bot|Quick Guard|p1a: Bot",
+            "|turn|3", "|move|p1a: Bot|Protect|p1a: Bot",
+        ])
+        out = parse_protect_spam_from_raw_protocol(self.tmpdir)
+        self.assertEqual(out["max_consecutive_protect_like_attempt_streak"], 1)
+        self.assertEqual(out["protect_policy_bug_count"], 0)
 
     def test_ten_turn_streak_fails_gate(self):
         lines = ["|turn|1"]

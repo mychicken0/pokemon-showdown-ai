@@ -5,6 +5,7 @@ no battles, no GPU. Mirrors the structure of
 ``test_phase7_fix_level_and_fakeout.py`` and
 ``test_phase7_fix_self_target_scoring.py``.
 """
+import poke_env_test_cleanup  # noqa: F401
 import json
 import os
 import unittest

@@ -11,6 +11,7 @@ training, no GPU.
 """
 import os
 import unittest
+from unittest import mock
 
 REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))
@@ -47,17 +48,21 @@ class TestMakeOpponentSafeDefault(unittest.TestCase):
     default without requiring any opt-in."""
 
     def test_damage_aware_built_without_unsafe_optin(self):
-        # Should not raise
-        opp = make_opponent("damage_aware", "TestOpp")
-        self.assertIsNotNone(opp)
-        # Must NOT be a RandomPlayer
-        cls_name = type(opp).__name__
-        self.assertNotEqual(cls_name, "RandomPlayer")
+        sentinel = object()
+        with mock.patch.object(
+            audit_mod, "DoublesDamageAwarePlayer", return_value=sentinel
+        ) as constructor:
+            opp = make_opponent("damage_aware", "TestOpp")
+        self.assertIs(opp, sentinel)
+        constructor.assert_called_once()
 
     def test_damage_aware_team_passed_through(self):
         team = "Incineroar @ Sitrus Berry\n- Flare Blitz"
-        opp = make_opponent("damage_aware", "TestOpp", team=team)
-        self.assertIsNotNone(opp)
+        with mock.patch.object(
+            audit_mod, "DoublesDamageAwarePlayer", return_value=object()
+        ) as constructor:
+            make_opponent("damage_aware", "TestOpp", team=team)
+        self.assertEqual(constructor.call_args.kwargs["team"], team)
 
 
 class TestMakeOpponentRandomRequiresOptIn(unittest.TestCase):
@@ -72,13 +77,15 @@ class TestMakeOpponentRandomRequiresOptIn(unittest.TestCase):
         self.assertIn("data expansion", msg.lower())
 
     def test_random_with_optin_does_not_raise(self):
-        # Should not raise when unsafe opt-in given
-        opp = make_opponent(
-            "random", "TestOpp", allow_unsafe_random=True
-        )
-        self.assertIsNotNone(opp)
-        cls_name = type(opp).__name__
-        self.assertEqual(cls_name, "RandomPlayer")
+        sentinel = object()
+        with mock.patch.object(
+            audit_mod, "RandomPlayer", return_value=sentinel
+        ) as constructor:
+            opp = make_opponent(
+                "random", "TestOpp", allow_unsafe_random=True
+            )
+        self.assertIs(opp, sentinel)
+        constructor.assert_called_once()
 
     def test_unknown_policy_raises(self):
         with self.assertRaises(ValueError):

@@ -11,6 +11,7 @@ Covers:
 - Parser updates for Protect-like variants and spread moves
 - Canonical trace coverage
 """
+import poke_env_test_cleanup  # noqa: F401
 import json
 import os
 import unittest
@@ -161,10 +162,12 @@ class TestProtectLikeNormalisation(unittest.TestCase):
 
 class TestProtectLikeStreakBlocking(unittest.TestCase):
     def test_first_protect_allowed(self):
+        state = {}
         blocked, _ = protect_streak_should_block(
-            {}, "battle-1", 0, "p1a: Mon", 1, "protect"
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
         )
         self.assertFalse(blocked)
+        self.assertEqual(state, {})
 
     def test_third_protect_blocked(self):
         state: Dict = {}
@@ -925,7 +928,7 @@ class TestStreakGuardReadOnlyOnCandidateScoring(unittest.TestCase):
                     _non_protect_order("tackle"), battle, 0, state
                 )
             )
-            self.assertFalse(
+            self.assertTrue(
                 _is_repeated_protect_spam(
                     _protect_order(), battle, 0, state
                 )
@@ -934,20 +937,8 @@ class TestStreakGuardReadOnlyOnCandidateScoring(unittest.TestCase):
         # per-candidate evaluation).
         rec = state.get(("battle-1", 0, "p1a: Mon"))
         self.assertEqual(rec["streak"], 2)
-        # Commit a Protect selection for turn 3: this is
-        # the 3rd consecutive Protect and must be blocked
-        # by the next read-only check.
-        best = _JointOrder(first=_protect_order(), second=None)
-        _commit_protect_selection_for_selected_orders(
-            battle, best, state
-        )
-        rec = state.get(("battle-1", 0, "p1a: Mon"))
-        self.assertEqual(rec["streak"], 3)
-        self.assertTrue(
-            _is_repeated_protect_spam(
-                _protect_order(), battle, 0, state
-            )
-        )
+        # The blocked third candidate is never committed.
+        self.assertEqual(rec["streak"], 2)
 
 
 class TestProtectVariantsShareStreak(unittest.TestCase):
@@ -964,7 +955,7 @@ class TestProtectVariantsShareStreak(unittest.TestCase):
             actives=[_Mon(ident="p1a: Mon")],
         )
         state: Dict = {}
-        for t, mid in [(1, "protect"), (2, "detect"), (3, "kingsshield")]:
+        for t, mid in [(1, "protect"), (2, "detect")]:
             order = _protect_order(mid)
             battle.turn = t
             self.assertFalse(
@@ -973,11 +964,10 @@ class TestProtectVariantsShareStreak(unittest.TestCase):
             record_protect_like_attempt(
                 state, "battle-1", 0, "p1a: Mon", t, mid
             )
-        # 4th attempt: blocked.
-        battle.turn = 4
+        battle.turn = 3
         self.assertTrue(
             _is_repeated_protect_spam(
-                _protect_order("banefulbunker"), battle, 0, state
+                _protect_order("kingsshield"), battle, 0, state
             )
         )
 
@@ -987,7 +977,7 @@ class TestProtectVariantsShareStreak(unittest.TestCase):
             actives=[_Mon(ident="p1a: Mon")],
         )
         state: Dict = {}
-        for t, mid in [(1, "detect"), (2, "protect"), (3, "detect")]:
+        for t, mid in [(1, "detect"), (2, "protect")]:
             battle.turn = t
             self.assertFalse(
                 _is_repeated_protect_spam(
@@ -997,7 +987,7 @@ class TestProtectVariantsShareStreak(unittest.TestCase):
             record_protect_like_attempt(
                 state, "battle-1", 0, "p1a: Mon", t, mid
             )
-        battle.turn = 4
+        battle.turn = 3
         self.assertTrue(
             _is_repeated_protect_spam(
                 _protect_order("detect"), battle, 0, state
@@ -1218,12 +1208,13 @@ class TestRecordProtectFailedSafetyStatus(unittest.TestCase):
         # depend on the tier-2 `last_failed` condition.
         battle = _Battle(actives=[_Mon()])
         state: Dict = {}
-        for t in (1, 2, 3):
+        for t in (1, 2):
             best = _JointOrder(first=_protect_order(), second=None)
             battle.turn = t
             _commit_protect_selection_for_selected_orders(
                 battle, best, state
             )
+        battle.turn = 3
         # 3rd consecutive must be blocked even though no
         # failure was recorded.
         self.assertTrue(

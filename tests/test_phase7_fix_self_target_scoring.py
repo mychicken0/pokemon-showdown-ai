@@ -3,6 +3,7 @@
 Ponytail: pure unit tests. No poke-env runtime, no network,
 no battles, no GPU. Uses mock-like duck-typed arguments.
 """
+import poke_env_test_cleanup  # noqa: F401
 import unittest
 from typing import Any
 

@@ -603,9 +603,9 @@ def _is_repeated_protect_spam(
     if rec.get("last_turn", -1) >= 0 and current_turn - rec["last_turn"] > 1:
         return False
     streak = int(rec.get("streak", 0))
-    # Hard-block threshold: 3rd+ consecutive Protect-like,
-    # OR a 2nd+ whose previous attempt already failed.
-    if streak >= 3:
+    # Two committed attempts mean this candidate would be
+    # the third consecutive selected Protect-like attempt.
+    if streak >= 2:
         return True
     if streak >= 1 and rec.get("last_failed"):
         return True
@@ -697,6 +697,7 @@ def _commit_protect_selection_for_selected_orders(
                 rec = state.get(key)
                 if rec is not None and rec.get("_committed_turn") == current_turn:
                     continue
+                streak_before = int((rec or {}).get("streak", 0))
                 _rpla = _plati.record_protect_like_attempt
                 move_id = ""
                 if hasattr(inner, "id"):
@@ -715,6 +716,19 @@ def _commit_protect_selection_for_selected_orders(
                 rec2 = state.get(key)
                 if rec2 is not None:
                     rec2["_committed_turn"] = current_turn
+                action_trace.record_state_update(
+                    battle,
+                    slot_i,
+                    is_reset=not bool(
+                        _plati.normalise_protect_like_move_id(move_id)
+                    ),
+                    selected_move_id=move_id,
+                    committed_streak_before=streak_before,
+                    committed_streak_after=int(
+                        (state.get(key) or {}).get("streak", 0)
+                    ),
+                    source="final_selected_order",
+                )
             except Exception:
                 # State mutation must never break choose_move.
                 continue
@@ -2882,8 +2896,8 @@ def select_best_joint_from_score_maps(
         # below applies. See
         # logs/phase7_production_hard_block_integrity_investigation_and_fix/.
         hard_blocked = (
-            (first is not None and s1 < HARD_BLOCK_SCORE_THRESHOLD)
-            or (second is not None and s2 < HARD_BLOCK_SCORE_THRESHOLD)
+            (first is not None and s1 <= HARD_BLOCK_SCORE_THRESHOLD)
+            or (second is not None and s2 <= HARD_BLOCK_SCORE_THRESHOLD)
         )
 
         blocked = any(
@@ -6788,6 +6802,8 @@ class DoublesDamageAwarePlayer(Player):
                 is_selected=is_selected,
                 in_spread_check=in_spread_check,
             )
+            if score <= HARD_BLOCK_SCORE_THRESHOLD:
+                return score
             # Phase SPREAD-5: Opt-in Wide Guard
             # spread-defense bonus. Apply only when
             # ALL of the following are true:
@@ -7209,9 +7225,31 @@ class DoublesDamageAwarePlayer(Player):
         if _is_repeated_protect_spam(
             order, battle, active_idx, self._protect_streak_state
         ):
+            _active = battle.active_pokemon[active_idx]
+            _ident = (
+                getattr(_active, "ident", None)
+                or getattr(_active, "name", None)
+                or getattr(_active, "species", None)
+                or ""
+            )
+            _protect_rec = self._protect_streak_state.get(
+                (getattr(battle, "battle_tag", ""), active_idx, _ident),
+                {},
+            )
+            _protect_reason = (
+                "protect_like_last_failed"
+                if _protect_rec.get("last_failed")
+                else "repeated_protect_like_third_attempt"
+            )
             action_trace.record_candidate(
                 battle, active_idx, order, -1e9,
-                hard_block_reason="repeated_protect",
+                hard_block_reason=_protect_reason,
+                committed_protect_streak=int(
+                    _protect_rec.get("streak", 0)
+                ),
+                protect_last_failed=bool(
+                    _protect_rec.get("last_failed", False)
+                ),
             )
             return -1e9
 

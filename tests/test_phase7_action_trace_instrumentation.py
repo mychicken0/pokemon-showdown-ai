@@ -4,6 +4,7 @@ Ponytail: pure unit tests. No poke-env runtime, no network,
 no battles, no GPU. The instrumentation must be disabled
 by default and have zero behavior change when disabled.
 """
+import poke_env_test_cleanup  # noqa: F401
 import json
 import os
 import tempfile
@@ -248,7 +249,9 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         battle = _Battle(actives=[_Mon()])
         action_trace.record_candidate(
             battle, 0, _protect_order(), -1e9,
-            hard_block_reason="repeated_protect",
+            hard_block_reason="repeated_protect_like_third_attempt",
+            committed_protect_streak=2,
+            protect_last_failed=False,
         )
         summary = action_trace.get_summary()
         self.assertEqual(summary["protect_candidate_count"], 1)
@@ -272,7 +275,9 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         battle = _Battle(battle_tag="battle-42", turn=7, actives=[mon])
         action_trace.record_candidate(
             battle, 0, _protect_order(), -1e9,
-            hard_block_reason="repeated_protect",
+            hard_block_reason="repeated_protect_like_third_attempt",
+            committed_protect_streak=2,
+            protect_last_failed=False,
         )
         records = action_trace.get_records()
         self.assertEqual(len(records), 1)
@@ -286,8 +291,32 @@ class TestRecordCandidateBehavior(unittest.TestCase):
         self.assertEqual(rec["candidate_move_id"], "protect")
         self.assertTrue(rec["is_protect_candidate"])
         self.assertTrue(rec["is_hard_blocked"])
-        self.assertEqual(rec["hard_block_reason"], "repeated_protect")
+        self.assertEqual(
+            rec["hard_block_reason"],
+            "repeated_protect_like_third_attempt",
+        )
+        self.assertEqual(rec["protect_like_class"], "protect_like")
+        self.assertEqual(rec["committed_protect_streak"], 2)
+        self.assertFalse(rec["protect_last_failed"])
         self.assertEqual(rec["raw_score_before_policy"], -1e9)
+
+    def test_commit_trace_exposes_final_order_state_transition(self):
+        battle = _Battle(battle_tag="battle-commit", turn=4, actives=[_Mon()])
+        action_trace.record_state_update(
+            battle,
+            0,
+            is_reset=False,
+            selected_move_id="protect",
+            committed_streak_before=1,
+            committed_streak_after=2,
+            source="final_selected_order",
+        )
+        rec = action_trace.get_records()[0]
+        self.assertEqual(rec["kind"], "protect_state_commit")
+        self.assertEqual(rec["source"], "final_selected_order")
+        self.assertEqual(rec["selected_move_id"], "protect")
+        self.assertEqual(rec["committed_streak_before"], 1)
+        self.assertEqual(rec["committed_streak_after"], 2)
 
 
 class TestRecordStateUpdateBehavior(unittest.TestCase):
@@ -594,7 +623,7 @@ class TestWiredProductionCallPoint(unittest.TestCase):
         marker = "if _is_repeated_protect_spam("
         idx = src.find(marker)
         self.assertGreaterEqual(idx, 0, "repeated_protect_spam call not found")
-        window = src[idx:idx + 600]
+        window = src[idx:idx + 1200]
         self.assertIn("action_trace.record_candidate(", window)
         self.assertIn("repeated_protect", window)
 

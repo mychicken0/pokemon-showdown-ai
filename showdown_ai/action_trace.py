@@ -158,6 +158,8 @@ def record_candidate(
     order,
     score: float,
     hard_block_reason: str = "",
+    committed_protect_streak=None,
+    protect_last_failed=None,
 ) -> None:
     """Record a candidate scoring event.
 
@@ -185,8 +187,11 @@ def record_candidate(
         "pokemon_ident": _pokemon_ident(battle, active_idx),
         "pokemon_types": _pokemon_types(battle, active_idx),
         "candidate_move_id": mid,
+        "protect_like_class": "protect_like" if is_protect else "",
         "candidate_target": target,
         "is_protect_candidate": is_protect,
+        "committed_protect_streak": committed_protect_streak,
+        "protect_last_failed": protect_last_failed,
         "raw_score_before_policy": score,
         "score_after_score_action_impl": score,
         "is_hard_blocked": score <= threshold,
@@ -205,7 +210,15 @@ def record_candidate(
                 _protect_hard_block_candidate_count += 1
 
 
-def record_state_update(battle, active_idx: int, is_reset: bool = False) -> None:
+def record_state_update(
+    battle,
+    active_idx: int,
+    is_reset: bool = False,
+    selected_move_id: str = "",
+    committed_streak_before=None,
+    committed_streak_after=None,
+    source: str = "",
+) -> None:
     """Record a Protect streak state update or reset."""
     if not is_action_trace_enabled():
         return
@@ -215,6 +228,18 @@ def record_state_update(battle, active_idx: int, is_reset: bool = False) -> None
             _protect_state_reset_count += 1
         else:
             _protect_state_update_count += 1
+        _records.append({
+            "kind": "protect_state_commit",
+            "battle_tag": _battle_id(battle),
+            "turn": _turn(battle),
+            "active_idx": active_idx,
+            "pokemon_ident": _pokemon_ident(battle, active_idx),
+            "selected_move_id": selected_move_id,
+            "committed_streak_before": committed_streak_before,
+            "committed_streak_after": committed_streak_after,
+            "is_reset": is_reset,
+            "source": source,
+        })
 
 
 def record_joint(

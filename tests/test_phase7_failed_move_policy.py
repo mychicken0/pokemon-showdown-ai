@@ -4,6 +4,7 @@ Ponytail: pure unit tests. No poke-env runtime, no network,
 no battles, no GPU. Tests hard-block integrity for the
 Protect-spam and no-effect-attack fixes.
 """
+import poke_env_test_cleanup  # noqa: F401
 import json
 import os
 import sys
@@ -171,6 +172,22 @@ class TestHardBlockSkipsJoint(unittest.TestCase):
         self.assertIsNotNone(out[0])
         self.assertEqual(out[0], b)
 
+    def test_threshold_score_is_hard_blocked(self):
+        protect = self._move("protect", priority=4, mt=-1)
+        tackle = self._move("tackle", mt=0)
+        joints = self._make_joints((protect, tackle), (tackle, tackle))
+        a, b = joints
+        scores = {
+            id(a.first_order): HARD_BLOCK_SCORE_THRESHOLD,
+            id(b.first_order): 0.0,
+            id(a.second_order): 0.0,
+            id(b.second_order): 0.0,
+        }
+        out = select_best_joint_from_score_maps(
+            self._battle(), self._cfg(), joints, scores, scores
+        )
+        self.assertEqual(out[0], b)
+
     def test_safety_block_penalty_does_not_undo_hard_block(self):
         # Joint with a safety-blocked slot (e.g. ally-redirection)
         # is penalized but not eliminated; the joint with a
@@ -244,6 +261,25 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
             _is_repeated_protect_spam(self._protect(), battle, 0, state)
         )
 
+    def test_outer_score_wrapper_cannot_resurrect_hard_block(self):
+        player = bot.DoublesDamageAwarePlayer.__new__(
+            bot.DoublesDamageAwarePlayer
+        )
+        player.config = bot.DoublesDamageAwareConfig()
+        player._base_scores_cache = {0: {}, 1: {}}
+        player._pure_scoring_mode = False
+        player._active_config_override = None
+        player._expected_to_faint_before_moving = {
+            "battle-X": {0: True, 1: False}
+        }
+        player._b17_protect_floor_debug = {}
+        battle = self._battle_with_active()
+        with mock.patch.object(
+            player, "_score_action_impl", return_value=-1e9
+        ):
+            score = player.score_action(self._protect(), 0, battle)
+        self.assertEqual(score, -1e9)
+
     def test_second_protect_not_blocked(self):
         battle = self._battle_with_active()
         state: Dict = {}
@@ -264,9 +300,6 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         ident = battle.active_pokemon[0].ident
         for t in (1, 2, 3):
             battle.turn = t
-            record_protect_like_attempt(
-                state, battle.battle_tag, 0, ident, t, "protect"
-            )
             is_blocked = _is_repeated_protect_spam(
                 self._protect(), battle, 0, state
             )
@@ -277,6 +310,10 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
             else:
                 self.assertTrue(
                     is_blocked, f"turn {t} should be blocked"
+                )
+            if not is_blocked:
+                record_protect_like_attempt(
+                    state, battle.battle_tag, 0, ident, t, "protect"
                 )
 
     def test_16_turn_whimsicott_streak(self):
@@ -291,24 +328,29 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         state: Dict = {}
         for turn in range(13, 29):
             battle.turn = turn
-            record_protect_like_attempt(
-                state, battle.battle_tag, 1, "p1b: Whimsicott",
-                turn, "protect",
-            )
             is_blocked = _is_repeated_protect_spam(
                 self._protect(), battle, 1, state
             )
-            if turn < 15:
-                # turns 13, 14: first and second Protect -> not blocked
+            should_block = (turn - 13) % 3 == 2
+            if not should_block:
                 self.assertFalse(
                     is_blocked,
                     f"Whimsicott turn {turn} should NOT be blocked"
                 )
             else:
-                # turn 15+: 3rd+ consecutive Protect -> blocked
                 self.assertTrue(
                     is_blocked,
                     f"Whimsicott turn {turn} should be blocked"
+                )
+            if not is_blocked:
+                record_protect_like_attempt(
+                    state, battle.battle_tag, 1, "p1b: Whimsicott",
+                    turn, "protect",
+                )
+            else:
+                record_protect_like_attempt(
+                    state, battle.battle_tag, 1, "p1b: Whimsicott",
+                    turn, "tackle",
                 )
 
     def test_state_resets_after_non_protect_move(self):
@@ -326,21 +368,19 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         record_protect_like_attempt(
             state, battle.battle_tag, 0, ident, 4, "tackle"
         )
-        # Then 2 fresh Protects on new turns should be allowed
+        # Then 2 fresh Protect candidates should be allowed
+        # and committed.
         for t in (5, 6):
             battle.turn = t
-            record_protect_like_attempt(
-                state, battle.battle_tag, 0, ident, t, "protect"
-            )
             self.assertFalse(
                 _is_repeated_protect_spam(self._protect(), battle, 0, state),
                 f"turn {t} should NOT be blocked",
             )
+            record_protect_like_attempt(
+                state, battle.battle_tag, 0, ident, t, "protect"
+            )
         # 3rd fresh Protect on a new turn should be blocked
         battle.turn = 7
-        record_protect_like_attempt(
-            state, battle.battle_tag, 0, ident, 7, "protect"
-        )
         self.assertTrue(
             _is_repeated_protect_spam(self._protect(), battle, 0, state)
         )
@@ -661,7 +701,7 @@ class TestProtectParserFixes(unittest.TestCase):
         self.assertEqual(out["repeated_protect_fail_count"], 0)
         self.assertTrue(out["protect_spam_gate_pass"])
 
-    def test_two_consecutive_fails_are_repeated(self):
+    def test_two_consecutive_fails_are_two_allowed_attempts(self):
         self._write([
             "|turn|2",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
@@ -672,43 +712,29 @@ class TestProtectParserFixes(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["protect_fail_count"], 2)
-        self.assertEqual(out["repeated_protect_fail_count"], 1)
-        self.assertEqual(out["protect_policy_bug_count"], 1)
-        self.assertFalse(out["protect_spam_gate_pass"])
+        self.assertEqual(out["repeated_protect_fail_count"], 0)
+        self.assertEqual(out["protect_policy_bug_count"], 0)
+        self.assertTrue(out["protect_spam_gate_pass"])
 
     def test_successful_protect_resets_fail_state(self):
-        # Without a server-side "Protect succeeded" signal
-        # in the parser's input, the parser cannot tell the
-        # difference between "Protect blocked by enemy
-        # priority" and "Protect succeeded with [still] echo".
-        # The current semantic is: any `|-fail|` line in the
-        # same turn as a Protect attempt whose streak is >= 2
-        # is a repeated fail. This test documents the
-        # limitation: a fail -> Protect -> fail is a repeated
-        # fail because the parser cannot know the middle
-        # Protect succeeded. The improvement is tracked in
-        # the parser's design as a future gate-side check
-        # against the audit logger's `move_metadata_map`.
+        # A successful Protect followed by one [still]/fail
+        # is one failure, not a repeated failure. A third
+        # selected attempt is still a policy bug.
         self._write([
             "|turn|2",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
-            "|-fail|p1a: Whimsicott",
+            "|-singleturn|p1a: Whimsicott|Protect",
             "|turn|3",
-            "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
-            "|move|p1a: Whimsicott|Protect||[still]",  # success echo
+            "|move|p1a: Whimsicott|Protect||[still]",
+            "|-fail|p1a: Whimsicott",
             "|turn|4",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
-            "|-fail|p1a: Whimsicott",
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
-        # Parser counts: t2 fail (streak=1, not repeated),
-        # t4 fail (streak=3 because t3 incremented, repeated=1).
-        self.assertEqual(out["protect_fail_count"], 2)
-        # repeated=1 is the documented limitation; the
-        # improvement requires a "succeeded" signal in the
-        # parser input. The gate will still catch the
-        # policy bug in the upstream raw stream.
-        self.assertEqual(out["repeated_protect_fail_count"], 1)
+        self.assertEqual(out["protect_fail_count"], 1)
+        self.assertEqual(out["repeated_protect_fail_count"], 0)
+        self.assertEqual(out["protect_like_third_attempt_bug_count"], 1)
+        self.assertEqual(out["protect_like_still_gap_bug_count"], 1)
 
     def test_non_protect_fail_not_counted(self):
         # |-miss| and |-immune| are not Protect fails.
@@ -835,4 +861,3 @@ class TestExistingSafetyStillWorks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

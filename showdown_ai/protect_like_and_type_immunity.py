@@ -176,13 +176,7 @@ def protect_streak_should_block(
     key = make_protect_streak_key(battle_tag, active_idx, pokemon_ident)
     rec = state.get(key)
     if rec is None or rec.get("last_ident") != pokemon_ident:
-        rec = {
-            "last_turn": -1,
-            "streak": 0,
-            "last_ident": pokemon_ident,
-            "last_failed": False,
-        }
-        state[key] = rec
+        return False, True
     if rec["last_turn"] >= 0 and current_turn - rec["last_turn"] > 1:
         return False, True  # streak broken; record fresh attempt
     if rec["streak"] == 0:

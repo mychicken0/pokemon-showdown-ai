@@ -452,14 +452,17 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         attempt. Increment the actor's streak if the actor
         was the previous Protect actor in the immediately
         prior turn; otherwise reset streak to 1.
-      - A ``|-fail|`` line in the same turn as the actor's
-        most recent Protect attempt marks the attempt as
-        failed. The first fail is NOT a repeated-fail; the
-        second and subsequent consecutive fails are.
-        A non-fail event between Protect moves resets the
-        fail counter.
-      - A ``|switch|`` line for the same actor resets the
-        streak (new active pokemon).
+      - State is independent per actor/slot. A failed or
+        ``[still]`` attempt remains a selected attempt and
+        does not reset the streak.
+      - ``repeated_protect_fail_count`` is reserved for a
+        failed third-or-later attempt after a prior failed
+        attempt; two selected attempts remain permitted.
+      - A non-Protect move, turn gap, or switch resets that
+        actor/slot streak.
+      - Policy bug counters apply to bot-side (p1) selected
+        attempts only. Opponent-side attempts remain in the
+        all-sides diagnostic maximum.
 
     Returns dict with these fields:
       - protect_move_count
@@ -468,8 +471,7 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
       - consecutive_protect_attempt_count (>=2 streaks)
       - max_consecutive_protect_streak
       - repeated_protect_fail_count
-      - protect_policy_bug_count (3+ streaks; or any
-        repeated failed Protect)
+      - protect_policy_bug_count (bot-side 3+ streaks)
       - protect_spam_gate_pass
       - protect_spam_battles
       - events (list of per-(battle, actor) policy-bug dicts)
@@ -482,7 +484,11 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         "protect_fail_count": 0,
         "consecutive_protect_attempt_count": 0,
         "max_consecutive_protect_streak": 0,
+        "max_consecutive_protect_like_attempt_streak": 0,
+        "max_consecutive_protect_like_attempt_streak_all_sides": 0,
         "repeated_protect_fail_count": 0,
+        "protect_like_third_attempt_bug_count": 0,
+        "protect_like_still_gap_bug_count": 0,
         "protect_policy_bug_count": 0,
         "protect_spam_gate_pass": True,
         "protect_spam_battles": 0,
@@ -493,15 +499,8 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
     spam_battles = set()
     for fp in sorted(_glob.glob(_os.path.join(raw_dir, "*.jsonl"))):
         bname = _os.path.basename(fp)
-        # Per-(battle, actor) state.
-        streak = 0
-        last_turn = -1
-        last_actor = None
-        # Track whether the most recent Protect attempt
-        # for ``last_actor`` failed. Reset on any new Protect
-        # attempt or any non-Protect move by the same actor.
-        last_failed = False
-        max_streak_local = 0
+        current_turn = 0
+        actor_state = {}
         try:
             with open(fp) as f:
                 for ln in f:
@@ -515,17 +514,17 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                             t = int(line.split("|")[2])
                         except Exception:
                             t = 0
-                        if last_turn >= 0 and t - last_turn > 1:
-                            # Streak broken by inactive turns.
-                            streak = 0
-                            last_failed = False
-                        last_turn = t
+                        current_turn = t
                         continue
                     if line.startswith("|switch|"):
                         parts = line.split("|")
-                        if len(parts) >= 3 and parts[2] == last_actor:
-                            streak = 0
-                            last_failed = False
+                        if len(parts) >= 3:
+                            slot = parts[2].split(":", 1)[0]
+                            actor_state = {
+                                actor: rec
+                                for actor, rec in actor_state.items()
+                                if actor.split(":", 1)[0] != slot
+                            }
                         continue
                     if line.startswith("|move|"):
                         parts = line.split("|")
@@ -533,73 +532,102 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                             continue
                         actor = parts[2]
                         move_id = parts[3].lower().replace(" ", "").replace("'", "").replace("-", "")
-                        if move_id not in {
+                        is_protect_like = move_id in {
                             "protect", "detect", "spikyshield",
                             "kingsshield", "obstruct", "maxguard",
                             "silktrap", "banefulbunker",
                             "burningbulwark",
-                        }:
-                            # Any non-Protect move by the same
-                            # actor resets the streak and the
-                            # fail counter.
-                            if actor == last_actor:
-                                streak = 0
-                                last_failed = False
+                        }
+                        if not is_protect_like:
+                            actor_state.pop(actor, None)
                             continue
                         out["protect_move_count"] += 1
-                        if actor == last_actor and streak >= 1:
-                            streak += 1
+                        rec = actor_state.get(actor, {})
+                        previous_failed = bool(rec.get("last_failed", False))
+                        previous_still = bool(rec.get("last_still", False))
+                        if (
+                            rec.get("last_turn", -1) >= 0
+                            and current_turn - rec["last_turn"] == 1
+                        ):
+                            streak = int(rec.get("streak", 0)) + 1
                         else:
                             streak = 1
-                        last_actor = actor
-                        # New Protect attempt: reset the
-                        # per-attempt fail flag for this actor.
-                        last_failed = False
-                        if streak >= 2:
+                            previous_failed = False
+                            previous_still = False
+                        is_still = "[still]" in line
+                        actor_state[actor] = {
+                            "streak": streak,
+                            "last_turn": current_turn,
+                            "last_failed": False,
+                            "last_still": is_still,
+                            "previous_failed": previous_failed,
+                        }
+                        is_bot = actor.startswith("p1")
+                        if is_bot and streak >= 2:
                             out["consecutive_protect_attempt_count"] += 1
-                        if streak >= 3:
+                        if is_bot and streak >= 3:
                             out["protect_policy_bug_count"] += 1
+                            out["protect_like_third_attempt_bug_count"] += 1
+                            if previous_still or previous_failed:
+                                out["protect_like_still_gap_bug_count"] += 1
                             spam_battles.add(bname)
                             out["events"].append({
                                 "battle": bname,
                                 "actor": actor,
-                                "turn": last_turn,
+                                "turn": current_turn,
                                 "streak": streak,
                                 "classification": "POLICY_BUG_REPEATED_PROTECT_SPAM",
                             })
-                        if streak > max_streak_local:
-                            max_streak_local = streak
+                        out[
+                            "max_consecutive_protect_like_attempt_streak_all_sides"
+                        ] = max(
+                            out[
+                                "max_consecutive_protect_like_attempt_streak_all_sides"
+                            ],
+                            streak,
+                        )
+                        if is_bot:
+                            out["max_consecutive_protect_streak"] = max(
+                                out["max_consecutive_protect_streak"],
+                                streak,
+                            )
+                            out[
+                                "max_consecutive_protect_like_attempt_streak"
+                            ] = max(
+                                out[
+                                    "max_consecutive_protect_like_attempt_streak"
+                                ],
+                                streak,
+                            )
                         continue
                     if line.startswith("|-fail|"):
                         # Server-side fail in the same turn as
                         # the most recent Protect attempt.
                         # A non-Protect fail is ignored.
-                        if last_actor is None:
+                        parts = line.split("|")
+                        actor = parts[2] if len(parts) >= 3 else ""
+                        rec = actor_state.get(actor)
+                        if rec is None or rec.get("last_turn") != current_turn:
                             continue
                         out["protect_fail_count"] += 1
-                        if streak >= 2:
-                            # 2nd+ consecutive Protect attempt
-                            # also failed: this is a repeated
-                            # fail. The first fail of a streak
-                            # (streak=1) is not repeated; the
-                            # second and later are.
+                        if (
+                            actor.startswith("p1")
+                            and rec.get("previous_failed", False)
+                            and rec.get("streak", 0) >= 3
+                        ):
                             out["repeated_protect_fail_count"] += 1
-                            out["protect_policy_bug_count"] += 1
                             spam_battles.add(bname)
                             out["events"].append({
                                 "battle": bname,
-                                "actor": last_actor,
-                                "turn": last_turn,
-                                "streak": streak,
+                                "actor": actor,
+                                "turn": current_turn,
+                                "streak": rec.get("streak", 0),
                                 "classification": "POLICY_BUG_REPEATED_FAILED_PROTECT",
                             })
-                        # Mark the current attempt as failed.
-                        last_failed = True
+                        rec["last_failed"] = True
                         continue
         except Exception:
             continue
-        if max_streak_local > out["max_consecutive_protect_streak"]:
-            out["max_consecutive_protect_streak"] = max_streak_local
     # successful = total - failed (approx; we did not
     # always know the server's success flag, so this is an
     # upper bound).
@@ -607,7 +635,10 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         0, out["protect_move_count"] - out["protect_fail_count"]
     )
     out["protect_spam_battles"] = len(spam_battles)
-    out["protect_spam_gate_pass"] = out["protect_policy_bug_count"] == 0
+    out["protect_spam_gate_pass"] = (
+        out["protect_policy_bug_count"] == 0
+        and out["repeated_protect_fail_count"] == 0
+    )
     return out
 
 

@@ -14,6 +14,7 @@ Validates:
 """
 from __future__ import annotations
 
+import poke_env_test_cleanup  # noqa: F401
 import copy
 import json
 import os
