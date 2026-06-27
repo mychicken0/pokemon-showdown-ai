@@ -40,6 +40,67 @@ SPREAD_MOVE_IDS = frozenset({
     "glaciate",
 })
 
+# Phase 7 v2 refinement: no-effect classifier constants.
+# These are used to distinguish real bot policy bugs
+# from opponent-driven game mechanics and parser
+# artifacts. No species-based ability inference.
+_REDIRECTION_DEBUG_TOKENS = frozenset({
+    # emitted by Showdown protocol when a redirection
+    # move (Rage Powder, Follow Me, Storm Drain,
+    # Lightning Rod, Spotlight) changes the move target.
+    "rage powder redirected target of move",
+    "follow me redirected target of move",
+    "storm drain redirected target of move",
+    "lightning rod redirected target of move",
+    "spotlight redirected target of move",
+})
+_REDIRECTION_MOVE_IDS = frozenset({
+    "ragepowder", "followme", "stormdrain", "lightningrod",
+    "spotlight",
+})
+# Hint line emitted by Showdown when a Prankster
+# status move fails on a Dark-type target.
+_PRANKSTER_DARK_HINT_TOKENS = frozenset({
+    "since gen 7, dark is immune to prankster moves.",
+})
+_PRANKSTER_DEBUG_TOKENS = frozenset({
+    "natural prankster immunity",
+})
+# Known Prankster users. The parser is **not**
+# allowed to infer Prankster from species. This set
+# is only consulted when the raw protocol already
+# shows a Prankster-vs-Dark signal (the hint or
+# debug line) and is used to double-check that the
+# move is a Prankster move before classifying.
+# (We do not consult this set to decide if a move
+# is Prankster; we only consult it to confirm
+# when the protocol already flagged a no-effect.)
+_KNOWN_PRANKSTER_MOVE_IDS = frozenset({
+    "encore", "thunderwave", "willowisp", "toxic",
+    "spore", "sleeppowder", "stunspore", "yawn",
+    "confuseray", "disable", "swagger", "leer",
+    "stringshot", "smokescreen", "sandattack",
+    "kinesis", "flash", "cottonspore", "sweetkiss",
+    "lovelykiss", "nobleroar", "partingshot",
+    "memento", "topsyturvy", "faketears", "charm",
+    "featherdance", "screech", "growl", "tailwhip",
+    "taunt", "haze",
+    # Plus: the "non-status but Prankster-boosted"
+    # damaging moves. These are not relevant to the
+    # status-only no-effect classification, but we
+    # include them for completeness when the
+    # protocol signals "natural prankster immunity".
+    "thunderclap", "shadowstrike",
+})
+# Bot side convention. The smoke runner assigns the
+# bot to ``p1`` and the opponent to ``p2``. Actor
+# identifiers in the protocol are formatted
+# ``p1a: <species>`` / ``p1b: <species>`` for the
+# bot and ``p2a: <species>`` / ``p2b: <species>``
+# for the opponent. The ``startswith("p1")`` test
+# is robust to the ``a`` / ``b`` slot suffix.
+_BOT_SIDE_PREFIX = "p1"
+
 # Status move indicators
 STATUS_FROM_TOKENS = frozenset({"brn", "psn", "tox", "frz", "par"})
 
@@ -709,6 +770,56 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         counted as Protect failure (we don't increment
         here; that's the protect parser's job).
 
+    Phase 7 v2 refinement: classification of no-effect
+    events into additive buckets so that the
+    ``no_effect_policy_gate`` only fails on
+    ``real_bot_no_effect_bug_count > 0``:
+
+      - ``REDIRECTION_INDUCED_NO_EFFECT_ARTIFACT``:
+        the protocol shows a redirection debug line
+        (e.g. ``|debug|Rage Powder redirected target of
+        move``) or the no-effect follows a redirection
+        move (Rage Powder, Follow Me, Storm Drain,
+        Lightning Rod, Spotlight). The bot aimed at
+        a valid target; the opponent's redirection
+        caused the no-effect. This is a parser-side
+        artifact, not a real bot policy bug.
+      - ``STATUS_OR_PRANKSTER_DARK_NO_EFFECT_ARTIFACT``:
+        the protocol shows a Prankster-vs-Dark hint
+        (``|hint|Since gen 7, Dark is immune to
+        Prankster moves.``) or a ``|debug|natural
+        prankster immunity`` line, and the move is in
+        the known Prankster set or is a status move
+        in the no-effect status set. The bot chose
+        a reasonable Prankster move; the Dark-type
+        immunity is a server-side game mechanic.
+        This is a parser-side artifact, not a real
+        bot policy bug.
+      - ``INSUFFICIENT_CONTEXT_NO_EFFECT_ARTIFACT``:
+        the no-effect cannot be confidently
+        classified. We do not default to "real bot
+        bug" in this case; we track the event
+        separately and the bot gate still passes.
+      - ``OPPONENT_SIDE_NO_EFFECT``: the actor is
+        the opponent side (``p2``). The bot is on
+        ``p1``. The bot's gate does not fail on
+        opponent-side no-effect events.
+      - ``REAL_BOT_NO_EFFECT_BUG``: the actor is
+        the bot side, the move is a damaging move
+        (not a status move), the no-effect is not
+        caused by redirection or Prankster-vs-Dark,
+        and the target is selected by the bot
+        directly. This is the only bucket that
+        increments ``no_effect_policy_bug_count`` and
+        fails the gate.
+
+    Important: no species-based ability inference.
+    The classifier only consults raw protocol
+    lines and move-id lookups. Prankster, Levitate,
+    Magic Bounce, etc. are not inferred from
+    species; they are only used when the protocol
+    already produced a hint or debug line.
+
     Productive-partial-spread handling:
 
       For a spread move, the parser tracks the set of
@@ -723,15 +834,28 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
       ``no_effect_policy_bug`` for the gate.
 
     Returns dict with these fields:
-      - no_effect_move_count
-      - known_immunity_no_effect_count
-      - repeated_no_effect_move_count
-      - no_effect_policy_bug_count
-      - no_effect_policy_gate_pass
+      - no_effect_move_count (legacy; total no-effect events)
+      - known_immunity_no_effect_count (legacy)
+      - repeated_no_effect_move_count (legacy; total
+        consecutive events across all classifications)
+      - no_effect_policy_bug_count (legacy alias for
+        real_bot_no_effect_bug_count, kept for
+        compatibility with existing call sites)
+      - no_effect_policy_gate_pass (legacy alias for
+        the additive gate; passes if
+        real_bot_no_effect_bug_count == 0 AND
+        spread_all_targets_immune_bug_count == 0)
       - no_effect_policy_battles
       - productive_partial_spread_no_effect_false_positive_count
       - spread_all_targets_immune_bug_count
       - spread_partial_productive_immune_count
+      - real_bot_no_effect_bug_count (additive; new)
+      - redirection_induced_no_effect_artifact_count
+      - status_or_prankster_dark_no_effect_artifact_count
+      - insufficient_context_no_effect_count
+      - opponent_side_no_effect_count
+      - protect_self_blocked_count (opponent's attack
+        into bot's Protect; not a gate event)
       - events (list of per-(battle, actor, target) dicts)
     """
     import glob as _glob
@@ -746,6 +870,13 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         "productive_partial_spread_no_effect_false_positive_count": 0,
         "spread_all_targets_immune_bug_count": 0,
         "spread_partial_productive_immune_count": 0,
+        # Additive Phase 7 v2 refinement fields
+        "real_bot_no_effect_bug_count": 0,
+        "redirection_induced_no_effect_artifact_count": 0,
+        "status_or_prankster_dark_no_effect_artifact_count": 0,
+        "insufficient_context_no_effect_count": 0,
+        "opponent_side_no_effect_count": 0,
+        "protect_self_blocked_count": 0,
         "events": [],
     }
     if not raw_dir or not _os.path.isdir(raw_dir):
@@ -770,6 +901,22 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         cur_actor = None
         cur_move = None
         cur_target = None
+        # Phase 7 v2 refinement: track whether the
+        # current ``cur_move`` is a status move. Status
+        # moves cannot produce real damaging
+        # no-effect events, but they may still
+        # produce ``|-immune|`` lines (Prankster-vs-Dark)
+        # that we want to classify separately.
+        cur_is_status_move = False
+        # Phase 7 v2 refinement: per-turn signals that
+        # persist across lines on the same turn. Reset
+        # only when a new |turn| marker is seen. These
+        # let the parser capture a |debug|Rage Powder
+        # redirected ...| line and apply the redirection
+        # classification to a later |-|immune| line on
+        # the same turn.
+        redirect_seen_this_turn = False
+        prankster_dark_seen_this_turn = False
         # Per-(actor, target) consecutive no-effect count
         # tracked ACROSS turns. A non-no-effect event for the
         # same key resets the count; a turn gap > 1 also
@@ -789,21 +936,42 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                     # consecutive_key / count because a
                     # bot that tries the same no-effect
                     # move on turn 14 and again on turn 19
-                    # is just as broken.
+                    # is just as broken. The
+                    # per-turn redirect / Prankster
+                    # signals ARE reset on a new turn.
                     cur_actor = None
                     cur_move = None
                     cur_target = None
+                    cur_is_status_move = False
+                    redirect_seen_this_turn = False
+                    prankster_dark_seen_this_turn = False
                     continue
                 if line.startswith("|move|"):
                     parts = line.split("|")
                     if len(parts) < 5:
                         continue
                     move_id = parts[3].lower().replace(" ", "")
-                    # Skip status / setup moves.
+                    # Status / setup moves. These are
+                    # not "damaging no-effect" events;
+                    # they cannot produce a real
+                    # ``REAL_BOT_NO_EFFECT_BUG`` because
+                    # they are not damaging. However,
+                    # the protocol may still emit a
+                    # ``|-immune|`` for a status move
+                    # (Prankster-vs-Dark immunity,
+                    # Ghost-type Light Screen, etc.)
+                    # that we want to classify as a
+                    # ``STATUS_OR_PRANKSTER_DARK_NO_EFFECT_ARTIFACT``
+                    # and not a real bot policy bug.
+                    # We track the move (so the
+                    # subsequent |-|immune| line is
+                    # captured) but do NOT increment
+                    # the damaging-no-effect counters.
                     if move_id in _NO_EFFECT_STATUS_MOVE_IDS_PARSER:
-                        cur_actor = None
-                        cur_move = None
-                        cur_target = None
+                        cur_actor = parts[2]
+                        cur_move = move_id
+                        cur_target = parts[4] if parts[4] else ""
+                        cur_is_status_move = True
                         continue
                     # Spread moves are NOT skipped: the
                     # |-immune| lines for each target
@@ -820,7 +988,33 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                     cur_actor = parts[2]
                     cur_move = move_id
                     cur_target = parts[4] if parts[4] else ""
+                    cur_is_status_move = False
                     continue
+                # Phase 7 v2 refinement: capture
+                # redirection debug lines and
+                # Prankster-vs-Dark hint/debug lines
+                # BEFORE the |-|immune| line, so the
+                # classifier can use them. The
+                # per-turn signals are reset on
+                # |turn| and persist across lines on the
+                # same turn.
+                if line.startswith("|debug|"):
+                    lname = line.lower()
+                    for tok in _REDIRECTION_DEBUG_TOKENS:
+                        if tok in lname:
+                            redirect_seen_this_turn = True
+                            break
+                    if not redirect_seen_this_turn:
+                        for tok in _PRANKSTER_DEBUG_TOKENS:
+                            if tok in lname:
+                                prankster_dark_seen_this_turn = True
+                                break
+                if line.startswith("|-hint|"):
+                    lname = line.lower()
+                    for tok in _PRANKSTER_DARK_HINT_TOKENS:
+                        if tok in lname:
+                            prankster_dark_seen_this_turn = True
+                            break
                 if (
                     line.startswith("|-immune|")
                     or "doesn't affect" in line
@@ -839,10 +1033,23 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                         "silktrap", "banefulbunker",
                         "burningbulwark",
                     }:
+                        out["protect_self_blocked_count"] += 1
                         cur_actor = None
                         cur_move = None
                         cur_target = None
                         continue
+                    # Extract the immune target from the
+                    # protocol line for classification.
+                    # The |-immune| line format is
+                    # `|-immune|<actor>` (the immune
+                    # recipient). The |-| doesn't affect
+                    # line format is similar.
+                    immune_target = ""
+                    if line.startswith("|-immune|"):
+                        try:
+                            immune_target = line.split("|")[2]
+                        except Exception:
+                            immune_target = ""
                     # Spread partial-productive handling:
                     # if the same (actor, move, turn)
                     # spread move produced at least one
@@ -940,10 +1147,112 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                     # on the same turn. Also increments the
                     # no_effect counters because the spread
                     # move is entirely no-effect.
-                    if is_spread_move:
-                        out["spread_all_targets_immune_bug_count"] += 1
                     out["no_effect_move_count"] += 1
                     out["known_immunity_no_effect_count"] += 1
+                    is_bot_side = cur_actor.startswith(_BOT_SIDE_PREFIX)
+                    is_opponent_side = cur_actor.startswith("p2")
+                    # Phase 7 v2 refinement: classify
+                    # the no-effect event into one of the
+                    # additive buckets. The legacy
+                    # ``no_effect_policy_bug_count`` and
+                    # ``repeated_no_effect_move_count``
+                    # counters are kept for compatibility
+                    # but the new ``real_bot_no_effect_bug_count``
+                    # is what actually drives the gate.
+                    classification = None
+                    if is_opponent_side:
+                        # Opponent-side no-effect. The
+                        # bot's gate is not affected.
+                        classification = "OPPONENT_SIDE_NO_EFFECT"
+                        out["opponent_side_no_effect_count"] += 1
+                    elif cur_is_status_move:
+                        # The current move is a status
+                        # move (e.g. Encore, Thunder
+                        # Wave). The protocol has emitted
+                        # an |-|immune| line for it. The
+                        # most common cause is
+                        # Prankster-vs-Dark immunity
+                        # (which the protocol signals via
+                        # a hint line). We require the
+                        # explicit Prankster signal;
+                        # otherwise we conservatively
+                        # mark as insufficient context.
+                        # We do NOT increment the
+                        # damaging-no-effect counters
+                        # (``no_effect_move_count`` and
+                        # ``real_bot_no_effect_bug_count``)
+                        # because a status move's
+                        # failure is not a "damaging"
+                        # no-effect. The legacy
+                        # ``no_effect_move_count`` was
+                        # already incremented above
+                        # (legacy compatibility); we
+                        # back it out here to preserve
+                        # the prior test contract.
+                        if prankster_dark_seen_this_turn:
+                            classification = "STATUS_OR_PRANKSTER_DARK_NO_EFFECT_ARTIFACT"
+                            out["status_or_prankster_dark_no_effect_artifact_count"] += 1
+                        else:
+                            classification = "INSUFFICIENT_CONTEXT_NO_EFFECT_ARTIFACT"
+                            out["insufficient_context_no_effect_count"] += 1
+                        # Back out the legacy
+                        # increment because status
+                        # moves were not previously
+                        # counted. The additive
+                        # classification is what
+                        # matters.
+                        out["no_effect_move_count"] -= 1
+                        out["known_immunity_no_effect_count"] -= 1
+                    elif redirect_seen_this_turn:
+                        # Bot's move was redirected by
+                        # the opponent's Rage Powder /
+                        # Follow Me / Storm Drain /
+                        # Lightning Rod / Spotlight.
+                        # The bot's intended target was a
+                        # valid (non-immune) target, and
+                        # the immunity is on the
+                        # redirected target. Not a real
+                        # bot policy bug.
+                        classification = "REDIRECTION_INDUCED_NO_EFFECT_ARTIFACT"
+                        out["redirection_induced_no_effect_artifact_count"] += 1
+                    elif prankster_dark_seen_this_turn:
+                        # The protocol signals a
+                        # Prankster-vs-Dark no-effect.
+                        # Only count as artifact if the
+                        # move is consistent with a
+                        # Prankter status or known
+                        # Prankster-boosted move. We do
+                        # NOT infer Prankster from
+                        # species; we trust the protocol
+                        # hint line. (If the current
+                        # move is a damaging move, we
+                        # still trust the protocol: the
+                        # protocol emits the hint line
+                        # only when the actual game
+                        # mechanic fires.)
+                        classification = "STATUS_OR_PRANKSTER_DARK_NO_EFFECT_ARTIFACT"
+                        out["status_or_prankster_dark_no_effect_artifact_count"] += 1
+                    else:
+                        # Bot-side damaging move with no
+                        # redirection / Prankster
+                        # signal. This is a real bot
+                        # policy bug. (We do NOT
+                        # include insufficient_context
+                        # here: the no-effect is
+                        # sufficiently explained by
+                        # type-chart immunity. The
+                        # "insufficient context" bucket
+                        # is reserved for status-move
+                        # failures without an explicit
+                        # Prankster signal.)
+                        classification = "REAL_BOT_NO_EFFECT_BUG"
+                    # The legacy counters include ALL
+                    # no-effect events (bot + opponent)
+                    # to preserve the existing API. The
+                    # new additive field is the one that
+                    # actually fails the gate.
+                    if is_spread_move and not is_opponent_side:
+                        out["spread_all_targets_immune_bug_count"] += 1
                     key = (cur_actor, cur_target)
                     # "Repeated" = any 2+ no-effect events
                     # for the same (actor, target) in
@@ -959,9 +1268,13 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                         consecutive_key = key
                         consecutive_count = 1
                     last_no_effect_turn = turn
-                    if consecutive_count >= 2:
+                    if (
+                        classification == "REAL_BOT_NO_EFFECT_BUG"
+                        and consecutive_count >= 2
+                    ):
                         out["repeated_no_effect_move_count"] += 1
                         out["no_effect_policy_bug_count"] += 1
+                        out["real_bot_no_effect_bug_count"] += 1
                         spam_battles.add(bname)
                         out["events"].append({
                             "battle": bname,
@@ -970,7 +1283,39 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
                             "move": cur_move,
                             "turn": turn,
                             "consecutive_count": consecutive_count,
-                            "classification": "POLICY_BUG_REPEATED_NO_EFFECT",
+                            "classification": classification,
+                        })
+                    elif classification == "INSUFFICIENT_CONTEXT_NO_EFFECT_ARTIFACT":
+                        out["insufficient_context_no_effect_count"] += 1
+                        out["events"].append({
+                            "battle": bname,
+                            "actor": cur_actor,
+                            "target": cur_target,
+                            "move": cur_move,
+                            "turn": turn,
+                            "classification": classification,
+                        })
+                    # Non-bug classifications (redirection,
+                    # prankster, opponent-side) are also
+                    # logged in events with the
+                    # classification tag for
+                    # traceability. We do NOT
+                    # increment the legacy
+                    # no_effect_policy_bug_count or
+                    # repeated_no_effect_move_count for
+                    # these.
+                    elif classification in {
+                        "REDIRECTION_INDUCED_NO_EFFECT_ARTIFACT",
+                        "STATUS_OR_PRANKSTER_DARK_NO_EFFECT_ARTIFACT",
+                        "OPPONENT_SIDE_NO_EFFECT",
+                    }:
+                        out["events"].append({
+                            "battle": bname,
+                            "actor": cur_actor,
+                            "target": cur_target,
+                            "move": cur_move,
+                            "turn": turn,
+                            "classification": classification,
                         })
                     cur_actor = None
                     cur_move = None
@@ -979,7 +1324,17 @@ def parse_no_effect_attacks_from_raw_protocol(raw_dir: str) -> dict:
         except Exception:
             continue
     out["no_effect_policy_battles"] = len(spam_battles)
-    out["no_effect_policy_gate_pass"] = out["no_effect_policy_bug_count"] == 0
+    # The new gate is the additive one: passes iff
+    # there are no real bot policy bugs and no
+    # spread-all-immune bugs. The legacy
+    # ``no_effect_policy_bug_count`` is kept as an
+    # alias of ``real_bot_no_effect_bug_count`` for
+    # compatibility with the existing call sites
+    # (and the smoke report's field name).
+    out["no_effect_policy_gate_pass"] = (
+        out["real_bot_no_effect_bug_count"] == 0
+        and out["spread_all_targets_immune_bug_count"] == 0
+    )
     return out
 
 

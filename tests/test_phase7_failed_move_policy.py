@@ -808,16 +808,18 @@ class TestNoEffectParser(unittest.TestCase):
     def test_two_consecutive_no_effect_is_bug(self):
         self._write([
             "|turn|14",
-            "|move|p2b: Archaludon|Electro Shot|p1a: Garchomp",
-            "|-immune|p1a: Garchomp",
+            "|move|p1b: Archaludon|Electro Shot|p2a: Garchomp",
+            "|-immune|p2a: Garchomp",
             "|turn|19",
-            "|move|p2b: Archaludon|Electro Shot|p1a: Garchomp",
-            "|-immune|p1a: Garchomp",
+            "|move|p1b: Archaludon|Electro Shot|p2a: Garchomp",
+            "|-immune|p2a: Garchomp",
         ])
         out = parse_no_effect_attacks_from_raw_protocol(self.tmpdir)
         self.assertEqual(out["no_effect_move_count"], 2)
         self.assertEqual(out["repeated_no_effect_move_count"], 1)
+        # The legacy no_effect_policy_bug_count tracks real bot bugs
         self.assertEqual(out["no_effect_policy_bug_count"], 1)
+        self.assertEqual(out["real_bot_no_effect_bug_count"], 1)
         self.assertFalse(out["no_effect_policy_gate_pass"])
 
     def test_status_move_no_effect_not_counted(self):
