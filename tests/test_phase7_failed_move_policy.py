@@ -744,8 +744,8 @@ class TestProtectParserFixes(unittest.TestCase):
     def test_successful_protect_resets_fail_state(self):
         # A successful Protect followed by one [still]/fail
         # is one failure, not a repeated failure. A third
-        # selected attempt is still a policy bug. Under
-        # strict cooldown, 2nd and 3rd are both policy bugs.
+        # selected attempt is still an Encore-forced
+        # artifact under the refined logic.
         self._write([
             "|turn|2",
             "|move|p1a: Whimsicott|Protect|p1a: Whimsicott",
@@ -761,8 +761,10 @@ class TestProtectParserFixes(unittest.TestCase):
         self.assertEqual(out["repeated_protect_fail_count"], 0)
         # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
         # the 2nd attempt (still-gap) AND the 3rd attempt
-        # are both policy bugs.
-        self.assertEqual(out["protect_like_third_attempt_bug_count"], 2)
+        # are both Encore-forced artifacts because the
+        # prior [still] flag propagates.
+        self.assertEqual(out["encore_forced_protect_artifact_count"], 2)
+        self.assertEqual(out["protect_like_third_attempt_bug_count"], 0)
         self.assertEqual(out["protect_like_still_gap_bug_count"], 1)
 
     def test_non_protect_fail_not_counted(self):

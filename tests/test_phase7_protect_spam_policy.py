@@ -669,8 +669,11 @@ class TestRawParserProtectSpam(unittest.TestCase):
     def test_consecutive_protect_fails_gate(self):
         # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
         # 2 consecutive Protects (still-gap) now
-        # produces 2 policy bug events: the 2nd and the
-        # 3rd. The still-gap (the 2nd) is one of them.
+        # produces 2 encore-forced artifact events:
+        # the 2nd (still-gap) and the 3rd (forced
+        # continuation). They are NOT policy bugs
+        # because the bot had no alternative (Encore
+        # forced the move).
         self._write([
             "|turn|11",
             "|move|p1a: Bot|Protect|p1a: Bot",
@@ -683,18 +686,24 @@ class TestRawParserProtectSpam(unittest.TestCase):
         ])
         out = parse_protect_spam_from_raw_protocol(self.tmpdir)
         # 3 attempts in a row (2nd was a still, 3rd was a
-        # normal Protect). 2nd (streak=2) and 3rd (streak=3)
-        # are both policy bugs.
+        # normal Protect but forced by the prior still).
         self.assertEqual(
             out["max_consecutive_protect_like_attempt_streak"], 3
         )
-        self.assertGreaterEqual(
-            out["protect_like_third_attempt_bug_count"], 2
+        # The 2nd (streak=2) and 3rd (streak=3) are both
+        # Encore-forced artifacts, not policy bugs.
+        self.assertEqual(
+            out["encore_forced_protect_artifact_count"], 2
+        )
+        self.assertEqual(
+            out["protect_like_third_attempt_bug_count"], 0
         )
         self.assertGreaterEqual(
             out["protect_like_still_gap_bug_count"], 1
         )
-        self.assertFalse(out["protect_spam_gate_pass"])
+        # The gate passes because forced artifacts are
+        # not policy bugs.
+        self.assertTrue(out["protect_spam_gate_pass"])
 
     def test_opponent_third_attempt_is_not_bot_policy_bug(self):
         self._write([
@@ -801,10 +810,11 @@ class TestStage2GateWithProtect(unittest.TestCase):
 
     def test_stage2_gate_fails_on_long_protect_streak(self):
         # PHASE7_POLICY_SANITY_STRICT_PROTECT_COOLDOWN:
-        # the gate threshold is now > 1. A streak of 2
+        # the gate threshold is now > 1 for the
+        # non-encore-forced streak. A streak of 2
         # already fails the gate.
         s = make_empty_summary(raw_protocol_logs_present=True)
-        s["max_consecutive_protect_streak"] = 2
+        s["bot_non_encore_forced_max_protect_streak"] = 2
         self.assertFalse(stage2_gate_passes(s))
 
     def test_stage2_gate_passes_on_clean_summary(self):

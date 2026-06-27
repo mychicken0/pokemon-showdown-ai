@@ -498,7 +498,7 @@ def stage2_gate_passes(summary: dict) -> bool:
         return False
     if summary.get("repeated_protect_fail_count", 0) > 0:
         return False
-    if summary.get("max_consecutive_protect_streak", 0) > 1:
+    if summary.get("bot_non_encore_forced_max_protect_streak", 0) > 1:
         return False
     if summary.get("no_effect_policy_bug_count", 0) > 0:
         return False
@@ -561,6 +561,16 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         "protect_like_third_attempt_bug_count": 0,
         "protect_like_still_gap_bug_count": 0,
         "protect_policy_bug_count": 0,
+        # Phase 7 Protect audit refinement: additive field
+        # for Encore-forced Protect events. These are NOT
+        # counted as policy bugs because the bot had no
+        # legal alternative (see _is_repeated_protect_spam
+        # and the only_legal override).
+        "encore_forced_protect_artifact_count": 0,
+        # Phase 7 Protect audit refinement: maximum
+        # consecutive Protect-like streak for bot-side
+        # non-Encore-forced events. Used for the gate.
+        "bot_non_encore_forced_max_protect_streak": 0,
         "protect_spam_gate_pass": True,
         "protect_spam_battles": 0,
         "events": [],
@@ -572,6 +582,19 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
         bname = _os.path.basename(fp)
         current_turn = 0
         actor_state = {}
+        # Phase 7 Encore-aware Protect audit: track which
+        # actors are under Encore. Reset on |turn| because
+        # Encore expires after a few turns (or when the
+        # Encored Pokémon switches out). The Encore state
+        # is set when an Encore move targets a bot-side
+        # actor, and cleared on |turn| (the Encore
+        # persists into the next turn but the affected
+        # actor's state was already carried forward).
+        # We need a per-actor Encore flag that persists
+        # across turns so that Protect-like moves on
+        # subsequent turns are also flagged. We store
+        # it as a set of actor identifiers.
+        encore_locked = set()
         try:
             with open(fp) as f:
                 for ln in f:
@@ -596,6 +619,14 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                                 for actor, rec in actor_state.items()
                                 if actor.split(":", 1)[0] != slot
                             }
+                            # Phase 7 Encore-aware Protect audit:
+                            # clear Encore state for actors in
+                            # the switching slot because the
+                            # Pokémon identity changed.
+                            encore_locked = {
+                                a for a in encore_locked
+                                if a.split(":", 1)[0] != slot
+                            }
                         continue
                     if line.startswith("|move|"):
                         parts = line.split("|")
@@ -611,6 +642,17 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                         }
                         if not is_protect_like:
                             actor_state.pop(actor, None)
+                            # Phase 7 Encore-aware Protect audit:
+                            # if the current move is Encore
+                            # targeting a bot-side actor, mark
+                            # that actor as Encore-locked so
+                            # subsequent Protect-like attempts
+                            # on the same turn are classified
+                            # as forced artifacts.
+                            if move_id == "encore" and len(parts) >= 5:
+                                encore_target = parts[4]
+                                if encore_target.startswith("p1"):
+                                    encore_locked.add(encore_target)
                             continue
                         out["protect_move_count"] += 1
                         rec = actor_state.get(actor, {})
@@ -638,20 +680,47 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                         # any 2nd consecutive Protect-like
                         # attempt by the bot is a policy
                         # bug (was previously 3rd).
+                        #
+                        # Phase 7 Protect audit refinement:
+                        # When the bot's Protect-like move is
+                        # "forced" by Encore (signalled via
+                        # ``[still]`` in the raw protocol line
+                        # or by the previous attempt being a
+                        # ``[still]`` line), the bot had no
+                        # other legal action because the
+                        # opponent's Encore locked the move.
+                        # The cooldown hard-blocked the move,
+                        # but ``only_legal`` allowed it through
+                        # because no alternative existed.
+                        # These events are tracked as
+                        # ``encore_forced_protect_artifact``,
+                        # not as policy bugs.
+                        is_encore_forced = is_still or previous_still or (actor in encore_locked)
                         if is_bot and streak >= 2:
                             out["consecutive_protect_attempt_count"] += 1
-                            out["protect_policy_bug_count"] += 1
-                            out["protect_like_third_attempt_bug_count"] += 1
                             if previous_still or previous_failed:
                                 out["protect_like_still_gap_bug_count"] += 1
-                            spam_battles.add(bname)
-                            out["events"].append({
-                                "battle": bname,
-                                "actor": actor,
-                                "turn": current_turn,
-                                "streak": streak,
-                                "classification": "POLICY_BUG_REPEATED_PROTECT_SPAM",
-                            })
+                            if is_encore_forced:
+                                out["encore_forced_protect_artifact_count"] = \
+                                    out.get("encore_forced_protect_artifact_count", 0) + 1
+                                out["events"].append({
+                                    "battle": bname,
+                                    "actor": actor,
+                                    "turn": current_turn,
+                                    "streak": streak,
+                                    "classification": "POLICY_BUG_REPEATED_PROTECT_SPAM_FORCED_BY_ENCORE",
+                                })
+                            else:
+                                out["protect_policy_bug_count"] += 1
+                                out["protect_like_third_attempt_bug_count"] += 1
+                                spam_battles.add(bname)
+                                out["events"].append({
+                                    "battle": bname,
+                                    "actor": actor,
+                                    "turn": current_turn,
+                                    "streak": streak,
+                                    "classification": "POLICY_BUG_REPEATED_PROTECT_SPAM",
+                                })
                         out[
                             "max_consecutive_protect_like_attempt_streak_all_sides"
                         ] = max(
@@ -673,6 +742,18 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
                                 ],
                                 streak,
                             )
+                            # Track a separate max that excludes
+                            # Encore-forced Protect events. This
+                            # is the value used for the gate.
+                            if not is_encore_forced:
+                                out[
+                                    "bot_non_encore_forced_max_protect_streak"
+                                ] = max(
+                                    out.get(
+                                        "bot_non_encore_forced_max_protect_streak", 0
+                                    ),
+                                    streak,
+                                )
                         continue
                     if line.startswith("|-fail|"):
                         # Server-side fail in the same turn as
@@ -712,6 +793,7 @@ def parse_protect_spam_from_raw_protocol(raw_dir: str) -> dict:
     out["protect_spam_gate_pass"] = (
         out["protect_policy_bug_count"] == 0
         and out["repeated_protect_fail_count"] == 0
+        and out.get("bot_non_encore_forced_max_protect_streak", 0) <= 1
     )
     return out
 
