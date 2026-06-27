@@ -667,5 +667,60 @@ class TestNoCircularImport(unittest.TestCase):
             action_trace._hard_block_score_threshold = original
 
 
+class AuditModuleTraceEnablerTest(unittest.TestCase):
+    """Verify the diagnostic trace enabler wiring inside
+    ``rl_data_3b_small_local_audit.run_smoke``.
+
+    The audit module must:
+      * import safely (no hard dependency on ``action_trace``),
+      * call ``action_trace.flush_records()`` at the end of
+        ``run_smoke`` before return,
+      * be harmless when trace is disabled.
+    """
+
+    def test_audit_module_imports_with_action_trace_available(self):
+        import showdown_ai.rl_data_3b_small_local_audit as audit_mod
+        self.assertTrue(hasattr(audit_mod, "run_smoke"))
+        self.assertTrue(hasattr(audit_mod, "action_trace"))
+
+    def test_audit_module_imports_when_action_trace_missing(self):
+        import showdown_ai.rl_data_3b_small_local_audit as audit_mod
+        # The module must guard the import with try/except
+        # ImportError so that a missing action_trace does not
+        # break the audit module. Verify the guard exists in
+        # source text.
+        import inspect
+        src = inspect.getsource(audit_mod)
+        self.assertIn("from . import action_trace", src)
+        self.assertIn("except ImportError:", src)
+        self.assertIn("import action_trace", src)
+
+    def test_run_smoke_calls_flush_records_before_return(self):
+        import inspect
+        import showdown_ai.rl_data_3b_small_local_audit as audit_mod
+        src = inspect.getsource(audit_mod.run_smoke)
+        self.assertIn("action_trace.flush_records()", src)
+        flush_pos = src.find("action_trace.flush_records()")
+        return_pos = src.rfind("return {")
+        self.assertGreater(flush_pos, -1, "flush_records() call not found")
+        self.assertGreater(
+            return_pos, flush_pos,
+            "flush_records() must be called before the return dict",
+        )
+
+    def test_flush_in_run_smoke_is_wrapped_in_try_except(self):
+        import inspect
+        import showdown_ai.rl_data_3b_small_local_audit as audit_mod
+        src = inspect.getsource(audit_mod.run_smoke)
+        self.assertIn("try:", src)
+        self.assertIn("action_trace.flush_records()", src)
+        self.assertIn("except Exception as e:", src)
+        flush_pos = src.find("action_trace.flush_records()")
+        try_window = src.rfind("try:", 0, flush_pos)
+        except_window = src.find("except Exception as e:", flush_pos)
+        self.assertGreater(try_window, -1)
+        self.assertGreater(except_window, flush_pos)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -64,9 +64,14 @@ import poke_env_test_cleanup  # noqa: F401
 from poke_env import AccountConfiguration
 from poke_env.player.baselines import RandomPlayer
 
-from bot_doubles_damage_aware import DoublesDamageAwarePlayer
-from doubles_decision_audit_logger import DoublesDecisionAuditLogger
-from rl_data_3b_raw_protocol_capture import RawProtocolCapture
+from .bot_doubles_damage_aware import DoublesDamageAwarePlayer
+from .doubles_decision_audit_logger import DoublesDecisionAuditLogger
+from .rl_data_3b_raw_protocol_capture import RawProtocolCapture
+
+try:
+    from . import action_trace
+except ImportError:
+    import action_trace
 
 # ponytail: optional team-pool mode. Imported lazily so
 # test environments without it still work; see
@@ -766,6 +771,18 @@ async def run_smoke(
                     "error": str(e),
                 }
             )
+
+    # Flush action-trace records to disk at the end of the
+    # smoke so the trace is visible to the diagnostic
+    # consumer. This is a no-op when the trace is disabled
+    # (PHASE7_ACTION_TRACE_DIR unset) or when no records
+    # were captured. Safe to call on the non-trace path
+    # because ``is_action_trace_enabled()`` early-returns
+    # in ``flush_records``.
+    try:
+        action_trace.flush_records()
+    except Exception as e:
+        print(f"  [trace] flush failed: {e}", flush=True)
 
     return {
         "battles_attempted": battles,
