@@ -498,16 +498,11 @@ def _is_repeated_protect_spam(
     active_idx: int,
     state: Any,
 ) -> bool:
-    """Return True when the same active Pokemon is about to
-    click a Protect-like move while the per-(battle, slot,
-    pokemon) streak state already shows a previous Protect
-    on the immediately prior active turn, with no
+    """Pure read: return True when the same active Pokemon is
+    about to click a Protect-like move while the per-(battle,
+    slot, pokemon) streak state already shows a previous
+    Protect on the immediately prior active turn, with no
     intervening switch.
-
-    The first Protect is allowed; the second consecutive
-    Protect is allowed (caller applies a heavy penalty via
-    ``_is_second_consecutive_protect``); the third and any
-    further consecutive Protect hard-blocks with ``-1e9``.
 
     ``state`` is a caller-managed dict keyed by
     ``(battle_tag, active_idx, pokemon_ident)`` whose values
@@ -528,11 +523,29 @@ def _is_repeated_protect_spam(
       ``|-fail|``). A second consecutive Protect whose
       previous attempt failed is also hard-blocked.
 
-    The helper only mutates ``state`` via a single
-    in-place update when the order is a Protect-like
-    action. Non-Protect actions do not write to ``state``;
-    a switch changes the active ident and the helper
-    detects that and resets the streak.
+    This helper is **read-only**: candidate scoring calls it
+    many times per turn (pre-compute pass + 2 counterfactual
+    re-computes) and MUST NOT mutate ``state``. The first
+    call-per-turn guard from the previous revision is no
+    longer needed because state is updated exactly once per
+    final selected order via
+    ``_commit_protect_selection_for_selected_orders``
+    (called from ``choose_move`` just before the final
+    return).
+
+    Pure-read design rules:
+
+    * Non-Protect-like action: never blocked, state unchanged.
+    * Battle boundary (new battle_tag): not blocked.
+    * Pokemon boundary (new ident): not blocked.
+    * Turn gap > 1: not blocked (streak broken by inactive
+      turns).
+    * First Protect-like attempt: not blocked.
+    * Second consecutive: not blocked (caller applies a
+      heavy penalty via ``_is_second_consecutive_protect``).
+    * Third+ consecutive: hard-blocked (return True).
+    * Second+ whose previous attempt already failed:
+      hard-blocked (return True).
 
     The helper does NOT look at species, ability, or item.
     It does NOT change scoring for non-Protect moves. It
@@ -550,36 +563,6 @@ def _is_repeated_protect_spam(
         return False
     mid = str(getattr(inner, "id", "")).lower()
     if mid not in _PROTECT_LIKE_MOVE_IDS_SPAM:
-        # Non-Protect action: reset the streak for this
-        # (battle, slot, pokemon) so the next Protect attempt
-        # starts a fresh streak.
-        active_list_n = (
-            getattr(battle, "active_pokemon", None)
-            if battle is not None
-            else None
-        )
-        if active_list_n is not None:
-            try:
-                mon_n = active_list_n[active_idx]
-            except (IndexError, TypeError):
-                mon_n = None
-            if mon_n is not None:
-                ident_n = (
-                    getattr(mon_n, "ident", None)
-                    or getattr(mon_n, "name", None)
-                    or getattr(mon_n, "species", None)
-                    or ""
-                )
-                battle_tag_n = (
-                    getattr(battle, "battle_tag", "")
-                    if battle is not None
-                    else ""
-                )
-                key_n = (battle_tag_n, active_idx, ident_n)
-                rec_n = state.get(key_n)
-                if rec_n is not None:
-                    rec_n["streak"] = 0
-                    rec_n["last_failed"] = False
         return False
     active_list = (
         getattr(battle, "active_pokemon", None)
@@ -611,51 +594,132 @@ def _is_repeated_protect_spam(
     key = (battle_tag, active_idx, ident)
     rec = state.get(key)
     if rec is None or rec.get("last_ident") != ident:
-        rec = {
-            "last_turn": -1,
-            "streak": 0,
-            "last_ident": ident,
-            "last_failed": False,
-        }
+        # Fresh state for this (battle, slot, pokemon): the
+        # first Protect is not blocked.
+        return False
     # If the gap between turns is more than 1 (e.g. the
-    # pokemon was inactive for >1 turn), reset the streak.
-    if rec["last_turn"] >= 0 and current_turn - rec["last_turn"] > 1:
-        rec["streak"] = 0
-        rec["last_failed"] = False
-        # Also clear the turn guard so the new turn starts fresh.
-        state["_turn_guard"] = set()
-    # Phase 7 first-call-per-turn guard: the production
-    # path calls this helper many times per choose_move
-    # (pre-compute pass for both slots + 2 counterfactual
-    # re-computes). Without a guard, the streak counter
-    # grows by the number of Protect candidates per
-    # turn, crossing the 3rd-consecutive threshold by
-    # scoring alone. The guard ensures state mutation
-    # happens at most once per (battle, turn, slot, ident).
-    turn_key = (battle_tag, current_turn, active_idx, ident)
-    already_processed = state.get("_turn_guard", set())
-    first_call_this_turn = turn_key not in already_processed
-    if first_call_this_turn:
-        already_processed = set(already_processed)
-        already_processed.add(turn_key)
-        state["_turn_guard"] = already_processed
-        # Increment the streak exactly once for this turn.
-        new_streak = rec["streak"] + 1
-        rec["streak"] = new_streak
-        rec["last_turn"] = current_turn
-        rec["last_ident"] = ident
-        state[key] = rec
-    else:
-        # Subsequent calls in the same turn: do not
-        # increment the streak. Use the current value.
-        new_streak = rec["streak"]
+    # pokemon was inactive for >1 turn), the streak is
+    # considered broken.
+    if rec.get("last_turn", -1) >= 0 and current_turn - rec["last_turn"] > 1:
+        return False
+    streak = int(rec.get("streak", 0))
     # Hard-block threshold: 3rd+ consecutive Protect-like,
     # OR a 2nd+ whose previous attempt already failed.
-    if new_streak >= 3:
+    if streak >= 3:
         return True
-    if new_streak >= 2 and rec.get("last_failed"):
+    if streak >= 1 and rec.get("last_failed"):
         return True
+    # 2nd consecutive is not blocked here; the caller
+    # applies a heavy penalty via
+    # ``_is_second_consecutive_protect`` instead.
     return False
+
+
+def _commit_protect_selection_for_selected_orders(
+    battle: Any,
+    best_joint: Any,
+    state: Any,
+) -> None:
+    """Mutate the per-(battle, slot, pokemon) Protect-like
+    streak state exactly once per final selected order in
+    ``best_joint``.
+
+    Called from ``choose_move`` immediately before the final
+    return. This is the SINGLE source of state mutation for
+    the streak guard.
+
+    Behaviour:
+
+    * For each slot (0 and 1), inspect the final selected
+      order.
+    * If the order is a Protect-like action: increment the
+      streak by 1 and clear ``last_failed`` for this
+      (battle, slot, pokemon).
+    * If the order is a non-Protect-like action (move,
+      switch, pass, none): reset the streak to 0 and clear
+      ``last_failed`` for this (battle, slot, pokemon).
+    * Idempotent per (battle, slot, pokemon, turn):
+      repeated calls in the same turn for the same key are
+      a no-op (the helper records ``_committed_turn`` on
+      the state and skips if the turn matches).
+    * p1a and p1b remain isolated.
+    * Battle A and Battle B remain isolated.
+    * Switch (new ident) starts a fresh streak automatically
+      because the new key has no prior record.
+
+    This helper is wrapped in try/except so a state-update
+    failure cannot break the bot's choose_move path. On
+    failure, state is left unchanged and the helper returns
+    silently.
+    """
+    if state is None or best_joint is None:
+        return
+    try:
+        battle_tag = getattr(battle, "battle_tag", "") or ""
+        current_turn = getattr(battle, "turn", 0) or 0
+        active_list = getattr(battle, "active_pokemon", None)
+        if active_list is None:
+            return
+        for slot_i in (0, 1):
+            sel_order = (
+                best_joint.first_order
+                if slot_i == 0
+                else best_joint.second_order
+            )
+            if sel_order is None:
+                continue
+            inner = getattr(sel_order, "order", None)
+            if inner is None:
+                # Pass / None order: treat as a non-Protect
+                # selection (no state change). A new pokemon
+                # switch has ``isinstance(inner, Pokemon)``;
+                # that path also resets via the helper.
+                continue
+            try:
+                try:
+                    mon = active_list[slot_i]
+                except (IndexError, TypeError):
+                    continue
+                if mon is None:
+                    continue
+                ident = (
+                    getattr(mon, "ident", None)
+                    or getattr(mon, "name", None)
+                    or getattr(mon, "species", None)
+                    or ""
+                )
+                if not ident:
+                    continue
+                key = (battle_tag, slot_i, ident)
+                # Idempotence: if the helper already
+                # committed a record for this
+                # (battle, slot, pokemon, turn), skip.
+                rec = state.get(key)
+                if rec is not None and rec.get("_committed_turn") == current_turn:
+                    continue
+                _rpla = _plati.record_protect_like_attempt
+                move_id = ""
+                if hasattr(inner, "id"):
+                    move_id = str(getattr(inner, "id", "") or "")
+                _rpla(
+                    state,
+                    battle_tag,
+                    slot_i,
+                    ident,
+                    current_turn,
+                    move_id,
+                    failed=False,
+                )
+                # Mark the commit so repeated calls this
+                # turn are no-ops.
+                rec2 = state.get(key)
+                if rec2 is not None:
+                    rec2["_committed_turn"] = current_turn
+            except Exception:
+                # State mutation must never break choose_move.
+                continue
+    except Exception:
+        return
 
 
 def _is_second_consecutive_protect(
@@ -15589,6 +15653,20 @@ class DoublesDamageAwarePlayer(Player):
                 emergency_fallback_used=False,
                 fallback_reason="",
             )
+
+        # Phase 7 streak-guard revision: mutate the
+        # per-(battle, slot, pokemon) Protect-like streak
+        # state exactly once per final selected order.
+        # The streak guard itself
+        # (``_is_repeated_protect_spam``) is now read-only
+        # to avoid the per-candidate reset bug that the
+        # 3-battle diagnostic smoke exposed. See
+        # logs/phase7_protect_streak_guard_revision/.
+        if not hasattr(self, "_protect_streak_state"):
+            self._protect_streak_state = {}
+        _commit_protect_selection_for_selected_orders(
+            battle, best_joint, self._protect_streak_state
+        )
 
         return best_joint
 

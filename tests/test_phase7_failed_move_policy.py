@@ -21,7 +21,12 @@ from showdown_ai.bot_doubles_damage_aware import (
     _is_fake_out_first_turn_only,
     _is_same_side_single_target_damage_blocked,
     _record_protect_failed,
+    _commit_protect_selection_for_selected_orders,
     select_best_joint_from_score_maps,
+)
+from showdown_ai.protect_like_and_type_immunity import (
+    record_protect_like_attempt,
+    record_protect_like_failed,
 )
 from showdown_ai.rl_data_3b_ff_monitor_v2 import (
     parse_protect_spam_from_raw_protocol,
@@ -242,7 +247,13 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
     def test_second_protect_not_blocked(self):
         battle = self._battle_with_active()
         state: Dict = {}
-        _is_repeated_protect_spam(self._protect(), battle, 0, state)
+        ident = battle.active_pokemon[0].ident
+        # Record the first Protect via the pure helper.
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 1, "protect"
+        )
+        # 2nd consecutive Protect: not blocked.
+        battle.turn = 2
         self.assertFalse(
             _is_repeated_protect_spam(self._protect(), battle, 0, state)
         )
@@ -250,8 +261,12 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
     def test_third_protect_hard_blocked(self):
         battle = self._battle_with_active()
         state: Dict = {}
+        ident = battle.active_pokemon[0].ident
         for t in (1, 2, 3):
             battle.turn = t
+            record_protect_like_attempt(
+                state, battle.battle_tag, 0, ident, t, "protect"
+            )
             is_blocked = _is_repeated_protect_spam(
                 self._protect(), battle, 0, state
             )
@@ -276,6 +291,10 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         state: Dict = {}
         for turn in range(13, 29):
             battle.turn = turn
+            record_protect_like_attempt(
+                state, battle.battle_tag, 1, "p1b: Whimsicott",
+                turn, "protect",
+            )
             is_blocked = _is_repeated_protect_spam(
                 self._protect(), battle, 1, state
             )
@@ -295,26 +314,33 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
     def test_state_resets_after_non_protect_move(self):
         battle = self._battle_with_active()
         state: Dict = {}
+        ident = battle.active_pokemon[0].ident
         # 3 Protects across 3 turns -> 3rd is blocked
         for t in (1, 2, 3):
             battle.turn = t
-            _is_repeated_protect_spam(self._protect(), battle, 0, state)
+            record_protect_like_attempt(
+                state, battle.battle_tag, 0, ident, t, "protect"
+            )
         # A non-Protect move on a NEW turn resets
         battle.turn = 4
-        tackle = _Order(inner=_Move("tackle", "physical", "normal", priority=0),
-                        move_target=0)
-        self.assertFalse(
-            _is_repeated_protect_spam(tackle, battle, 0, state)
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 4, "tackle"
         )
         # Then 2 fresh Protects on new turns should be allowed
         for t in (5, 6):
             battle.turn = t
+            record_protect_like_attempt(
+                state, battle.battle_tag, 0, ident, t, "protect"
+            )
             self.assertFalse(
                 _is_repeated_protect_spam(self._protect(), battle, 0, state),
                 f"turn {t} should NOT be blocked",
             )
         # 3rd fresh Protect on a new turn should be blocked
         battle.turn = 7
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 7, "protect"
+        )
         self.assertTrue(
             _is_repeated_protect_spam(self._protect(), battle, 0, state)
         )
@@ -326,7 +352,10 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         # Whimsicott: 3 Protects across 3 turns -> 3rd blocked
         for t in (1, 2, 3):
             battle1.turn = t
-            _is_repeated_protect_spam(self._protect(), battle1, 0, state)
+            record_protect_like_attempt(
+                state, battle1.battle_tag, 0, "p1a: Whimsicott",
+                t, "protect",
+            )
         # Switch to Garchomp: fresh streak (different ident)
         battle2.turn = 4
         self.assertFalse(
@@ -342,7 +371,10 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         # p1a: 3 Protects across 3 turns -> 3rd blocked
         for t in (1, 2, 3):
             battle.turn = t
-            _is_repeated_protect_spam(self._protect(), battle, 0, state)
+            record_protect_like_attempt(
+                state, battle.battle_tag, 0, "p1a: MonA",
+                t, "protect",
+            )
         # p1b: first Protect on a new turn -> not blocked
         battle.turn = 4
         self.assertFalse(
@@ -356,7 +388,10 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
         # battle-A: 3 Protects across 3 turns
         for t in (1, 2, 3):
             battle_a.turn = t
-            _is_repeated_protect_spam(self._protect(), battle_a, 0, state)
+            record_protect_like_attempt(
+                state, "battle-A", 0, "p1a: TestMon",
+                t, "protect",
+            )
         # battle-B: fresh streak (different battle_tag)
         battle_b.turn = 4
         self.assertFalse(
@@ -366,12 +401,15 @@ class TestProtectStreakHardBlocked(unittest.TestCase):
     def test_failed_protect_blocks_next(self):
         battle = self._battle_with_active()
         state: Dict = {}
-        # First Protect on turn 1
+        ident = battle.active_pokemon[0].ident
+        # First Protect on turn 1, recorded as failed.
         battle.turn = 1
-        _is_repeated_protect_spam(self._protect(), battle, 0, state)
-        # Mark as failed (e.g. server |-fail|)
-        _record_protect_failed(battle, 0, state)
+        record_protect_like_attempt(
+            state, battle.battle_tag, 0, ident, 1, "protect",
+            failed=True,
+        )
         # Next Protect attempt on a new turn: blocked
+        # (2nd+ whose previous attempt already failed).
         battle.turn = 2
         self.assertTrue(
             _is_repeated_protect_spam(self._protect(), battle, 0, state)

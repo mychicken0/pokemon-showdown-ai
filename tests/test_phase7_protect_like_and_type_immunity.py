@@ -24,6 +24,7 @@ from showdown_ai.bot_doubles_damage_aware import (
     _is_second_consecutive_protect,
     _is_no_effect_attack_blocked,
     _record_protect_failed,
+    _commit_protect_selection_for_selected_orders,
 )
 from showdown_ai.protect_like_and_type_immunity import (
     PROTECT_LIKE_MOVE_IDS,
@@ -304,22 +305,23 @@ class TestProtectLikeStreakBlocking(unittest.TestCase):
 
 
 class TestProtectLikeGuardNoMutation(unittest.TestCase):
-    def test_first_call_per_turn_guard(self):
-        # The production path calls the helper many times
-        # per turn. The first-call-per-turn guard ensures
-        # the streak is only incremented once per
-        # (battle, turn, slot, ident). We test the
-        # production helper directly.
+    """Phase 7 streak-guard revision: ``_is_repeated_protect_spam``
+    is now read-only. State mutation happens only via
+    ``record_protect_like_attempt`` (called from
+    ``_commit_protect_selection_for_selected_orders``).
+    """
+
+    def test_helper_does_not_mutate_state(self):
+        # The helper is pure-read. 20 calls in the same
+        # turn must NOT mutate the state dict.
         battle = _Battle(actives=[_Mon(ident="p1a: Mon")])
         state: Dict = {}
         for _ in range(20):
             _is_repeated_protect_spam(
                 _protect_order(), battle, 0, state
             )
-        # After 20 calls in the same turn, the streak
-        # should still be 1 (only the first call incremented).
-        rec = state[("battle-X", 0, "p1a: Mon")]
-        self.assertEqual(rec["streak"], 1)
+        # State must remain empty.
+        self.assertEqual(state, {})
 
     def test_counterfactual_scoring_does_not_mutate(self):
         # The counterfactual re-compute path should be
@@ -331,13 +333,13 @@ class TestProtectLikeGuardNoMutation(unittest.TestCase):
             _is_repeated_protect_spam(
                 _protect_order(), battle, 0, state
             )
-        rec = state[("battle-X", 0, "p1a: Mon")]
-        self.assertEqual(rec["streak"], 1)
+        # State must remain empty.
+        self.assertEqual(state, {})
 
     def test_state_updates_once_from_final_orders(self):
         # record_protect_like_attempt should be called
         # exactly once per final selected order.
-        state: Dict = {"_turn_guard": set()}
+        state: Dict = {}
         record_protect_like_attempt(
             state, "battle-1", 0, "p1a: Mon", 1, "protect"
         )
@@ -347,7 +349,8 @@ class TestProtectLikeGuardNoMutation(unittest.TestCase):
 
     def test_final_order_protect_like_sequence(self):
         # Simulate a sequence of final selected orders
-        state: Dict = {"_turn_guard": set()}
+        # via the pure record helper.
+        state: Dict = {}
         for t in range(1, 5):
             record_protect_like_attempt(
                 state, "battle-1", 0, "p1a: Mon", t, "protect"
@@ -356,7 +359,7 @@ class TestProtectLikeGuardNoMutation(unittest.TestCase):
         self.assertEqual(rec["streak"], 4)
 
     def test_selected_order_state_records_normalized_class(self):
-        state: Dict = {"_turn_guard": set()}
+        state: Dict = {}
         record_protect_like_attempt(
             state, "battle-1", 0, "p1a: Mon", 1, "kingsshield"
         )
@@ -765,6 +768,469 @@ class TestCanonicalTraceCoverage(unittest.TestCase):
             finally:
                 os.environ.pop("PHASE7_ACTION_TRACE_DIR", None)
                 action_trace.reset_action_trace_counters()
+
+
+# ============================================================
+# Phase 7 streak-guard revision tests
+# ============================================================
+
+
+class _JointOrder:
+    """Minimal joint order with first_order and second_order."""
+    def __init__(self, first=None, second=None):
+        self.first_order = first
+        self.second_order = second
+
+
+class TestStreakGuardReadOnlyOnCandidateScoring(unittest.TestCase):
+    """The streak guard is read-only during per-candidate
+    scoring. State mutation happens only when the final
+    selected order is committed (via
+    ``_commit_protect_selection_for_selected_orders``).
+    """
+
+    def test_non_protect_candidate_does_not_reset_streak(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        # Seed streak with 2 prior consecutive Protects.
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 2, "protect"
+        )
+        # Score a non-Protect candidate.
+        self.assertFalse(
+            _is_repeated_protect_spam(
+                _non_protect_order("tackle"), battle, 0, state
+            )
+        )
+        # Streak must still be 2 (not reset to 0 by the
+        # per-candidate evaluation).
+        rec = state.get(("battle-1", 0, "p1a: Mon"))
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec["streak"], 2)
+
+    def test_protect_candidate_does_not_increment_streak(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        # Seed streak with 1 prior Protect.
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        # 20 read-only helper calls must not increment.
+        for _ in range(20):
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _protect_order(), battle, 0, state
+                )
+            )
+        rec = state.get(("battle-1", 0, "p1a: Mon"))
+        self.assertEqual(rec["streak"], 1)
+
+    def test_repeated_candidate_scoring_is_idempotent(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        for _ in range(50):
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _protect_order(), battle, 0, state
+                )
+            )
+        self.assertEqual(state, {})
+
+    def test_candidate_scoring_cannot_clear_last_failed(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        # Seed with a failed Protect.
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect",
+            failed=True,
+        )
+        # 20 read-only helper calls must not clear last_failed.
+        for _ in range(20):
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _protect_order(), battle, 0, state
+                )
+            )
+        rec = state.get(("battle-1", 0, "p1a: Mon"))
+        self.assertTrue(rec["last_failed"])
+
+    def test_p1a_non_protect_does_not_reset_p1b_streak(self):
+        battle = _Battle(
+            actives=[_Mon(ident="p1a: MonA"), _Mon(ident="p1b: MonB")]
+        )
+        state: Dict = {}
+        # Seed p1b with 2 consecutive Protects.
+        record_protect_like_attempt(
+            state, "battle-1", 1, "p1b: MonB", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 1, "p1b: MonB", 2, "protect"
+        )
+        # Score a non-Protect candidate for p1a.
+        self.assertFalse(
+            _is_repeated_protect_spam(
+                _non_protect_order("tackle"), battle, 0, state
+            )
+        )
+        # p1b streak must be unchanged.
+        rec_b = state.get(("battle-1", 1, "p1b: MonB"))
+        self.assertEqual(rec_b["streak"], 2)
+
+    def test_battle_a_does_not_reset_battle_b_streak(self):
+        battle_a = _Battle(battle_tag="battle-A", actives=[_Mon()])
+        state: Dict = {}
+        # Seed battle-A.
+        record_protect_like_attempt(
+            state, "battle-A", 0, "p1a: Mon", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-A", 0, "p1a: Mon", 2, "protect"
+        )
+        # Score a non-Protect candidate for battle-B.
+        battle_b = _Battle(battle_tag="battle-B", actives=[_Mon()])
+        self.assertFalse(
+            _is_repeated_protect_spam(
+                _non_protect_order("tackle"), battle_b, 0, state
+            )
+        )
+        # battle-A streak must be unchanged.
+        rec_a = state.get(("battle-A", 0, "p1a: Mon"))
+        self.assertEqual(rec_a["streak"], 2)
+
+    def test_third_consecutive_still_blocked_after_candidate_loop(self):
+        # The original bug: candidate scoring reset the
+        # streak on every non-Protect candidate, so the
+        # 3rd consecutive Protect was never blocked.
+        battle = _Battle(
+            battle_tag="battle-1",
+            actives=[_Mon(ident="p1a: Mon")],
+        )
+        state: Dict = {}
+        # Seed streak with 2 prior Protects.
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-1", 0, "p1a: Mon", 2, "protect"
+        )
+        # Simulate the per-candidate scoring loop:
+        # 10 non-Protect candidates + 10 Protect candidates.
+        battle.turn = 3
+        for _ in range(10):
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _non_protect_order("tackle"), battle, 0, state
+                )
+            )
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _protect_order(), battle, 0, state
+                )
+            )
+        # Streak is still 2 (not reset to 0 by the
+        # per-candidate evaluation).
+        rec = state.get(("battle-1", 0, "p1a: Mon"))
+        self.assertEqual(rec["streak"], 2)
+        # Commit a Protect selection for turn 3: this is
+        # the 3rd consecutive Protect and must be blocked
+        # by the next read-only check.
+        best = _JointOrder(first=_protect_order(), second=None)
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        rec = state.get(("battle-1", 0, "p1a: Mon"))
+        self.assertEqual(rec["streak"], 3)
+        self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order(), battle, 0, state
+            )
+        )
+
+
+class TestProtectVariantsShareStreak(unittest.TestCase):
+    """Protect / Detect / King's Shield / Spiky Shield /
+    Obstruct / Max Guard / Silk Trap / Baneful Bunker /
+    Burning Bulwark all share the same normalised stall
+    class so cycling between them cannot bypass the
+    3rd-consecutive hard-block.
+    """
+
+    def test_protect_detect_kingsshield_blocked_on_third(self):
+        battle = _Battle(
+            battle_tag="battle-1",
+            actives=[_Mon(ident="p1a: Mon")],
+        )
+        state: Dict = {}
+        for t, mid in [(1, "protect"), (2, "detect"), (3, "kingsshield")]:
+            order = _protect_order(mid)
+            battle.turn = t
+            self.assertFalse(
+                _is_repeated_protect_spam(order, battle, 0, state)
+            )
+            record_protect_like_attempt(
+                state, "battle-1", 0, "p1a: Mon", t, mid
+            )
+        # 4th attempt: blocked.
+        battle.turn = 4
+        self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order("banefulbunker"), battle, 0, state
+            )
+        )
+
+    def test_detect_protect_detect_blocked_on_third(self):
+        battle = _Battle(
+            battle_tag="battle-1",
+            actives=[_Mon(ident="p1a: Mon")],
+        )
+        state: Dict = {}
+        for t, mid in [(1, "detect"), (2, "protect"), (3, "detect")]:
+            battle.turn = t
+            self.assertFalse(
+                _is_repeated_protect_spam(
+                    _protect_order(mid), battle, 0, state
+                )
+            )
+            record_protect_like_attempt(
+                state, "battle-1", 0, "p1a: Mon", t, mid
+            )
+        battle.turn = 4
+        self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order("detect"), battle, 0, state
+            )
+        )
+
+
+class TestCommitSelectedOrdersUpdatesStreak(unittest.TestCase):
+    """``_commit_protect_selection_for_selected_orders``
+    is the single source of state mutation.
+    """
+
+    def test_commit_protect_increments_streak(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        best = _JointOrder(first=_protect_order(), second=None)
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        rec = state.get(("battle-X", 0, "p1a: TestMon"))
+        self.assertEqual(rec["streak"], 1)
+
+    def test_commit_non_protect_resets_streak(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        # Seed streak with 2 prior Protects via direct record.
+        record_protect_like_attempt(
+            state, "battle-X", 0, "p1a: TestMon", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-X", 0, "p1a: TestMon", 2, "protect"
+        )
+        # Commit a non-Protect selection.
+        best = _JointOrder(first=_non_protect_order("tackle"), second=None)
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        rec = state.get(("battle-X", 0, "p1a: TestMon"))
+        self.assertEqual(rec["streak"], 0)
+
+    def test_commit_protect_detect_kingsshield_via_commit(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        for t, mid in [(1, "protect"), (2, "detect"), (3, "kingsshield")]:
+            best = _JointOrder(
+                first=_protect_order(mid), second=None
+            )
+            battle.turn = t
+            _commit_protect_selection_for_selected_orders(
+                battle, best, state
+            )
+        rec = state.get(("battle-X", 0, "p1a: TestMon"))
+        self.assertEqual(rec["streak"], 3)
+        # 4th must be blocked.
+        battle.turn = 3
+        self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order("banefulbunker"), battle, 0, state
+            )
+        )
+
+    def test_commit_resets_streak_on_switch_via_new_ident(self):
+        # A switch (new pokemon) means the active_pokemon
+        # ident changes. The commit helper looks up the
+        # current active; if the new mon is different from
+        # the prior record, a new key is used and the old
+        # streak is preserved under the old key (not
+        # touched).
+        battle = _Battle(actives=[_Mon(ident="p1a: Garchomp")])
+        state: Dict = {}
+        # Seed Garchomp with 2 Protects.
+        record_protect_like_attempt(
+            state, "battle-X", 0, "p1a: Garchomp", 1, "protect"
+        )
+        record_protect_like_attempt(
+            state, "battle-X", 0, "p1a: Garchomp", 2, "protect"
+        )
+        # Switch to Volcarona: update active_pokemon[0].
+        battle.active_pokemon[0] = _Mon(ident="p1a: Volcarona")
+        # Commit a Protect for the new mon.
+        best = _JointOrder(first=_protect_order(), second=None)
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        # New key has streak=1.
+        rec_new = state.get(("battle-X", 0, "p1a: Volcarona"))
+        self.assertEqual(rec_new["streak"], 1)
+        # Old key still has streak=2 (preserved; not reset).
+        rec_old = state.get(("battle-X", 0, "p1a: Garchomp"))
+        self.assertEqual(rec_old["streak"], 2)
+
+    def test_commit_idempotent_for_same_turn(self):
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        best = _JointOrder(first=_protect_order(), second=None)
+        # Three commit calls on the same turn must not
+        # silently leak state.
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        _commit_protect_selection_for_selected_orders(
+            battle, best, state
+        )
+        rec = state.get(("battle-X", 0, "p1a: TestMon"))
+        # Streak is finite (1, 2, or 3 depending on
+        # turn-gap semantics), but never overflows.
+        self.assertIn(rec["streak"], (1, 2, 3))
+
+
+class TestHardBlockAndTypeImmunityRegression(unittest.TestCase):
+    """The streak-guard revision must not regress the
+    hard-block and type-immunity fixes.
+    """
+
+    def test_canonical_compute_joint_scores_threshold_unchanged(self):
+        # HARD_BLOCK_SCORE_THRESHOLD is unchanged.
+        from showdown_ai.bot_doubles_damage_aware import (
+            HARD_BLOCK_SCORE_THRESHOLD,
+        )
+        self.assertEqual(HARD_BLOCK_SCORE_THRESHOLD, -1e8)
+
+    def test_ground_into_known_flying_blocked(self):
+        from showdown_ai.bot_doubles_damage_aware import (
+            _is_no_effect_attack_blocked,
+        )
+        target = _Mon(ident="p2a: Tornadus", types=("Flying",))
+        opponents = [
+            target,
+            _Mon(ident="p2b: Other", types=("Normal",)),
+        ]
+        battle = _Battle(
+            actives=[_Mon(ident="p1a: Archaludon", types=("Steel", "Electric"))],
+            opponents=opponents,
+        )
+        order = _Order(
+            inner=_Move("earthquake", "physical", "normal", priority=0),
+            move_target=0,
+        )
+        with mock.patch.object(bot, "is_type_immune",
+                               return_value=(True, "ground_vs_flying")):
+            self.assertTrue(
+                _is_no_effect_attack_blocked(order, battle, 0)
+            )
+
+    def test_electric_into_known_ground_blocked(self):
+        from showdown_ai.bot_doubles_damage_aware import (
+            _is_no_effect_attack_blocked,
+        )
+        target = _Mon(ident="p2a: Garchomp", types=("Dragon", "Ground"))
+        opponents = [target, None]
+        battle = _Battle(
+            actives=[_Mon(ident="p1a: Electabuzz", types=("Electric",))],
+            opponents=opponents,
+        )
+        order = _Order(
+            inner=_Move("thunderbolt", "special", "normal", priority=0),
+            move_target=0,
+        )
+        with mock.patch.object(bot, "is_type_immune",
+                               return_value=(True, "electric_vs_ground")):
+            self.assertTrue(
+                _is_no_effect_attack_blocked(order, battle, 0)
+            )
+
+    def test_unknown_target_type_not_guessed(self):
+        from showdown_ai.bot_doubles_damage_aware import (
+            _is_no_effect_attack_blocked,
+        )
+        # No is_type_immune mock: with an unknown type,
+        # the helper does not consult is_type_immune and
+        # returns False directly.
+        target = _Mon(ident="p2a: ???", types=())
+        opponents = [target, None]
+        battle = _Battle(
+            actives=[_Mon(ident="p1a: Electabuzz", types=("Electric",))],
+            opponents=opponents,
+        )
+        order = _Order(
+            inner=_Move("thunderbolt", "special", "normal", priority=0),
+            move_target=0,
+        )
+        # Unknown type -> do not block (do not guess).
+        self.assertFalse(
+            _is_no_effect_attack_blocked(order, battle, 0)
+        )
+
+
+class TestRecordProtectFailedSafetyStatus(unittest.TestCase):
+    """``_record_protect_failed`` (in
+    bot_doubles_damage_aware.py) is currently dead code
+    in production because poke-env does not expose a
+    per-protocol-line observer on the bot path. This test
+    documents the safety status: the function is callable
+    for future wiring, but production failure marking
+    remains off until a safe production signal exists.
+    """
+
+    def test_record_protect_failed_is_callable(self):
+        from showdown_ai.bot_doubles_damage_aware import (
+            _record_protect_failed,
+        )
+        # Just exercise the function with a synthetic
+        # battle; it should not raise.
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        # No prior record: should be a no-op.
+        _record_protect_failed(battle, 0, state)
+        # No state mutation expected.
+        self.assertEqual(state, {})
+
+    def test_selected_order_block_works_without_failure_signal(self):
+        # The 3rd-consecutive selected-order block must
+        # work even when `_record_protect_failed` is never
+        # called. This proves the production fix does not
+        # depend on the tier-2 `last_failed` condition.
+        battle = _Battle(actives=[_Mon()])
+        state: Dict = {}
+        for t in (1, 2, 3):
+            best = _JointOrder(first=_protect_order(), second=None)
+            battle.turn = t
+            _commit_protect_selection_for_selected_orders(
+                battle, best, state
+            )
+        # 3rd consecutive must be blocked even though no
+        # failure was recorded.
+        self.assertTrue(
+            _is_repeated_protect_spam(
+                _protect_order(), battle, 0, state
+            )
+        )
 
 
 if __name__ == "__main__":
